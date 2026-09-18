@@ -6,14 +6,13 @@ const isLocal = window.location.hostname === 'localhost' ||
   window.location.hostname.startsWith('10.') ||
   window.location.hostname.endsWith('.local');
 
-const envProductionDomain = import.meta.env.VITE_PRODUCTION_DOMAIN || window.location.origin;
+const envProductionDomain = import.meta.env.VITE_PRODUCTION_DOMAIN || 'https://snbtradingco.in';
 const PRODUCTION_DOMAIN = envProductionDomain.endsWith('/') ? envProductionDomain.slice(0, -1) : envProductionDomain;
-const LOCAL_DOMAIN = import.meta.env.VITE_PRODUCTION_DOMAIN || 'https://snbtradingco.in';
 
-export const BASE_DOMAIN = isLocal ? LOCAL_DOMAIN : PRODUCTION_DOMAIN;
-export const BASE_URL = import.meta.env.VITE_API_URL || `${BASE_DOMAIN}/api`;
+export const BASE_DOMAIN = isLocal ? window.location.origin : PRODUCTION_DOMAIN;
+export const BASE_URL = isLocal ? '/api' : (import.meta.env.VITE_API_URL || `${PRODUCTION_DOMAIN}/api`);
 export const UPLOAD_URL = BASE_URL;
-export const IMAGE_BASE_URL = BASE_DOMAIN;
+export const IMAGE_BASE_URL = PRODUCTION_DOMAIN;
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -24,7 +23,7 @@ export const uploadApi = axios.create({
 });
 
 export const notificationApi = axios.create({
-  baseURL: import.meta.env.VITE_NOTIFICATION_API_URL || import.meta.env.VITE_API_URL || `${BASE_DOMAIN}/api`,
+  baseURL: isLocal ? '/api' : (import.meta.env.VITE_NOTIFICATION_API_URL || import.meta.env.VITE_API_URL || `${PRODUCTION_DOMAIN}/api`),
 });
 
 const setupInterceptors = (instance) => {

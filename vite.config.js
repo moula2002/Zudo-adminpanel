@@ -8,4 +8,19 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'https://snbtradingco.in',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/uploads': {
+        target: 'https://snbtradingco.in',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  }
 })
