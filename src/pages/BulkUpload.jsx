@@ -20,7 +20,7 @@ const BulkUpload = () => {
           MOQ: 5,
           Unit: '1kg',
           Description: 'High quality lentils directly from farm',
-          ImageUrl: 'https://via.placeholder.com/150',
+          ImageUrl: 'https://placehold.co/150',
           PdfUrl: '',
           SellerId: '',
           B2C_Size: '500g',
@@ -43,7 +43,7 @@ const BulkUpload = () => {
           MOQ: 5,
           Unit: '1kg',
           Description: 'High quality lentils directly from farm',
-          ImageUrl: 'https://via.placeholder.com/150',
+          ImageUrl: 'https://placehold.co/150',
           PdfUrl: '',
           SellerId: '',
           B2C_Size: '1kg',
@@ -63,13 +63,13 @@ const BulkUpload = () => {
       data = [
         {
           Category: 'Pulses',
-          CategoryImageUrl: 'https://via.placeholder.com/150',
+          CategoryImageUrl: 'https://placehold.co/150',
           SubCategory: 'Lentils',
-          SubCategoryImageUrl: 'https://via.placeholder.com/150'
+          SubCategoryImageUrl: 'https://placehold.co/150'
         },
         {
           Category: 'Rice',
-          CategoryImageUrl: 'https://via.placeholder.com/150',
+          CategoryImageUrl: 'https://placehold.co/150',
           SubCategory: '', // Example of blank subcategory
           SubCategoryImageUrl: ''
         }

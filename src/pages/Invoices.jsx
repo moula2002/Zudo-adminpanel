@@ -89,6 +89,7 @@ const Invoices = () => {
   // Edit Pricing State
   // Map of orderId -> itemIndex -> newPrice
   const [customPrices, setCustomPrices] = useState({});
+  const [customInvoiceNumbers, setCustomInvoiceNumbers] = useState({});
 
   const [sellerInvoices, setSellerInvoices] = useState([]);
 
@@ -215,6 +216,13 @@ const Invoices = () => {
     }));
   };
 
+  const handleInvoiceNumberChange = (orderId, newInvNo) => {
+    setCustomInvoiceNumbers(prev => ({
+      ...prev,
+      [orderId]: newInvNo
+    }));
+  };
+
   const calculateItemPrice = (orderId, itemIndex, originalPrice) => {
     const key = `${orderId}_${itemIndex}`;
     return customPrices[key] !== undefined ? customPrices[key] : originalPrice;
@@ -291,7 +299,8 @@ const Invoices = () => {
         `;
       }).join('');
 
-      const invNo = order.invoiceNumber || `BYJS/${order._id.slice(-8).toUpperCase()}`;
+      const defaultInvNo = order.invoiceNumber || `snb-686/${order._id.slice(-8).toUpperCase()}`;
+      const invNo = customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : defaultInvNo;
       const invDate = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const orderNo = order.orderNumber || order._id.slice(-8).toUpperCase();
       const barcodeValue = `${order._id.slice(-8)}-${order.userId?._id?.slice(-8) || '00000000'}-${orderNo}`;
@@ -709,7 +718,7 @@ const Invoices = () => {
                 {filteredOrders.slice(0, 50).map(order => (
                   <tr key={order._id} className="border-b border-[var(--glass-border)] hover:bg-white/5">
                     <td style={{ padding: '16px 24px', fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>
-                      #{order._id.slice(-8).toUpperCase()}
+                      snb-686/{order._id.slice(-8).toUpperCase()}
                       <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>{order.userId?.role?.toUpperCase() || 'B2C'}</div>
                     </td>
                     <td style={{ padding: '16px 24px' }}>
@@ -796,7 +805,17 @@ const Invoices = () => {
               <div className="flex flex-col gap-6">
                 {previewOrders.map(order => (
                   <div key={order._id} className="p-4 rounded-xl border" style={{ background: 'var(--glass-bg)', borderColor: 'var(--glass-border)' }}>
-                    <div className="text-xs font-bold mb-3" style={{ color: 'var(--primary)' }}>Order #{order._id.slice(-8).toUpperCase()}</div>
+                    <div className="flex flex-col gap-2 mb-4">
+                      <div className="text-xs font-bold" style={{ color: 'var(--primary)' }}>Invoice Number</div>
+                      <input 
+                        type="text" 
+                        className="input-field w-full"
+                        style={{ padding: '6px', fontSize: '13px', minHeight: 'auto' }}
+                        value={customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : (order.invoiceNumber || `snb-686/${order._id.slice(-8).toUpperCase()}`)}
+                        onChange={e => handleInvoiceNumberChange(order._id, e.target.value)}
+                      />
+                    </div>
+                    <div className="text-xs font-bold mb-3" style={{ color: 'var(--primary)' }}>Order snb-686/{order._id.slice(-8).toUpperCase()} Items</div>
                     <div className="flex flex-col gap-3">
                       {order.items.map((item, index) => {
                         const rawPrice = item.price || 0;
