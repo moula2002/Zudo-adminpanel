@@ -23,7 +23,12 @@ const Login = () => {
   const fetchLocations = async () => {
     try {
       const { data } = await api.get('/locations/active');
-      setLocations(data);
+      if (Array.isArray(data)) {
+        setLocations(data);
+      } else {
+        console.error('Expected array of locations but got:', data);
+        setLocations([]);
+      }
     } catch (err) {
       console.error('Failed to fetch locations', err);
     } finally {

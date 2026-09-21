@@ -1,6 +1,14 @@
 {
     "rewrites": [
         {
+            "source": "/api/(.*)",
+            "destination": "https://snbtradingco.in/api/$1"
+        },
+        {
+            "source": "/uploads/(.*)",
+            "destination": "https://snbtradingco.in/uploads/$1"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }
