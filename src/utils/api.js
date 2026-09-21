@@ -98,8 +98,8 @@ export const getImageUrl = (url) => {
 
   // Ensure the URL uses the production domain for consistency if it's already a full URL
   if (finalUrl.startsWith('http')) {
-    if (!isLocal && finalUrl.includes(LOCAL_DOMAIN)) {
-      finalUrl = finalUrl.replace(LOCAL_DOMAIN, PRODUCTION_DOMAIN);
+    if (!isLocal && finalUrl.includes('http://localhost:5000')) {
+      finalUrl = finalUrl.replace('http://localhost:5000', PRODUCTION_DOMAIN);
     }
   } else {
     // If it's a relative path, prepend IMAGE_BASE_URL
