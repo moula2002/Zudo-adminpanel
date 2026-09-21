@@ -39,7 +39,7 @@ const Dashboard = () => {
   const [stats, setStats] = useState({
     products: 0, categories: 0, drivers: 0, deliveries: 0,
     pendingPayments: 0, sellers: 0, b2bOrders: 0, b2cOrders: 0,
-    totalRevenue: 0, locations: 0
+    totalRevenue: 0, locations: 0, dailyOrders: 0
   });
   const [chartData, setChartData] = useState([]);
   const [revenueData, setRevenueData] = useState([]);
@@ -76,6 +76,14 @@ const Dashboard = () => {
       const b2cOrders = ordersList.filter(order => order.userId?.role === 'b2c' || !order.userId?.role).length;
       const totalRevenue = ordersList.reduce((sum, order) => sum + (order.orderStatus !== 'Cancelled' ? order.totalAmount : 0), 0);
 
+      const today = new Date();
+      const dailyOrders = ordersList.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate.getDate() === today.getDate() &&
+               orderDate.getMonth() === today.getMonth() &&
+               orderDate.getFullYear() === today.getFullYear();
+      }).length;
+
       setStats({
         products: productsList.length,
         categories: c.data.length,
@@ -86,7 +94,8 @@ const Dashboard = () => {
         b2bOrders,
         b2cOrders,
         totalRevenue,
-        locations: l.data.length
+        locations: l.data.length,
+        dailyOrders
       });
 
       // Calculate sales by category
@@ -173,6 +182,10 @@ const Dashboard = () => {
       <div style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', display: 'grid', gap: '24px' }}>
         {hasPerm('manage_orders') && (
           <StatCard title="Sales Revenue" value={`₹${stats.totalRevenue.toLocaleString()}`} icon={DollarSign} color="#6366f1" trend={12} />
+        )}
+
+        {hasPerm('manage_orders') && (
+          <StatCard title="Daily Orders" value={stats.dailyOrders} subValue="Today" icon={FileText} color="#3b82f6" />
         )}
 
         {hasPerm('manage_orders') && (!user.targetSegment || user.targetSegment === 'Both' || user.targetSegment === 'B2B') && (
