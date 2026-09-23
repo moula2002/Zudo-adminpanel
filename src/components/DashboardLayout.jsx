@@ -74,13 +74,36 @@ const DashboardLayout = ({ children }) => {
     try {
       const { data } = await api.get('/locations/active');
       setLocations(data);
+
+      // Auto-migrate existing sessions that don't have db_name yet
+      const currentLocId = localStorage.getItem('zudo_admin_location');
+      if (currentLocId && !localStorage.getItem('zudo_admin_db_name')) {
+        const selectedLoc = data.find(l => l._id === currentLocId);
+        if (selectedLoc) {
+          const dbIdentifier = selectedLoc.dbName || selectedLoc.name || `zudo-${selectedLoc.city.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+          localStorage.setItem('zudo_admin_db_name', dbIdentifier);
+          window.location.reload();
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch locations', err);
     }
   };
 
   const handleLocationChange = (locId) => {
-    localStorage.setItem('zudo_admin_location', locId);
+    if (locId === 'global') {
+      localStorage.setItem('zudo_admin_location', 'global');
+      localStorage.setItem('zudo_admin_db_name', 'global');
+    } else {
+      localStorage.setItem('zudo_admin_location', locId);
+      const selectedLoc = locations.find(l => l._id === locId);
+      if (selectedLoc) {
+        const dbIdentifier = selectedLoc.dbName || selectedLoc.name || `zudo-${selectedLoc.city.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+        localStorage.setItem('zudo_admin_db_name', dbIdentifier);
+      } else {
+        localStorage.removeItem('zudo_admin_db_name');
+      }
+    }
     window.location.reload();
   };
 
@@ -88,6 +111,7 @@ const DashboardLayout = ({ children }) => {
     localStorage.removeItem('zudo_admin_token');
     localStorage.removeItem('zudo_admin_user');
     localStorage.removeItem('zudo_admin_location');
+    localStorage.removeItem('zudo_admin_db_name');
     navigate('/login');
   };
 
@@ -296,7 +320,7 @@ const DashboardLayout = ({ children }) => {
               {menuItems.find(i => i.to === location.pathname)?.label || 'Dashboard'}
             </h2>
           </div>
-          
+
           <div style={{
             display: 'flex',
             gap: '16px',

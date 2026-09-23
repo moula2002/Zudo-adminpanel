@@ -35,8 +35,12 @@ const setupInterceptors = (instance) => {
     }
 
     // Check if there is a location header needed
+    const dbName = localStorage.getItem('zudo_admin_db_name');
     const location = localStorage.getItem('zudo_admin_location');
-    if (location && !config.headers['x-location']) {
+    
+    if (dbName && !config.headers['x-location']) {
+      config.headers['x-location'] = dbName;
+    } else if (location && !config.headers['x-location']) {
       config.headers['x-location'] = location;
     }
     return config;
@@ -71,6 +75,7 @@ const setupInterceptors = (instance) => {
         localStorage.removeItem('zudo_admin_token');
         localStorage.removeItem('zudo_admin_user');
         localStorage.removeItem('zudo_admin_location');
+        localStorage.removeItem('zudo_admin_db_name');
         window.location.href = '/login';
       }
       return Promise.reject(error);
