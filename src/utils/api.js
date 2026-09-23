@@ -43,9 +43,12 @@ const setupInterceptors = (instance) => {
     // Attach the current global abort signal to the request
     config.signal = globalAbortController.signal;
 
+    // Determine the expected location header for the cache key
+    const currentDbName = localStorage.getItem('zudo_admin_db_name') || localStorage.getItem('zudo_admin_location') || 'global';
+
     // Check Cache before queuing to save network requests instantly
     if (config.method === 'get') {
-      const cacheKey = `${config.url}-${config.headers['x-location'] || 'global'}`;
+      const cacheKey = `${config.url}-${currentDbName}`;
       const cached = apiCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < 120000) { // 2 minute cache
         config.adapter = () => Promise.resolve({
