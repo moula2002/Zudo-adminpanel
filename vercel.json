@@ -1,12 +1,12 @@
 {
     "rewrites": [
         {
-            "source": "/api/(.*)",
-            "destination": "https://snbtradingco.in/api/$1"
+            "source": "/api/:path*",
+            "destination": "https://snbtradingco.in/api/:path*"
         },
         {
-            "source": "/uploads/(.*)",
-            "destination": "https://snbtradingco.in/uploads/$1"
+            "source": "/uploads/:path*",
+            "destination": "https://snbtradingco.in/uploads/:path*"
         },
         {
             "source": "/(.*)",
