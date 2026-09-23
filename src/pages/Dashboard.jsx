@@ -56,14 +56,24 @@ const Dashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const results = await Promise.allSettled([
-        hasPerm('manage_products') ? api.get('/products') : Promise.resolve({ data: [] }),
-        hasPerm('manage_categories') ? api.get('/categories') : Promise.resolve({ data: [] }),
-        hasPerm('manage_drivers') ? api.get('/drivers') : Promise.resolve({ data: [] }),
-        hasPerm('manage_orders') ? api.get('/orders/admin/all') : Promise.resolve({ data: [] }),
-        hasPerm('manage_sellers') ? api.get('/sellers') : Promise.resolve({ data: [] }),
-        hasPerm('manage_locations') ? api.get('/locations') : Promise.resolve({ data: [] })
-      ]);
+      const fetchFns = [
+        hasPerm('manage_products') ? () => api.get('/products') : () => Promise.resolve({ data: [] }),
+        hasPerm('manage_categories') ? () => api.get('/categories') : () => Promise.resolve({ data: [] }),
+        hasPerm('manage_drivers') ? () => api.get('/drivers') : () => Promise.resolve({ data: [] }),
+        hasPerm('manage_orders') ? () => api.get('/orders/admin/all') : () => Promise.resolve({ data: [] }),
+        hasPerm('manage_sellers') ? () => api.get('/sellers') : () => Promise.resolve({ data: [] }),
+        hasPerm('manage_locations') ? () => api.get('/locations') : () => Promise.resolve({ data: [] })
+      ];
+
+      const results = [];
+      for (const fn of fetchFns) {
+        try {
+          const res = await fn();
+          results.push({ status: 'fulfilled', value: res });
+        } catch (err) {
+          results.push({ status: 'rejected', reason: err });
+        }
+      }
 
       const [p, c, d, o, s, l] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
 
