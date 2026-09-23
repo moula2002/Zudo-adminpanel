@@ -27,9 +27,10 @@ export const notificationApi = axios.create({
 });
 
 let globalApiQueue = Promise.resolve();
-const GLOBAL_REQUEST_DELAY = 400; // 400ms delay between requests to prevent 429 rate limiting
+const GLOBAL_REQUEST_DELAY = 800; // Increased to 800ms to definitively bypass strict hostinger rate limits
 
 let globalAbortController = new AbortController();
+const apiCache = new Map(); // Global memory cache for API requests
 
 export const cancelAllPendingRequests = () => {
   globalAbortController.abort(); // Abort all inflight requests
@@ -41,6 +42,23 @@ const setupInterceptors = (instance) => {
   instance.interceptors.request.use(async (config) => {
     // Attach the current global abort signal to the request
     config.signal = globalAbortController.signal;
+
+    // Check Cache before queuing to save network requests instantly
+    if (config.method === 'get') {
+      const cacheKey = `${config.url}-${config.headers['x-location'] || 'global'}`;
+      const cached = apiCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < 120000) { // 2 minute cache
+        config.adapter = () => Promise.resolve({
+          data: cached.data,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+          request: {}
+        });
+        return config;
+      }
+    }
 
     // Queue the request to avoid 429 Rate Limiting
     const currentQueue = globalApiQueue;
@@ -66,7 +84,17 @@ const setupInterceptors = (instance) => {
   });
 
   instance.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      // Cache successful GET responses
+      if (response.config.method === 'get') {
+        const cacheKey = `${response.config.url}-${response.config.headers['x-location'] || 'global'}`;
+        apiCache.set(cacheKey, {
+          data: response.data,
+          timestamp: Date.now()
+        });
+      }
+      return response;
+    },
     async (error) => {
       const config = error.config;
       

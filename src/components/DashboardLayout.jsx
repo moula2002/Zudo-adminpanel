@@ -396,7 +396,7 @@ const DashboardLayout = ({ children }) => {
                   <div style={{
                     position: 'absolute',
                     top: 'calc(100% + 8px)',
-                    right: 0,
+                    ...(isMobile ? { left: 0 } : { right: 0 }),
                     background: 'var(--glass-bg)',
                     backdropFilter: 'blur(20px)',
                     WebkitBackdropFilter: 'blur(20px)',
