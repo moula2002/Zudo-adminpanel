@@ -26,8 +26,16 @@ export const notificationApi = axios.create({
   baseURL: '/api',
 });
 
+let globalApiQueue = Promise.resolve();
+const GLOBAL_REQUEST_DELAY = 400; // 400ms delay between requests to prevent 429 rate limiting
+
 const setupInterceptors = (instance) => {
-  instance.interceptors.request.use((config) => {
+  instance.interceptors.request.use(async (config) => {
+    // Queue the request to avoid 429 Rate Limiting
+    const currentQueue = globalApiQueue;
+    globalApiQueue = currentQueue.then(() => new Promise(resolve => setTimeout(resolve, GLOBAL_REQUEST_DELAY)));
+    await currentQueue;
+
     // Admin panel uses admin token
     const token = localStorage.getItem('zudo_admin_token');
     if (token) {
