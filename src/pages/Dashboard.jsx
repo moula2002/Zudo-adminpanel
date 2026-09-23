@@ -67,8 +67,14 @@ const Dashboard = () => {
 
       const [p, c, d, o, s, l] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
 
-      const productsList = p.data;
-      const ordersList = o.data;
+      const getArray = (res) => Array.isArray(res?.data) ? res.data : (Array.isArray(res?.data?.data) ? res.data.data : []);
+      
+      const productsList = getArray(p);
+      const categoriesList = getArray(c);
+      const driversList = getArray(d);
+      const ordersList = getArray(o);
+      const sellersList = getArray(s);
+      const locationsList = getArray(l);
 
       const deliveries = ordersList.filter(order => order.orderStatus === 'Delivered').length;
       const pendingPayments = ordersList.filter(order => order.paymentStatus === 'Pending').length;
@@ -86,15 +92,15 @@ const Dashboard = () => {
 
       setStats({
         products: productsList.length,
-        categories: c.data.length,
-        drivers: d.data.length,
+        categories: categoriesList.length,
+        drivers: driversList.length,
         deliveries,
         pendingPayments,
-        sellers: s.data.length,
+        sellers: sellersList.length,
         b2bOrders,
         b2cOrders,
         totalRevenue,
-        locations: l.data.length,
+        locations: locationsList.length,
         dailyOrders
       });
 
