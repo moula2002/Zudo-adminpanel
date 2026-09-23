@@ -29,8 +29,19 @@ export const notificationApi = axios.create({
 let globalApiQueue = Promise.resolve();
 const GLOBAL_REQUEST_DELAY = 400; // 400ms delay between requests to prevent 429 rate limiting
 
+let globalAbortController = new AbortController();
+
+export const cancelAllPendingRequests = () => {
+  globalAbortController.abort(); // Abort all inflight requests
+  globalAbortController = new AbortController(); // Create a fresh controller for new requests
+  globalApiQueue = Promise.resolve(); // Reset the delay queue for immediate execution of the new batch
+};
+
 const setupInterceptors = (instance) => {
   instance.interceptors.request.use(async (config) => {
+    // Attach the current global abort signal to the request
+    config.signal = globalAbortController.signal;
+
     // Queue the request to avoid 429 Rate Limiting
     const currentQueue = globalApiQueue;
     globalApiQueue = currentQueue.then(() => new Promise(resolve => setTimeout(resolve, GLOBAL_REQUEST_DELAY)));

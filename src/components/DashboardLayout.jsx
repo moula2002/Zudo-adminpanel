@@ -32,7 +32,7 @@ import {
   Settings
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import api from '../utils/api';
+import api, { cancelAllPendingRequests } from '../utils/api';
 
 const DashboardLayout = ({ children }) => {
   const { theme, toggleTheme } = useTheme();
@@ -42,6 +42,8 @@ const DashboardLayout = ({ children }) => {
 
   const [locations, setLocations] = React.useState([]);
   const [locDropdownOpen, setLocDropdownOpen] = React.useState(false);
+  const [activeDbName, setActiveDbName] = React.useState(localStorage.getItem('zudo_admin_db_name') || 'global');
+  const locationChangeTimeout = React.useRef(null);
   const currentLocId = localStorage.getItem('zudo_admin_location') || admin.locationId;
 
   // Responsive state
@@ -82,7 +84,7 @@ const DashboardLayout = ({ children }) => {
         if (selectedLoc) {
           const dbIdentifier = selectedLoc.dbName || selectedLoc.name || `zudo-${selectedLoc.city.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
           localStorage.setItem('zudo_admin_db_name', dbIdentifier);
-          window.location.reload();
+          setActiveDbName(dbIdentifier);
         }
       }
     } catch (err) {
@@ -91,20 +93,33 @@ const DashboardLayout = ({ children }) => {
   };
 
   const handleLocationChange = (locId) => {
-    if (locId === 'global') {
-      localStorage.setItem('zudo_admin_location', 'global');
-      localStorage.setItem('zudo_admin_db_name', 'global');
-    } else {
-      localStorage.setItem('zudo_admin_location', locId);
-      const selectedLoc = locations.find(l => l._id === locId);
-      if (selectedLoc) {
-        const dbIdentifier = selectedLoc.dbName || selectedLoc.name || `zudo-${selectedLoc.city.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-        localStorage.setItem('zudo_admin_db_name', dbIdentifier);
+    // Clear any pending debounced location switches
+    if (locationChangeTimeout.current) clearTimeout(locationChangeTimeout.current);
+
+    // Debounce the actual switch to prevent rapid clicking from triggering massive bursts
+    locationChangeTimeout.current = setTimeout(() => {
+      // Instantly abort all inflight network requests to prevent 429 errors from stacking
+      cancelAllPendingRequests();
+
+      let newDbName = 'global';
+      if (locId === 'global') {
+        localStorage.setItem('zudo_admin_location', 'global');
+        localStorage.setItem('zudo_admin_db_name', 'global');
       } else {
-        localStorage.removeItem('zudo_admin_db_name');
+        localStorage.setItem('zudo_admin_location', locId);
+        const selectedLoc = locations.find(l => l._id === locId);
+        if (selectedLoc) {
+          newDbName = selectedLoc.dbName || selectedLoc.name || `zudo-${selectedLoc.city.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+          localStorage.setItem('zudo_admin_db_name', newDbName);
+        } else {
+          localStorage.removeItem('zudo_admin_db_name');
+        }
       }
-    }
-    window.location.reload();
+      
+      // Soft-reload the main view by updating the key
+      setActiveDbName(newDbName);
+      setLocDropdownOpen(false);
+    }, 300);
   };
 
   const handleLogout = () => {
@@ -514,7 +529,7 @@ const DashboardLayout = ({ children }) => {
           </div>
         </header>
 
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} key={activeDbName}>
           {children}
         </div>
       </main>
