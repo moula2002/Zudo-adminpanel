@@ -56,16 +56,21 @@ const Dashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const results = await Promise.allSettled([
-        hasPerm('manage_products') ? api.get('/products') : Promise.resolve({ data: [] }),
-        hasPerm('manage_categories') ? api.get('/categories') : Promise.resolve({ data: [] }),
-        hasPerm('manage_drivers') ? api.get('/drivers') : Promise.resolve({ data: [] }),
-        hasPerm('manage_orders') ? api.get('/orders/admin/all') : Promise.resolve({ data: [] }),
-        hasPerm('manage_sellers') ? api.get('/sellers') : Promise.resolve({ data: [] }),
-        hasPerm('manage_locations') ? api.get('/locations') : Promise.resolve({ data: [] })
-      ]);
+      // Fetch sequentially to avoid 429 Rate Limiting errors
+      const safeGet = async (url) => {
+        try {
+          return await api.get(url);
+        } catch (e) {
+          return { data: [] };
+        }
+      };
 
-      const [p, c, d, o, s, l] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
+      const p = hasPerm('manage_products') ? await safeGet('/products') : { data: [] };
+      const c = hasPerm('manage_categories') ? await safeGet('/categories') : { data: [] };
+      const d = hasPerm('manage_drivers') ? await safeGet('/drivers') : { data: [] };
+      const o = hasPerm('manage_orders') ? await safeGet('/orders/admin/all') : { data: [] };
+      const s = hasPerm('manage_sellers') ? await safeGet('/sellers') : { data: [] };
+      const l = hasPerm('manage_locations') ? await safeGet('/locations') : { data: [] };
 
       const getArray = (res) => Array.isArray(res?.data) ? res.data : (Array.isArray(res?.data?.data) ? res.data.data : []);
       
