@@ -44,7 +44,24 @@ const setupInterceptors = (instance) => {
 
   instance.interceptors.response.use(
     (response) => response,
-    (error) => {
+    async (error) => {
+      const config = error.config;
+      
+      // Handle 429 Too Many Requests (Rate Limiting) with exponential backoff
+      if (error.response && error.response.status === 429 && config) {
+        config.retryCount = config.retryCount || 0;
+        
+        if (config.retryCount < 3) {
+          config.retryCount += 1;
+          
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = Math.pow(2, config.retryCount - 1) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          
+          return instance(config);
+        }
+      }
+
       if (error.response && error.response.status === 401) {
         if (error.response.data && error.response.data.code === 'SESSION_INVALIDATED') {
           alert('Session expired. You have logged in from another device.');
