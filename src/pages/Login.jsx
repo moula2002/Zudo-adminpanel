@@ -215,7 +215,7 @@ const Login = () => {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Branch</span>
-                    <span style={{ color: selectedLocation ? '#fff' : '#94a3b8', fontWeight: 600, fontSize: '13px' }}>
+                    <span style={{ color: selectedLocation ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 600, fontSize: '13px' }}>
                       {selectedLocation ? `${selectedLocation.city}` : 'Select Operational Zone'}
                     </span>
                   </div>
