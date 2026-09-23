@@ -10,7 +10,7 @@ const envProductionDomain = import.meta.env.VITE_PRODUCTION_DOMAIN || 'https://s
 const PRODUCTION_DOMAIN = envProductionDomain.endsWith('/') ? envProductionDomain.slice(0, -1) : envProductionDomain;
 
 export const BASE_DOMAIN = isLocal ? window.location.origin : PRODUCTION_DOMAIN;
-export const BASE_URL = isLocal ? '/api' : `${PRODUCTION_DOMAIN}/api`;
+export const BASE_URL = '/api';
 export const UPLOAD_URL = BASE_URL;
 export const IMAGE_BASE_URL = PRODUCTION_DOMAIN;
 
@@ -23,7 +23,7 @@ export const uploadApi = axios.create({
 });
 
 export const notificationApi = axios.create({
-  baseURL: BASE_URL,
+  baseURL: '/api',
 });
 
 const setupInterceptors = (instance) => {
@@ -65,11 +65,13 @@ const setupInterceptors = (instance) => {
       if (error.response && error.response.status === 401) {
         if (error.response.data && error.response.data.code === 'SESSION_INVALIDATED') {
           alert('Session expired. You have logged in from another device.');
-          localStorage.removeItem('zudo_admin_token');
-          localStorage.removeItem('zudo_admin_user');
-          localStorage.removeItem('zudo_admin_location');
-          window.location.href = '/login';
+        } else {
+          alert('Session expired. Please log in again.');
         }
+        localStorage.removeItem('zudo_admin_token');
+        localStorage.removeItem('zudo_admin_user');
+        localStorage.removeItem('zudo_admin_location');
+        window.location.href = '/login';
       }
       return Promise.reject(error);
     }
