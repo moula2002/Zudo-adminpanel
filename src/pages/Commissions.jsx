@@ -37,6 +37,7 @@ const Commissions = () => {
           exportData.push({
             'Category Name': cat.name,
             'Subcategories Count': (cat.subCategories || []).length,
+            'Pincode': comm.pincode || 'All',
             'Packaging Unit': comm.unit,
             'Commission Type': comm.commissionType === 'percentage' ? 'Percentage (%)' : 'Flat (₹)',
             'Commission Value': comm.commissionValue
@@ -68,7 +69,8 @@ const Commissions = () => {
   const [newRule, setNewRule] = useState({
     unit: 'pcs',
     commissionType: 'percentage',
-    commissionValue: ''
+    commissionValue: '',
+    pincode: ''
   });
   const [customUnit, setCustomUnit] = useState('');
   const [showCustomUnitInput, setShowCustomUnitInput] = useState(false);
@@ -135,7 +137,8 @@ const Commissions = () => {
     setNewRule({
       unit: 'pcs',
       commissionType: 'percentage',
-      commissionValue: ''
+      commissionValue: '',
+      pincode: ''
     });
     setCustomUnit('');
     setShowCustomUnitInput(false);
@@ -153,9 +156,10 @@ const Commissions = () => {
       return;
     }
 
+    const pincodeValue = newRule.pincode.trim() || 'All';
     // Check if unit rule already exists
-    if (commissionsList.some(r => r.unit.toLowerCase() === unitName.toLowerCase())) {
-      alert(`A commission rule for unit "${unitName}" already exists.`);
+    if (commissionsList.some(r => r.unit.toLowerCase() === unitName.toLowerCase() && (r.pincode || 'All') === pincodeValue)) {
+      alert(`A commission rule for unit "${unitName}" and pincode "${pincodeValue}" already exists.`);
       return;
     }
 
@@ -164,7 +168,8 @@ const Commissions = () => {
       {
         unit: unitName,
         commissionType: newRule.commissionType,
-        commissionValue: val
+        commissionValue: val,
+        pincode: pincodeValue
       }
     ];
     setCommissionsList(updatedList);
@@ -173,7 +178,8 @@ const Commissions = () => {
     setNewRule({
       unit: 'pcs',
       commissionType: 'percentage',
-      commissionValue: ''
+      commissionValue: '',
+      pincode: ''
     });
     setCustomUnit('');
     setShowCustomUnitInput(false);
@@ -469,7 +475,7 @@ const Commissions = () => {
                               : '1px solid rgba(16, 185, 129, 0.2)'
                           }}
                         >
-                          <span style={{ color: 'var(--text-main)', opacity: 0.6 }}>{comm.unit}:</span>
+                          <span style={{ color: 'var(--text-main)', opacity: 0.6 }}>{comm.unit} {comm.pincode && comm.pincode !== 'All' ? `(${comm.pincode})` : ''}:</span>
                           <span>
                             {comm.commissionType === 'percentage' 
                               ? `${comm.commissionValue}%` 
@@ -578,6 +584,18 @@ const Commissions = () => {
                     </div>
                   )}
 
+                  {/* Pincode */}
+                  <div style={{ flex: '1 1 120px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Pincode</label>
+                    <input 
+                      type="text" 
+                      className="input-field" 
+                      placeholder="e.g. 560001 (Blank for All)" 
+                      value={newRule.pincode} 
+                      onChange={(e) => setNewRule({ ...newRule, pincode: e.target.value })}
+                    />
+                  </div>
+
                   {/* Comm Type */}
                   <div style={{ flex: '1 1 120px' }}>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Type</label>
@@ -638,7 +656,9 @@ const Commissions = () => {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontWeight: 700, fontSize: '14px' }}>{comm.unit}</span>
+                          <span style={{ fontWeight: 700, fontSize: '14px' }}>
+                            {comm.unit} {comm.pincode && comm.pincode !== 'All' ? <span style={{ color: 'var(--primary)', fontSize: '12px', background: 'rgba(99, 102, 241, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>{comm.pincode}</span> : <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>(All)</span>}
+                          </span>
                           <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>—</span>
                           <span style={{ 
                             fontSize: '13px', 
