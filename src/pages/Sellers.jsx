@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
+import { getFullUrl } from '../utils/media_utils';
 import { 
   Users, 
   UserPlus, 
@@ -30,7 +31,7 @@ const Sellers = () => {
   const [status, setStatus] = useState({ type: '', message: '' });
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [createData, setCreateData] = useState({ name: '', email: '', password: '', creditDays: 0, status: 'pending' });
+  const [createData, setCreateData] = useState({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '' });
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -88,7 +89,7 @@ const Sellers = () => {
       await api.post('/sellers', payload);
       setStatus({ type: 'success', message: 'New seller account created successfully!' });
       setShowCreate(false);
-      setCreateData({ name: '', email: '', password: '', creditDays: 0, status: 'pending' });
+      setCreateData({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '' });
       fetchSellers();
     } catch (err) {
       setStatus({ type: 'error', message: err.response?.data?.message || 'Failed to create seller.' });
@@ -259,6 +260,10 @@ const Sellers = () => {
               </div>
             </div>
             <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Company Name</label>
+                <input type="text" placeholder="e.g. Acme Corp" className="input-field" value={createData.businessName} onChange={e => setCreateData({...createData, businessName: e.target.value})} />
+              </div>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Allowed Credit Days</label>
                 <input type="number" placeholder="e.g. 7" className="input-field" value={createData.creditDays} onChange={e => setCreateData({...createData, creditDays: Number(e.target.value) || 0})} min="0" />
@@ -469,8 +474,8 @@ const Sellers = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 {[
-                  { label: 'GST Document', url: selectedSeller.gstDoc, color: '#6366f1' },
-                  { label: 'PAN Document', url: selectedSeller.panDoc, color: '#ec4899' }
+                  { label: 'GST Document', url: getFullUrl(selectedSeller.gstDoc), color: '#6366f1' },
+                  { label: 'PAN Document', url: getFullUrl(selectedSeller.panDoc), color: '#ec4899' }
                 ].map((doc, idx) => (
                   <a 
                     key={idx}
