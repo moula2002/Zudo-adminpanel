@@ -11,6 +11,7 @@ import {
   ExternalLink,
   ShieldCheck,
   Building2,
+  Mail,
   Phone,
   Download,
   XCircle,
