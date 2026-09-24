@@ -19,7 +19,9 @@ import {
   Search,
   Download,
   Edit2,
-  Trash2
+  Trash2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -39,6 +41,7 @@ const Sellers = () => {
   const [showEdit, setShowEdit] = useState(false);
   const [editData, setEditData] = useState(null);
   const [editPassword, setEditPassword] = useState('');
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
 
   const fetchSellers = async () => {
     try {
@@ -256,7 +259,12 @@ const Sellers = () => {
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Secure Password</label>
-                <input type="password" placeholder="••••••••" className="input-field" required value={createData.password} onChange={e => setCreateData({...createData, password: e.target.value})} />
+                <div style={{ position: 'relative' }}>
+                  <input type={showCreatePassword ? "text" : "password"} placeholder="••••••••" className="input-field" style={{ width: '100%', paddingRight: '40px' }} required value={createData.password} onChange={e => setCreateData({...createData, password: e.target.value})} />
+                  <button type="button" onClick={() => setShowCreatePassword(!showCreatePassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {showCreatePassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
