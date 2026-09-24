@@ -10,7 +10,7 @@ const envProductionDomain = import.meta.env.VITE_PRODUCTION_DOMAIN || 'https://s
 const PRODUCTION_DOMAIN = envProductionDomain.endsWith('/') ? envProductionDomain.slice(0, -1) : envProductionDomain;
 
 export const BASE_DOMAIN = isLocal ? window.location.origin : PRODUCTION_DOMAIN;
-export const BASE_URL = '/api';
+export const BASE_URL = `${BASE_DOMAIN}/api`;
 export const UPLOAD_URL = BASE_URL;
 export const IMAGE_BASE_URL = PRODUCTION_DOMAIN;
 
@@ -23,7 +23,7 @@ export const uploadApi = axios.create({
 });
 
 export const notificationApi = axios.create({
-  baseURL: '/api',
+  baseURL: BASE_URL,
 });
 
 let globalApiQueue = Promise.resolve();
