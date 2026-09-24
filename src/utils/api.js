@@ -32,6 +32,17 @@ const GLOBAL_REQUEST_DELAY = 800; // Increased to 800ms to definitively bypass s
 let globalAbortController = new AbortController();
 const apiCache = new Map(); // Global memory cache for API requests
 
+let activeRequests = 0;
+let apiLoadingTimeout;
+const emitLoadState = () => {
+  if (apiLoadingTimeout) clearTimeout(apiLoadingTimeout);
+  apiLoadingTimeout = setTimeout(() => {
+    window.dispatchEvent(new CustomEvent('apiLoadingChange', { detail: activeRequests }));
+  }, 100);
+};
+
+export const getActiveRequests = () => activeRequests;
+
 export const cancelAllPendingRequests = () => {
   globalAbortController.abort(); // Abort all inflight requests
   globalAbortController = new AbortController(); // Create a fresh controller for new requests
@@ -83,6 +94,10 @@ const setupInterceptors = (instance) => {
     } else if (location && !config.headers['x-location']) {
       config.headers['x-location'] = location;
     }
+
+    activeRequests++;
+    emitLoadState();
+    
     return config;
   });
 
@@ -96,6 +111,8 @@ const setupInterceptors = (instance) => {
           timestamp: Date.now()
         });
       }
+      activeRequests = Math.max(0, activeRequests - 1);
+      emitLoadState();
       return response;
     },
     async (error) => {
@@ -128,6 +145,8 @@ const setupInterceptors = (instance) => {
         localStorage.removeItem('zudo_admin_db_name');
         window.location.href = '/login';
       }
+      activeRequests = Math.max(0, activeRequests - 1);
+      emitLoadState();
       return Promise.reject(error);
     }
   );

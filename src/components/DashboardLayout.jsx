@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
+  Loader2,
   LayoutDashboard,
   Package,
   Layers,
@@ -45,6 +46,25 @@ const DashboardLayout = ({ children }) => {
   const [activeDbName, setActiveDbName] = React.useState(localStorage.getItem('zudo_admin_db_name') || 'global');
   const locationChangeTimeout = React.useRef(null);
   const currentLocId = localStorage.getItem('zudo_admin_location') || admin.locationId;
+
+  const [isSwitchingLocation, setIsSwitchingLocation] = React.useState(false);
+  const [switchingLocationName, setSwitchingLocationName] = React.useState('');
+
+  React.useEffect(() => {
+    let timeoutId;
+    const handleApiLoading = (e) => {
+      if (isSwitchingLocation && e.detail === 0) {
+        timeoutId = setTimeout(() => {
+          setIsSwitchingLocation(false);
+        }, 600);
+      }
+    };
+    window.addEventListener('apiLoadingChange', handleApiLoading);
+    return () => {
+      window.removeEventListener('apiLoadingChange', handleApiLoading);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isSwitchingLocation]);
 
   // Responsive state
   const [isMobile, setIsMobile] = React.useState(false);
@@ -105,20 +125,32 @@ const DashboardLayout = ({ children }) => {
       if (locId === 'global') {
         localStorage.setItem('zudo_admin_location', 'global');
         localStorage.setItem('zudo_admin_db_name', 'global');
+        setSwitchingLocationName('Global Access');
       } else {
         localStorage.setItem('zudo_admin_location', locId);
         const selectedLoc = locations.find(l => l._id === locId);
         if (selectedLoc) {
           newDbName = selectedLoc.dbName || selectedLoc.name || `zudo-${selectedLoc.city.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
           localStorage.setItem('zudo_admin_db_name', newDbName);
+          setSwitchingLocationName(selectedLoc.city);
         } else {
           localStorage.removeItem('zudo_admin_db_name');
+          setSwitchingLocationName('Location Data');
         }
       }
       
+      setIsSwitchingLocation(true);
       // Soft-reload the main view by updating the key
       setActiveDbName(newDbName);
       setLocDropdownOpen(false);
+
+      // Fallback timeout in case no API requests are made
+      setTimeout(() => {
+        setIsSwitchingLocation((prev) => {
+          if (prev) return false;
+          return prev;
+        });
+      }, 3000);
     }, 300);
   };
 
@@ -347,6 +379,7 @@ const DashboardLayout = ({ children }) => {
             {admin.role === 'super_admin' && (
               <div style={{ position: 'relative' }}>
                 <button
+                  disabled={isSwitchingLocation}
                   onClick={() => setLocDropdownOpen(!locDropdownOpen)}
                   style={{
                     display: 'flex',
@@ -359,16 +392,19 @@ const DashboardLayout = ({ children }) => {
                     backdropFilter: 'blur(10px)',
                     WebkitBackdropFilter: 'blur(10px)',
                     color: 'var(--text-main)',
-                    cursor: 'pointer',
+                    cursor: isSwitchingLocation ? 'not-allowed' : 'pointer',
+                    opacity: isSwitchingLocation ? 0.6 : 1,
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     boxShadow: '0 4px 15px rgba(99, 102, 241, 0.1)',
                   }}
                   onMouseEnter={(e) => {
+                    if (isSwitchingLocation) return;
                     e.currentTarget.style.border = '1px solid rgba(99, 102, 241, 0.5)';
                     e.currentTarget.style.boxShadow = '0 6px 20px rgba(99, 102, 241, 0.2)';
                     e.currentTarget.style.transform = 'translateY(-1px)';
                   }}
                   onMouseLeave={(e) => {
+                    if (isSwitchingLocation) return;
                     e.currentTarget.style.border = '1px solid rgba(99, 102, 241, 0.25)';
                     e.currentTarget.style.boxShadow = '0 4px 15px rgba(99, 102, 241, 0.1)';
                     e.currentTarget.style.transform = 'none';
@@ -423,10 +459,7 @@ const DashboardLayout = ({ children }) => {
                     </div>
 
                     <button
-                      onClick={() => {
-                        localStorage.setItem('zudo_admin_location', 'global');
-                        window.location.reload();
-                      }}
+                      onClick={() => handleLocationChange('global')}
                       style={{
                         width: '100%',
                         textAlign: 'left',
@@ -530,7 +563,47 @@ const DashboardLayout = ({ children }) => {
         </header>
 
         <div style={{ position: 'relative' }} key={activeDbName}>
-          {children}
+          <style>{`
+            @keyframes loadPulse {
+              0%, 100% { opacity: 1; }
+              50% { opacity: .4; }
+            }
+            .skeleton-loader { animation: loadPulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+            .spinner-anim { animation: spinAnim 1s linear infinite; }
+            @keyframes spinAnim { 100% { transform: rotate(360deg); } }
+          `}</style>
+          
+          {isSwitchingLocation ? (
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              padding: '80px 20px',
+              minHeight: '60vh',
+              background: 'var(--card-bg)',
+              borderRadius: '20px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+              textAlign: 'center'
+            }}>
+              <Loader2 className="spinner-anim" size={56} style={{ color: '#6366f1', marginBottom: '24px' }} />
+              <h3 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '12px' }}>
+                Switching to {switchingLocationName}...
+              </h3>
+              <p style={{ color: 'var(--text-dim)', fontSize: '15px' }}>
+                Please wait while we fetch the latest location data.
+              </p>
+              
+              <div style={{ display: 'flex', gap: '24px', marginTop: '48px', width: '100%', maxWidth: '850px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="skeleton-loader" style={{ flex: '1 1 250px', height: '140px', background: 'var(--glass-bg)', borderRadius: '16px' }} />
+                ))}
+              </div>
+              <div className="skeleton-loader" style={{ width: '100%', maxWidth: '850px', height: '240px', background: 'var(--glass-bg)', borderRadius: '16px', marginTop: '24px' }} />
+            </div>
+          ) : (
+            children
+          )}
         </div>
       </main>
     </div>
