@@ -42,6 +42,7 @@ const DashboardLayout = ({ children }) => {
   const admin = JSON.parse(localStorage.getItem('zudo_admin_user') || '{}');
 
   const [locations, setLocations] = React.useState([]);
+  const [isFetchingLocations, setIsFetchingLocations] = React.useState(false);
   const [locDropdownOpen, setLocDropdownOpen] = React.useState(false);
   const [activeDbName, setActiveDbName] = React.useState(localStorage.getItem('zudo_admin_db_name') || 'global');
   const locationChangeTimeout = React.useRef(null);
@@ -94,6 +95,7 @@ const DashboardLayout = ({ children }) => {
 
   const fetchLocations = async () => {
     try {
+      setIsFetchingLocations(true);
       const { data } = await api.get('/locations/active');
       setLocations(data);
 
@@ -109,6 +111,8 @@ const DashboardLayout = ({ children }) => {
       }
     } catch (err) {
       console.error('Failed to fetch locations', err);
+    } finally {
+      setIsFetchingLocations(false);
     }
   };
 
@@ -525,9 +529,14 @@ const DashboardLayout = ({ children }) => {
                         </button>
                       );
                     })}
-                    {locations.length === 0 && (
-                      <div style={{ padding: '12px', fontSize: '13px', color: 'var(--text-dim)', textAlign: 'center' }}>
+                    {isFetchingLocations ? (
+                      <div style={{ padding: '12px', fontSize: '13px', color: 'var(--text-dim)', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                        <Loader2 className="spinner-anim" size={14} />
                         Loading branches...
+                      </div>
+                    ) : locations.length === 0 && (
+                      <div style={{ padding: '12px', fontSize: '13px', color: 'var(--text-dim)', textAlign: 'center' }}>
+                        No branches available
                       </div>
                     )}
                   </div>
