@@ -24,8 +24,7 @@ const B2BVerification = () => {
   const [pendingUsers, setPendingUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [userToDelete, setUserToDelete] = useState(null);
+  const [modalState, setModalState] = useState({ isOpen: false, type: '', user: null });
   const [selectedPdf, setSelectedPdf] = useState(null);
   const [activeTab, setActiveTab] = useState('Pending');
   const [showImageModal, setShowImageModal] = useState(null);
@@ -63,71 +62,37 @@ const B2BVerification = () => {
     fetchPendingUsers();
   }, [activeTab]);
 
-  const handleVerify = async (id) => {
-    if (!window.confirm('Are you sure you want to verify this business?')) return;
-    setActionLoading(id);
-    try {
-      await api.put(`/auth/verify-b2b/${id}`);
-      fetchPendingUsers();
-      setToastMessage('Business verified successfully! Notification sent.');
-      setTimeout(() => setToastMessage(''), 3000);
-    } catch (err) {
-      alert('Failed to verify user');
-    } finally {
-      setActionLoading(null);
-    }
+  const openModal = (type, user) => {
+    setModalState({ isOpen: true, type, user });
   };
 
-  const handleReject = async (id) => {
-    if (!window.confirm('Are you sure you want to reject this business?')) return;
-    setActionLoading(id);
+  const confirmAction = async () => {
+    const { type, user } = modalState;
+    if (!user) return;
+    
+    setActionLoading(user._id);
+    setModalState({ isOpen: false, type: '', user: null });
+
     try {
-      await api.put(`/auth/reject-b2b/${id}`);
+      if (type === 'verify') {
+        await api.put(`/auth/verify-b2b/${user._id}`);
+        setToastMessage('Business verified successfully! Notification sent.');
+      } else if (type === 'reject') {
+        await api.put(`/auth/reject-b2b/${user._id}`);
+        setToastMessage('Business rejected successfully! Notification sent.');
+      } else if (type === 'block') {
+        await api.put(`/auth/block-b2b/${user._id}`);
+        setToastMessage('Business blocked successfully! Notification sent.');
+      } else if (type === 'delete') {
+        await api.delete(`/auth/users/${user._id}`);
+        setToastMessage('Business deleted successfully!');
+      }
       fetchPendingUsers();
-      setToastMessage('Business rejected successfully! Notification sent.');
       setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
-      alert('Failed to reject user');
+      alert(`Failed to ${type} user`);
     } finally {
       setActionLoading(null);
-    }
-  };
-
-  const handleBlock = async (id) => {
-    if (!window.confirm('Are you sure you want to block this business? They will lose access to B2B features.')) return;
-    setActionLoading(id);
-    try {
-      await api.put(`/auth/block-b2b/${id}`);
-      fetchPendingUsers();
-      setToastMessage('Business blocked successfully! Notification sent.');
-      setTimeout(() => setToastMessage(''), 3000);
-    } catch (err) {
-      alert('Failed to block user');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const openDeleteModal = (user) => {
-    setUserToDelete(user);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!userToDelete) return;
-    const id = userToDelete._id;
-    setActionLoading(id);
-    setShowDeleteModal(false);
-    try {
-      await api.delete(`/auth/users/${id}`);
-      fetchPendingUsers();
-      setToastMessage('Business deleted successfully!');
-      setTimeout(() => setToastMessage(''), 3000);
-    } catch (err) {
-      alert('Failed to delete user');
-    } finally {
-      setActionLoading(null);
-      setUserToDelete(null);
     }
   };
 
@@ -358,7 +323,7 @@ const B2BVerification = () => {
                   <td style={{ padding: '20px 24px' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button 
-                        onClick={() => handleVerify(user._id)}
+                        onClick={() => openModal('verify', user)}
                         disabled={actionLoading === user._id}
                         title="Verify"
                         style={{ 
@@ -370,7 +335,7 @@ const B2BVerification = () => {
                         {actionLoading === user._id ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
                       </button>
                       <button 
-                        onClick={() => handleReject(user._id)}
+                        onClick={() => openModal('reject', user)}
                         disabled={actionLoading === user._id}
                         title="Reject"
                         style={{ 
@@ -382,7 +347,7 @@ const B2BVerification = () => {
                         {actionLoading === user._id ? <Loader2 size={18} className="animate-spin" /> : <X size={18} />}
                       </button>
                       <button 
-                        onClick={() => openDeleteModal(user)}
+                        onClick={() => openModal('delete', user)}
                         disabled={actionLoading === user._id}
                         title="Delete Business"
                         style={{ 
@@ -406,7 +371,7 @@ const B2BVerification = () => {
                         <Check size={14} /> Verified
                       </span>
                       <button 
-                        onClick={() => handleBlock(user._id)}
+                        onClick={() => openModal('block', user)}
                         disabled={actionLoading === user._id}
                         title="Block Business"
                         style={{ 
@@ -418,7 +383,7 @@ const B2BVerification = () => {
                         {actionLoading === user._id ? <Loader2 size={16} className="animate-spin" /> : <Ban size={16} />}
                       </button>
                       <button 
-                        onClick={() => openDeleteModal(user)}
+                        onClick={() => openModal('delete', user)}
                         disabled={actionLoading === user._id}
                         title="Delete Business"
                         style={{ 
@@ -513,8 +478,8 @@ const B2BVerification = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && userToDelete && (
+      {/* Universal Action Modal */}
+      {modalState.isOpen && modalState.user && (
         <div style={{ 
           position: 'fixed', inset: 0, 
           background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
@@ -526,24 +491,31 @@ const B2BVerification = () => {
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
           }}>
             <div style={{ 
-              width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(239, 68, 68, 0.1)',
+              width: '48px', height: '48px', borderRadius: '24px', 
+              background: modalState.type === 'verify' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
-              color: '#ef4444'
+              color: modalState.type === 'verify' ? '#22c55e' : '#ef4444'
             }}>
-              <Trash2 size={24} />
+              {modalState.type === 'verify' && <Check size={24} />}
+              {modalState.type === 'reject' && <X size={24} />}
+              {modalState.type === 'block' && <Ban size={24} />}
+              {modalState.type === 'delete' && <Trash2 size={24} />}
             </div>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-              Delete Business Account?
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px', textTransform: 'capitalize' }}>
+              {modalState.type} Business Account?
             </h3>
             <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
-              Are you sure you want to permanently delete <strong>{userToDelete.businessName}</strong>? This action cannot be undone.
+              {modalState.type === 'verify' && `Are you sure you want to verify `}
+              {modalState.type === 'reject' && `Are you sure you want to reject `}
+              {modalState.type === 'block' && `Are you sure you want to block `}
+              {modalState.type === 'delete' && `Are you sure you want to permanently delete `}
+              <strong>{modalState.user.businessName}</strong>? 
+              {modalState.type === 'block' && ' They will lose access to B2B features.'}
+              {modalState.type === 'delete' && ' This action cannot be undone.'}
             </p>
             <div style={{ display: 'flex', gap: '12px' }}>
               <button 
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setUserToDelete(null);
-                }}
+                onClick={() => setModalState({ isOpen: false, type: '', user: null })}
                 style={{ 
                   flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
                   background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
@@ -552,13 +524,15 @@ const B2BVerification = () => {
                 Cancel
               </button>
               <button 
-                onClick={confirmDelete}
+                onClick={confirmAction}
                 style={{ 
                   flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
-                  background: '#ef4444', color: '#fff', fontWeight: 600, cursor: 'pointer'
+                  background: modalState.type === 'verify' ? '#22c55e' : '#ef4444', 
+                  color: modalState.type === 'verify' ? 'var(--text-main)' : '#fff', 
+                  fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize'
                 }}
               >
-                Delete
+                {modalState.type}
               </button>
             </div>
           </div>
