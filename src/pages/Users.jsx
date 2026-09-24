@@ -86,22 +86,40 @@ const Users = () => {
   );
 
   const exportUsers = () => {
-    const exportData = filteredUsers.map(user => ({
-      ID: user._id,
-      Name: user.name,
-      Email: user.email,
-      Phone: user.phone || 'N/A',
-      'Business Name': user.businessName || 'N/A',
-      'GST Number': user.gstNumber || 'N/A',
-      'Role/Type': user.role,
-      Verified: user.isVerified ? 'YES' : 'NO',
-      Blocked: user.isBlocked ? 'YES' : 'NO',
-      'Joined Date': new Date(user.createdAt).toLocaleDateString()
-    }));
+    const exportData = filteredUsers.map(user => {
+      const addressString = user.address?.street || (typeof user.address === 'string' ? user.address : 'N/A');
+      return {
+        'Customer ID': user._id,
+        'Name': user.name || 'N/A',
+        'Mobile Number': user.phone || 'N/A',
+        'Email Address': user.email || 'N/A',
+        'Profile Image': user.profilePicture ? getFullUrl(user.profilePicture) : 'N/A',
+        'Gender': user.gender || 'N/A',
+        'Date of Birth': user.dob ? new Date(user.dob).toLocaleDateString() : 'N/A',
+        'Address': addressString,
+        'City': user.address?.city || user.city || 'N/A',
+        'State': user.address?.state || user.state || 'N/A',
+        'Country': user.address?.country || user.country || 'N/A',
+        'Pincode': user.address?.pincode || user.address?.zip || user.pincode || 'N/A',
+        'Registration Date': user.createdAt ? new Date(user.createdAt).toLocaleString() : 'N/A',
+        'Last Login': user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'N/A',
+        'Account Status': user.isBlocked ? 'Blocked' : 'Active',
+        'Wallet Balance': user.walletBalance || 0,
+        'Reward Points': user.rewardPoints || 0,
+        'Total Orders': user.totalOrders || 0,
+        'Total Spending': user.totalSpending || 0,
+        'Referral Details': user.referredBy ? `Referred by ${user.referredBy}` : (user.referralCode || 'N/A'),
+        'Preferred Location': user.preferredLocation || 'N/A',
+        'Business Name': user.businessName || 'N/A',
+        'GST Number': user.gstNumber || 'N/A',
+        'Role/Type': user.role || 'N/A',
+        'Verified': user.isVerified ? 'YES' : 'NO'
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Users");
-    XLSX.writeFile(wb, "Zudo_Users_Report.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Customer Details");
+    XLSX.writeFile(wb, "Zudo_Customer_Details_Report.xlsx");
   };
 
 
