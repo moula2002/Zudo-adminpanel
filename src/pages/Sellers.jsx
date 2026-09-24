@@ -480,14 +480,18 @@ const Sellers = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
                 {[
-                  { label: 'GST Document', url: getFullUrl(selectedSeller.gstDoc), color: '#6366f1' },
-                  { label: 'PAN Document', url: getFullUrl(selectedSeller.panDoc), color: '#ec4899' }
-                ].map((doc, idx) => (
+                  { label: 'Store Logo', url: selectedSeller.storePic, color: '#3b82f6' },
+                  { label: 'GST Document', url: selectedSeller.gstDoc, color: '#6366f1' },
+                  { label: 'PAN Document', url: selectedSeller.panDoc, color: '#ec4899' },
+                  { label: 'Trade Licence', url: selectedSeller.tradeLicenseDoc, color: '#eab308' },
+                  { label: 'RMC/AMPC', url: selectedSeller.rmcAmpcDoc, color: '#10b981' },
+                  { label: 'Food Licence', url: selectedSeller.foodLicenseDoc, color: '#f97316' }
+                ].filter(doc => doc.url).map((doc, idx) => (
                   <a 
                     key={idx}
-                    href={doc.url} 
+                    href={getFullUrl(doc.url)} 
                     target="_blank" 
                     rel="noreferrer"
                     style={{ 
