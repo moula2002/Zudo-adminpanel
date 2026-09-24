@@ -286,6 +286,13 @@ const Dashboard = () => {
             <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Fleet Drivers</p>
           </div>
         )}
+        {hasPerm('manage_orders') && (
+          <div className="glass-card" style={{ padding: '24px', borderRadius: '24px', textAlign: 'center' }}>
+            <CheckCircle size={24} style={{ color: '#10b981', margin: '0 auto 16px' }} />
+            <h4 style={{ fontSize: '20px', fontWeight: 800 }}>{stats.deliveries}</h4>
+            <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Completed Deliveries</p>
+          </div>
+        )}
         {hasPerm('manage_cash') && (
           <div className="glass-card" style={{ padding: '24px', borderRadius: '24px', textAlign: 'center' }}>
             <Activity size={24} style={{ color: '#f59e0b', margin: '0 auto 16px' }} />
