@@ -11,10 +11,11 @@ import {
   ExternalLink,
   ShieldCheck,
   Building2,
-  Mail,
   Phone,
   Download,
-  XCircle
+  XCircle,
+  Ban,
+  CheckCircle2
 } from 'lucide-react';
 
 const B2BVerification = () => {
@@ -25,6 +26,7 @@ const B2BVerification = () => {
   const [activeTab, setActiveTab] = useState('Pending');
   const [showImageModal, setShowImageModal] = useState(null);
   const [counts, setCounts] = useState({ pending: 0, verified: 0 });
+  const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
     fetchPendingUsers();
@@ -63,6 +65,8 @@ const B2BVerification = () => {
     try {
       await api.put(`/auth/verify-b2b/${id}`);
       fetchPendingUsers();
+      setToastMessage('Business verified successfully! Notification sent.');
+      setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
       alert('Failed to verify user');
     } finally {
@@ -76,8 +80,25 @@ const B2BVerification = () => {
     try {
       await api.put(`/auth/reject-b2b/${id}`);
       fetchPendingUsers();
+      setToastMessage('Business rejected successfully! Notification sent.');
+      setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
       alert('Failed to reject user');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleBlock = async (id) => {
+    if (!window.confirm('Are you sure you want to block this business? They will lose access to B2B features.')) return;
+    setActionLoading(id);
+    try {
+      await api.put(`/auth/block-b2b/${id}`);
+      fetchPendingUsers();
+      setToastMessage('Business blocked successfully! Notification sent.');
+      setTimeout(() => setToastMessage(''), 3000);
+    } catch (err) {
+      alert('Failed to block user');
     } finally {
       setActionLoading(null);
     }
@@ -151,6 +172,12 @@ const B2BVerification = () => {
         </button>
       </div>
 
+      {toastMessage && (
+        <div style={{ padding: '16px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid #22c55e', color: '#22c55e', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <CheckCircle2 size={18} /> {toastMessage}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
         {['Pending', 'Verified'].map(tab => (
           <button
@@ -182,7 +209,7 @@ const B2BVerification = () => {
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Documents</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>ID Credentials</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Created At</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>{activeTab === 'Pending' ? 'Actions' : 'Status'}</th>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -331,13 +358,27 @@ const B2BVerification = () => {
                   </td>
                 ) : (
                   <td style={{ padding: '20px 24px' }}>
-                    <span style={{ 
-                      padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 800,
-                      background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', textTransform: 'uppercase',
-                      display: 'inline-flex', alignItems: 'center', gap: '4px'
-                    }}>
-                      <Check size={14} /> Verified
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ 
+                        padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 800,
+                        background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', textTransform: 'uppercase',
+                        display: 'inline-flex', alignItems: 'center', gap: '4px'
+                      }}>
+                        <Check size={14} /> Verified
+                      </span>
+                      <button 
+                        onClick={() => handleBlock(user._id)}
+                        disabled={actionLoading === user._id}
+                        title="Block Business"
+                        style={{ 
+                          width: '36px', height: '36px', borderRadius: '10px', border: 'none',
+                          background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                      >
+                        {actionLoading === user._id ? <Loader2 size={16} className="animate-spin" /> : <Ban size={16} />}
+                      </button>
+                    </div>
                   </td>
                 )}
               </tr>
