@@ -37,7 +37,7 @@ const StatCard = ({ title, value, subValue, icon: Icon, color, trend }) => (
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
-    products: 0, categories: 0, drivers: 0, deliveries: 0, pendingDeliveries: 0,
+    products: 0, categories: 0, drivers: 0, deliveries: 0, pendingDeliveries: 0, totalDeliveries: 0,
     pendingPayments: 0, sellers: 0, b2bOrders: 0, b2cOrders: 0,
     totalRevenue: 0, locations: 0, dailyOrders: 0
   });
@@ -52,6 +52,10 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchStats();
+    const interval = setInterval(() => {
+      fetchStats();
+    }, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchStats = async () => {
@@ -83,6 +87,7 @@ const Dashboard = () => {
 
       const deliveries = ordersList.filter(order => order.orderStatus === 'Delivered').length;
       const pendingDeliveries = ordersList.filter(order => order.orderStatus !== 'Delivered' && order.orderStatus !== 'Cancelled' && order.orderStatus !== 'Returned').length;
+      const totalDeliveries = deliveries + pendingDeliveries;
       const pendingPayments = ordersList.filter(order => order.paymentStatus === 'Pending').length;
       const b2bOrders = ordersList.filter(order => order.userId?.role === 'b2b').length;
       const b2cOrders = ordersList.filter(order => order.userId?.role === 'b2c' || !order.userId?.role).length;
@@ -102,6 +107,7 @@ const Dashboard = () => {
         drivers: driversList.length,
         deliveries,
         pendingDeliveries,
+        totalDeliveries,
         pendingPayments,
         sellers: sellersList.length,
         b2bOrders,
@@ -243,6 +249,49 @@ const Dashboard = () => {
         )}
       </div>
 
+      {/* Delivery Status Overview */}
+      {hasPerm('manage_orders') && (
+        <div className="glass-card" style={{ padding: '24px', borderRadius: '24px' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>Delivery Status</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            <div style={{ padding: '20px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '16px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ padding: '10px', background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', borderRadius: '10px' }}>
+                  <Package size={20} />
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Total Deliveries</span>
+              </div>
+              <h4 style={{ fontSize: '28px', fontWeight: 800 }}>{stats.totalDeliveries}</h4>
+            </div>
+            
+            <div style={{ padding: '20px', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '16px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ padding: '10px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderRadius: '10px' }}>
+                  <CheckCircle size={20} />
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Delivered</span>
+              </div>
+              <h4 style={{ fontSize: '28px', fontWeight: 800 }}>{stats.deliveries}</h4>
+            </div>
+
+            <div style={{ padding: '20px', background: 'rgba(245, 158, 11, 0.05)', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ padding: '10px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', borderRadius: '10px' }}>
+                  <Clock size={20} />
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Pending Deliveries</span>
+              </div>
+              <h4 style={{ fontSize: '28px', fontWeight: 800 }}>{stats.pendingDeliveries}</h4>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '4px', height: '8px', borderRadius: '4px', overflow: 'hidden', marginTop: '24px' }}>
+            <div style={{ width: `${stats.totalDeliveries > 0 ? (stats.deliveries / stats.totalDeliveries) * 100 : 0}%`, background: '#10b981', transition: 'width 0.5s ease' }} title="Delivered"></div>
+            <div style={{ width: `${stats.totalDeliveries > 0 ? (stats.pendingDeliveries / stats.totalDeliveries) * 100 : 0}%`, background: '#f59e0b', transition: 'width 0.5s ease' }} title="Pending"></div>
+          </div>
+        </div>
+      )}
+
       {/* Visual Analytics */}
       <div style={{ display: 'grid', gridTemplateColumns: hasPerm('manage_products') ? '2fr 1fr' : '1fr', gap: '24px' }}>
         {hasPerm('manage_orders') && (
@@ -288,20 +337,7 @@ const Dashboard = () => {
             <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Fleet Drivers</p>
           </div>
         )}
-        {hasPerm('manage_orders') && (
-          <div className="glass-card" style={{ padding: '24px', borderRadius: '24px', textAlign: 'center' }}>
-            <CheckCircle size={24} style={{ color: '#10b981', margin: '0 auto 16px' }} />
-            <h4 style={{ fontSize: '20px', fontWeight: 800 }}>{stats.deliveries}</h4>
-            <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Completed Deliveries</p>
-          </div>
-        )}
-        {hasPerm('manage_orders') && (
-          <div className="glass-card" style={{ padding: '24px', borderRadius: '24px', textAlign: 'center' }}>
-            <Clock size={24} style={{ color: '#f59e0b', margin: '0 auto 16px' }} />
-            <h4 style={{ fontSize: '20px', fontWeight: 800 }}>{stats.pendingDeliveries}</h4>
-            <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Pending Deliveries</p>
-          </div>
-        )}
+
         {hasPerm('manage_cash') && (
           <div className="glass-card" style={{ padding: '24px', borderRadius: '24px', textAlign: 'center' }}>
             <Activity size={24} style={{ color: '#f59e0b', margin: '0 auto 16px' }} />
