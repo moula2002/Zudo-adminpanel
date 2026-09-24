@@ -14,6 +14,9 @@ const Drivers = () => {
     password: '',
     licenseNumber: '',
     vehicleDetails: '',
+    vehicleNo: '',
+    drivingLicense: '',
+    aadharNumber: '',
     type: 'B2C',
     cashManagement: false,
     documents: []
@@ -280,7 +283,7 @@ const Drivers = () => {
       };
       await api.post('/drivers', payload);
       setShowModal(false);
-      setFormData({ name: '', phone: '', email: '', password: '', licenseNumber: '', vehicleDetails: '', type: 'B2C', cashManagement: false, documents: [] });
+      setFormData({ name: '', phone: '', email: '', password: '', licenseNumber: '', vehicleDetails: '', vehicleNo: '', drivingLicense: '', aadharNumber: '', type: 'B2C', cashManagement: false, documents: [] });
       fetchDrivers();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to create driver');
@@ -1160,8 +1163,32 @@ const Drivers = () => {
                     value={formData.vehicleDetails} onChange={(e) => setFormData({ ...formData, vehicleDetails: e.target.value })}
                   />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: 'var(--input-bg)', borderRadius: '12px', height: '60px', marginTop: '16px', border: '1px solid var(--glass-border)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)' }}>Vehicle No</label>
+                  <input
+                    type="text" placeholder="Vehicle No" className="input-field"
+                    style={{ height: '38px', fontSize: '13px', padding: '0 12px', marginTop: '16px' }}
+                    value={formData.vehicleNo || ''} onChange={(e) => setFormData({ ...formData, vehicleNo: e.target.value })}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)' }}>Driving License</label>
+                  <input
+                    type="text" placeholder="Driving License" className="input-field"
+                    style={{ height: '38px', fontSize: '13px', padding: '0 12px' }}
+                    value={formData.drivingLicense || ''} onChange={(e) => setFormData({ ...formData, drivingLicense: e.target.value })}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)' }}>Aadhar Number</label>
+                  <input
+                    type="text" placeholder="Aadhar Number" className="input-field"
+                    style={{ height: '38px', fontSize: '13px', padding: '0 12px' }}
+                    value={formData.aadharNumber || ''} onChange={(e) => setFormData({ ...formData, aadharNumber: e.target.value })}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: 'var(--input-bg)', borderRadius: '12px', height: '60px', border: '1px solid var(--glass-border)' }}>
                     <input
                       type="checkbox"
                       id="cashManagement"
