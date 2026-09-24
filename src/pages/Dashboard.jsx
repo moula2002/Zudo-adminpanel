@@ -3,7 +3,7 @@ import api from '../utils/api';
 import {
   Package, Layers, Truck, Users, TrendingUp, ShoppingBag,
   CheckCircle, DollarSign, Store, FileText, Download,
-  ArrowUpRight, ArrowDownRight, Activity, ShieldAlert, MapPin
+  ArrowUpRight, ArrowDownRight, Activity, ShieldAlert, MapPin, Clock
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -297,7 +297,7 @@ const Dashboard = () => {
         )}
         {hasPerm('manage_orders') && (
           <div className="glass-card" style={{ padding: '24px', borderRadius: '24px', textAlign: 'center' }}>
-            <Package size={24} style={{ color: '#f59e0b', margin: '0 auto 16px' }} />
+            <Clock size={24} style={{ color: '#f59e0b', margin: '0 auto 16px' }} />
             <h4 style={{ fontSize: '20px', fontWeight: 800 }}>{stats.pendingDeliveries}</h4>
             <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Pending Deliveries</p>
           </div>
