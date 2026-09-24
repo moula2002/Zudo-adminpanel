@@ -371,6 +371,18 @@ const B2BVerification = () => {
                       >
                         {actionLoading === user._id ? <Loader2 size={18} className="animate-spin" /> : <X size={18} />}
                       </button>
+                      <button 
+                        onClick={() => handleDelete(user._id)}
+                        disabled={actionLoading === user._id}
+                        title="Delete Business"
+                        style={{ 
+                          width: '36px', height: '36px', borderRadius: '10px', border: 'none',
+                          background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                      >
+                        {actionLoading === user._id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                      </button>
                     </div>
                   </td>
                 ) : (
