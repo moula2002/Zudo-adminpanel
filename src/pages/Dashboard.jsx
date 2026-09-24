@@ -37,7 +37,7 @@ const StatCard = ({ title, value, subValue, icon: Icon, color, trend }) => (
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
-    products: 0, categories: 0, drivers: 0, deliveries: 0,
+    products: 0, categories: 0, drivers: 0, deliveries: 0, pendingDeliveries: 0,
     pendingPayments: 0, sellers: 0, b2bOrders: 0, b2cOrders: 0,
     totalRevenue: 0, locations: 0, dailyOrders: 0
   });
@@ -82,6 +82,7 @@ const Dashboard = () => {
       const locationsList = getArray(l);
 
       const deliveries = ordersList.filter(order => order.orderStatus === 'Delivered').length;
+      const pendingDeliveries = ordersList.filter(order => order.orderStatus !== 'Delivered' && order.orderStatus !== 'Cancelled' && order.orderStatus !== 'Returned').length;
       const pendingPayments = ordersList.filter(order => order.paymentStatus === 'Pending').length;
       const b2bOrders = ordersList.filter(order => order.userId?.role === 'b2b').length;
       const b2cOrders = ordersList.filter(order => order.userId?.role === 'b2c' || !order.userId?.role).length;
@@ -100,6 +101,7 @@ const Dashboard = () => {
         categories: categoriesList.length,
         drivers: driversList.length,
         deliveries,
+        pendingDeliveries,
         pendingPayments,
         sellers: sellersList.length,
         b2bOrders,
@@ -291,6 +293,13 @@ const Dashboard = () => {
             <CheckCircle size={24} style={{ color: '#10b981', margin: '0 auto 16px' }} />
             <h4 style={{ fontSize: '20px', fontWeight: 800 }}>{stats.deliveries}</h4>
             <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Completed Deliveries</p>
+          </div>
+        )}
+        {hasPerm('manage_orders') && (
+          <div className="glass-card" style={{ padding: '24px', borderRadius: '24px', textAlign: 'center' }}>
+            <Package size={24} style={{ color: '#f59e0b', margin: '0 auto 16px' }} />
+            <h4 style={{ fontSize: '20px', fontWeight: 800 }}>{stats.pendingDeliveries}</h4>
+            <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Pending Deliveries</p>
           </div>
         )}
         {hasPerm('manage_cash') && (
