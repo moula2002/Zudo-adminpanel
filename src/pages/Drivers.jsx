@@ -22,6 +22,9 @@ const Drivers = () => {
     documents: []
   });
   const [submitting, setSubmitting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [driverToDelete, setDriverToDelete] = useState(null);
+  const [deleteSuccessMsg, setDeleteSuccessMsg] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [history, setHistory] = useState([]);
@@ -262,11 +265,15 @@ const Drivers = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this driver?')) return;
+  const handleDelete = async () => {
+    if (!driverToDelete) return;
     try {
-      await api.delete(`/drivers/${id}`);
+      await api.delete(`/drivers/${driverToDelete._id}`);
+      setShowDeleteModal(false);
+      setDeleteSuccessMsg('Driver deleted successfully');
+      setDriverToDelete(null);
       fetchDrivers();
+      setTimeout(() => setDeleteSuccessMsg(''), 3000);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to delete driver');
     }
@@ -357,6 +364,12 @@ const Drivers = () => {
           </button>
         </div>
       </div>
+
+      {deleteSuccessMsg && (
+        <div style={{ padding: '16px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid #22c55e', color: '#22c55e', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', zIndex: 100 }}>
+          <CheckCircle2 size={18} /> {deleteSuccessMsg}
+        </div>
+      )}
 
       <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -570,7 +583,8 @@ const Drivers = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(driver._id);
+                        setDriverToDelete(driver);
+                        setShowDeleteModal(true);
                       }}
                       style={{
                         background: 'none', border: 'none', color: '#ef4444',
@@ -1329,6 +1343,39 @@ const Drivers = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
+        }}>
+          <div className="glass" style={{ width: '100%', maxWidth: '400px', padding: '32px', borderRadius: '24px', textAlign: 'center' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', margin: '0 auto 16px' }}>
+              <AlertTriangle size={32} />
+            </div>
+            <h3 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>Delete Driver?</h3>
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '24px' }}>
+              Are you sure you want to delete <strong>{driverToDelete?.name}</strong>? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => { setShowDeleteModal(false); setDriverToDelete(null); }} 
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: 'var(--input-bg)', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleDelete} 
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+              >
+                <Trash2 size={16} /> Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
