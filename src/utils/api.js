@@ -90,9 +90,9 @@ const setupInterceptors = (instance) => {
     const dbName = localStorage.getItem('zudo_admin_db_name');
     const location = localStorage.getItem('zudo_admin_location');
     
-    if (dbName && !config.headers['x-location']) {
+    if (dbName && dbName !== 'global' && !config.headers['x-location']) {
       config.headers['x-location'] = dbName;
-    } else if (location && !config.headers['x-location']) {
+    } else if (location && location !== 'global' && !config.headers['x-location']) {
       config.headers['x-location'] = location;
     }
 
