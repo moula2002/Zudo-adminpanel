@@ -16,7 +16,8 @@ import {
   Download,
   XCircle,
   Ban,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
 
 const B2BVerification = () => {
@@ -100,6 +101,21 @@ const B2BVerification = () => {
       setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
       alert('Failed to block user');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to permanently delete this business? This action cannot be undone.')) return;
+    setActionLoading(id);
+    try {
+      await api.delete(`/auth/users/${id}`);
+      fetchPendingUsers();
+      setToastMessage('Business deleted successfully!');
+      setTimeout(() => setToastMessage(''), 3000);
+    } catch (err) {
+      alert('Failed to delete user');
     } finally {
       setActionLoading(null);
     }
@@ -378,6 +394,18 @@ const B2BVerification = () => {
                         }}
                       >
                         {actionLoading === user._id ? <Loader2 size={16} className="animate-spin" /> : <Ban size={16} />}
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(user._id)}
+                        disabled={actionLoading === user._id}
+                        title="Delete Business"
+                        style={{ 
+                          width: '36px', height: '36px', borderRadius: '10px', border: 'none',
+                          background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                      >
+                        {actionLoading === user._id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                       </button>
                     </div>
                   </td>
