@@ -27,7 +27,7 @@ export const notificationApi = axios.create({
 });
 
 let globalApiQueue = Promise.resolve();
-const GLOBAL_REQUEST_DELAY = 800; // Increased to 800ms to definitively bypass strict hostinger rate limits
+const GLOBAL_REQUEST_DELAY = 1200; // Increased to 1200ms to definitively bypass strict hostinger rate limits
 
 let globalAbortController = new AbortController();
 const apiCache = new Map(); // Global memory cache for API requests
@@ -46,7 +46,8 @@ export const getActiveRequests = () => activeRequests;
 export const cancelAllPendingRequests = () => {
   globalAbortController.abort(); // Abort all inflight requests
   globalAbortController = new AbortController(); // Create a fresh controller for new requests
-  globalApiQueue = Promise.resolve(); // Reset the delay queue for immediate execution of the new batch
+  // Reset the delay queue, but enforce a wait to prevent instant 429s from the just-aborted requests hitting the server
+  globalApiQueue = new Promise(resolve => setTimeout(resolve, GLOBAL_REQUEST_DELAY)); 
 };
 
 const setupInterceptors = (instance) => {
