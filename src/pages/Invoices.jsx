@@ -17,6 +17,7 @@ const Invoices = () => {
   const [dateFilter, setDateFilter] = useState('All Time');
   const [customDate, setCustomDate] = useState({ start: '', end: '' });
   const [collation, setCollation] = useState('All'); // 'Collated', 'Uncollated', 'All'
+  const [cityFilter, setCityFilter] = useState('All');
 
   // Print Preview
   const [showPreview, setShowPreview] = useState(false);
@@ -163,10 +164,15 @@ const Invoices = () => {
 
   useEffect(() => {
     applyFilters();
-  }, [invoiceType, segmentType, searchTerm, dateFilter, customDate, collation, orders]);
+  }, [invoiceType, segmentType, searchTerm, dateFilter, customDate, collation, cityFilter, orders]);
 
   const applyFilters = () => {
     let result = [...orders];
+
+    // City Filter
+    if (cityFilter !== 'All') {
+      result = result.filter(o => o.locationId?.city === cityFilter);
+    }
 
     // Segment Filter
     if (segmentType !== 'All') {
@@ -521,6 +527,8 @@ const Invoices = () => {
     }
   };
 
+  const availableCities = ['All', ...new Set(orders.map(o => o.locationId?.city).filter(Boolean))];
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-between items-center">
@@ -582,6 +590,15 @@ const Invoices = () => {
               <option value="All">All</option>
               <option value="Collated">Collated</option>
               <option value="Uncollated">Uncollated</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">City Zone</label>
+            <select className="input-field" value={cityFilter} onChange={e => setCityFilter(e.target.value)}>
+              {availableCities.map(city => (
+                <option key={city} value={city}>{city === 'All' ? 'All Cities' : city}</option>
+              ))}
             </select>
           </div>
         </div>
