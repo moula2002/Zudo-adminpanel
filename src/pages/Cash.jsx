@@ -23,7 +23,9 @@ import {
   CheckCircle,
   AlertTriangle,
   FileText,
-  Download
+  Download,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -31,6 +33,8 @@ const Cash = () => {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [transactions, setTransactions] = useState([]);
+  const [editId, setEditId] = useState(null);
+  const [deleteModalData, setDeleteModalData] = useState({ show: false, id: null });
   const [formData, setFormData] = useState({
     type: 'B2C',
     name: '',
@@ -188,15 +192,46 @@ const Cash = () => {
     }
   };
 
+  const handleEditClick = (t) => {
+    setEditId(t._id || t.id);
+    setFormData({
+      type: t.type === 'B2C (Driver)' ? 'B2C (Driver)' : t.type,
+      name: t.name,
+      phone: t.phone,
+      email: t.email || '',
+      password: '',
+      otp: t.otp || '',
+      amount: t.amount,
+      description: t.description || '',
+      paymentMethod: t.paymentMethod || 'Cash'
+    });
+    setShowForm(true);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      await axios.delete(`cash/${deleteModalData.id}`);
+      setTransactions(transactions.filter(t => (t._id || t.id) !== deleteModalData.id));
+      setDeleteModalData({ show: false, id: null });
+    } catch (error) {
+      alert('Failed to delete transaction');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data: transaction } = await axios.post('cash', formData);
-
-      setTransactions([transaction, ...transactions]);
-      alert('Transaction recorded successfully!');
-      setShowForm(false);
+      if (editId) {
+        const { data: updatedTx } = await axios.put(`cash/${editId}`, formData);
+        setTransactions(transactions.map(t => (t._id || t.id) === editId ? updatedTx : t));
+        setShowForm(false);
+        setEditId(null);
+      } else {
+        const { data: transaction } = await axios.post('cash', formData);
+        setTransactions([transaction, ...transactions]);
+        setShowForm(false);
+      }
       setFormData({
         type: 'B2C',
         name: '',
@@ -209,7 +244,7 @@ const Cash = () => {
         paymentMethod: 'Cash'
       });
     } catch (error) {
-      alert('Failed to record transaction');
+      alert(editId ? 'Failed to update transaction' : 'Failed to record transaction');
     } finally {
       setLoading(false);
     }
@@ -260,7 +295,11 @@ const Cash = () => {
             <Download size={18} /> Export
           </button>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              setEditId(null);
+              setFormData({ type: 'B2C', name: '', phone: '', email: '', password: '', otp: '', amount: '', description: '', paymentMethod: 'Cash' });
+              setShowForm(true);
+            }}
             style={{
               padding: '12px 24px',
               borderRadius: '16px',
@@ -521,7 +560,8 @@ const Cash = () => {
                   <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Type</th>
                   <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Date & Time</th>
                   <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Verification</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Status</th>
+                  <th style={{ padding: '16px 32px', textAlign: 'center', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Status</th>
+                  <th style={{ padding: '16px 32px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -563,13 +603,31 @@ const Cash = () => {
                         {t.type === 'B2B' ? (t.password || 'N/A') : (t.otp || 'N/A')}
                       </div>
                     </td>
-                    <td style={{ padding: '20px 32px', textAlign: 'right' }}>
+                    <td style={{ padding: '20px 32px', textAlign: 'center' }}>
                       <span style={{
                         padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 800,
                         background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', textTransform: 'uppercase'
                       }}>
                         Completed
                       </span>
+                    </td>
+                    <td style={{ padding: '20px 32px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button
+                          onClick={() => handleEditClick(t)}
+                          style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                          title="Edit"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                        <button
+                          onClick={() => setDeleteModalData({ show: true, id: t._id || t.id })}
+                          style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                          title="Delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -598,11 +656,11 @@ const Cash = () => {
               background: 'var(--card-bg)'
             }}>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Log Cash Transaction</h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>Manually record a cash payment</p>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>{editId ? 'Edit Cash Transaction' : 'Log Cash Transaction'}</h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>{editId ? 'Modify existing cash payment details' : 'Manually record a cash payment'}</p>
               </div>
               <button
-                onClick={() => setShowForm(false)}
+                onClick={() => { setShowForm(false); setEditId(null); }}
                 style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--input-bg)', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <X size={16} />
@@ -766,7 +824,7 @@ const Cash = () => {
                   boxShadow: '0 8px 16px -6px rgba(99, 102, 241, 0.4)'
                 }}
               >
-                {loading ? <Loader2 className="animate-spin" size={18} /> : <><CheckCircle2 size={16} /> Record Transaction</>}
+                {loading ? <Loader2 className="animate-spin" size={18} /> : <><CheckCircle2 size={16} /> {editId ? 'Update Transaction' : 'Record Transaction'}</>}
               </button>
             </form>
           </div>
@@ -821,6 +879,37 @@ const Cash = () => {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Custom Delete Modal */}
+      {deleteModalData.show && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200
+        }}>
+          <div className="glass-card" style={{ padding: '32px', borderRadius: '24px', width: '360px', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#ef4444' }}>
+              <Trash2 size={32} />
+            </div>
+            <h3 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '8px', color: 'var(--text-main)' }}>Delete Transaction</h3>
+            <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to delete this transaction? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setDeleteModalData({ show: false, id: null })}
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', background: '#ef4444', border: 'none', color: '#fff', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
