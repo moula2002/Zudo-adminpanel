@@ -50,6 +50,7 @@ const Payments = () => {
   // Generate Invoice State
   const [generateStartDate, setGenerateStartDate] = useState('');
   const [generateEndDate, setGenerateEndDate] = useState('');
+  const [generateInvoiceNumber, setGenerateInvoiceNumber] = useState('');
   const [generateLoading, setGenerateLoading] = useState(false);
 
   const [notification, setNotification] = useState({ type: '', message: '' });
@@ -87,13 +88,13 @@ const Payments = () => {
     }
   };
 
-  const handleDownloadInvoice = async (id) => {
+  const handleDownloadInvoice = async (inv) => {
     try {
-      const response = await api.get(`/seller-invoices/${id}/download`, { responseType: 'blob' });
+      const response = await api.get(`/seller-invoices/${inv._id}/download`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Seller_Invoice_${id}.pdf`);
+      link.setAttribute('download', `Seller_Invoice_${inv.invoiceNumber || inv._id}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -108,13 +109,18 @@ const Payments = () => {
       alert("Please select start and end dates.");
       return;
     }
+    if (!generateInvoiceNumber) {
+      alert("Please enter an invoice number.");
+      return;
+    }
     
     setGenerateLoading(true);
     try {
       await api.post('/seller-invoices/generate', {
         sellerId: selectedMerchant.seller._id,
         startDate: generateStartDate,
-        endDate: generateEndDate
+        endDate: generateEndDate,
+        invoiceNumber: generateInvoiceNumber
       });
       setNotification({ type: 'success', message: 'Invoice generated successfully!' });
       
@@ -124,6 +130,7 @@ const Payments = () => {
       
       setGenerateStartDate('');
       setGenerateEndDate('');
+      setGenerateInvoiceNumber('');
     } catch (err) {
       setNotification({ type: 'error', message: err.response?.data?.message || 'Failed to generate invoice' });
     } finally {
@@ -166,6 +173,7 @@ const Payments = () => {
     
     setGenerateStartDate(start.toISOString().split('T')[0]);
     setGenerateEndDate(end.toISOString().split('T')[0]);
+    setGenerateInvoiceNumber('');
     
     setShowSellerInvoicesModal(true);
   };
@@ -532,6 +540,18 @@ const Payments = () => {
                         />
                       </div>
                     </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '6px' }}>INVOICE NUMBER</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. INV-2024-001"
+                        className="input-field"
+                        value={generateInvoiceNumber}
+                        onChange={e => setGenerateInvoiceNumber(e.target.value)}
+                        required
+                        style={{ padding: '10px 14px', width: '100%' }}
+                      />
+                    </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                        <button 
                          type="submit" 
@@ -574,6 +594,7 @@ const Payments = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.1)' }}>
+                      <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 600 }}>INVOICE NO</th>
                       <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 600 }}>PERIOD</th>
                       <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 600 }}>AMOUNT / ORDERS</th>
                       <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 600 }}>STATUS</th>
@@ -583,18 +604,21 @@ const Payments = () => {
                   <tbody>
                     {invoicesLoading ? (
                       <tr>
-                        <td colSpan="4" style={{ padding: '40px', textAlign: 'center' }}>
+                        <td colSpan="5" style={{ padding: '40px', textAlign: 'center' }}>
                           <Loader2 className="animate-spin" size={24} style={{ display: 'inline-block' }} />
                         </td>
                       </tr>
                     ) : currentSellerInvoices.length === 0 ? (
                       <tr>
-                        <td colSpan="4" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
                           No invoices generated for this seller yet.
                         </td>
                       </tr>
                     ) : currentSellerInvoices.map((inv) => (
                       <tr key={inv._id} style={{ borderBottom: '1px solid var(--glass-border)' }} className="table-row-hover hover-row">
+                        <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--text-main)', fontSize: '13px' }}>
+                          {inv.invoiceNumber || `#${inv._id.toString().substring(0,8).toUpperCase()}`}
+                        </td>
                         <td style={{ padding: '16px 20px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600 }}>
                             <Calendar size={14} color="var(--primary)" />
@@ -623,7 +647,7 @@ const Payments = () => {
                         <td style={{ padding: '16px 20px' }}>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <button 
-                              onClick={() => handleDownloadInvoice(inv._id)}
+                              onClick={() => handleDownloadInvoice(inv)}
                               className="btn-primary"
                               style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none', cursor: 'pointer', borderRadius: '8px' }}
                               title="Download PDF"
