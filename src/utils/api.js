@@ -180,7 +180,7 @@ export const getImageUrl = (url) => {
       finalUrl = finalUrl.replace(/(https?:\/\/)?zudo\.co\.in/g, IMAGE_BASE_URL);
     }
     if (finalUrl.includes('lightgreen-trout-176417.hostingersite.com')) {
-      finalUrl = finalUrl.replace(/(https?:\/\/)?lightgreen-trout-176417\.hostingersite\.com/g, IMAGE_BASE_URL);
+      finalUrl = finalUrl.replace(/(https?:)?(\/\/)?lightgreen-trout-176417\.hostingersite\.com/g, IMAGE_BASE_URL);
     }
     // Fix corrupted URLs where the domain was prepended twice
     if (finalUrl.includes('snbtradingco.inhttps')) {
