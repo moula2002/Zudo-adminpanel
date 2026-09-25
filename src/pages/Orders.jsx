@@ -18,6 +18,11 @@ const Orders = () => {
   const [showCashModal, setShowCashModal] = useState(false);
   const [showReturnsModal, setShowReturnsModal] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusActionData, setStatusActionData] = useState({ orderId: null, status: null });
+  const [showReturnDriverModal, setShowReturnDriverModal] = useState(false);
+  const [returnDriverActionData, setReturnDriverActionData] = useState({ orderId: null });
+  const [returnDriverIdInput, setReturnDriverIdInput] = useState('');
   const [otp, setOtp] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
@@ -211,13 +216,23 @@ const Orders = () => {
     }
   };
 
-  const handleUpdateStatus = async (orderId, status) => {
-    if (!window.confirm(`Are you sure you want to change order status to ${status}?`)) return;
+  const handleUpdateStatus = (orderId, status) => {
+    setStatusActionData({ orderId, status });
+    setShowStatusModal(true);
+  };
+
+  const confirmUpdateStatus = async () => {
+    const { orderId, status } = statusActionData;
+    if (!orderId || !status) return;
+    
     try {
       await axios.put(`/orders/${orderId}/status`, { status });
       fetchOrders();
     } catch (error) {
       alert('Failed to update status');
+    } finally {
+      setShowStatusModal(false);
+      setStatusActionData({ orderId: null, status: null });
     }
   };
 
@@ -248,23 +263,27 @@ const Orders = () => {
     }
   };
 
-  const handleAssignReturnDriver = async (orderId) => {
-    const driverId = prompt('Enter Driver ID for return pickup:');
-    if (!driverId) return;
+  const handleAssignReturnDriver = (orderId) => {
+    setReturnDriverActionData({ orderId });
+    setReturnDriverIdInput('');
+    setShowReturnDriverModal(true);
+  };
+
+  const confirmAssignReturnDriver = async () => {
+    const { orderId } = returnDriverActionData;
+    const driverId = returnDriverIdInput.trim();
+    if (!orderId || !driverId) return;
+
     try {
-      const res = await fetch(`${API_URL}/api/orders/${orderId}/assign-return-driver`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ driverId })
-      });
-      if (res.ok) {
-        fetchOrders();
-      } else {
-        const data = await res.json();
-        alert('Failed: ' + data.message);
-      }
+      await axios.put(`/orders/${orderId}/assign-return-driver`, { driverId });
+      fetchOrders();
+      alert('Driver assigned successfully');
     } catch (e) {
-      alert('Error assigning return driver');
+      const msg = e.response?.data?.message || 'Error assigning return driver';
+      alert('Failed: ' + msg);
+    } finally {
+      setShowReturnDriverModal(false);
+      setReturnDriverActionData({ orderId: null });
     }
   };
 
@@ -2568,6 +2587,126 @@ const Orders = () => {
                 className="btn-primary"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Confirmation Modal */}
+      {showStatusModal && (
+        <div style={{ 
+          position: 'fixed', inset: 0, 
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+        }}>
+          <div style={{ 
+            background: 'var(--card-bg)', padding: '24px', borderRadius: '24px',
+            border: '1px solid var(--glass-border)', width: '400px', maxWidth: '90%',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
+          }}>
+            <div style={{ 
+              width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(99, 102, 241, 0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+              color: '#6366f1'
+            }}>
+              <RefreshCw size={24} />
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
+              Confirm Status Change
+            </h3>
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to change order status to <strong style={{ color: 'var(--text-main)' }}>{statusActionData.status}</strong>?
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => {
+                  setShowStatusModal(false);
+                  setStatusActionData({ orderId: null, status: null });
+                }}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+                  background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmUpdateStatus}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
+                  background: '#6366f1', color: '#fff', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return Driver Modal */}
+      {showReturnDriverModal && (
+        <div style={{ 
+          position: 'fixed', inset: 0, 
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+        }}>
+          <div style={{ 
+            background: 'var(--card-bg)', padding: '24px', borderRadius: '24px',
+            border: '1px solid var(--glass-border)', width: '400px', maxWidth: '90%',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
+          }}>
+            <div style={{ 
+              width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(99, 102, 241, 0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+              color: '#6366f1'
+            }}>
+              <Truck size={24} />
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
+              Assign Return Driver
+            </h3>
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '20px', lineHeight: '1.5' }}>
+              Please enter the Driver ID for the return pickup.
+            </p>
+            
+            <input 
+              type="text" 
+              placeholder="Enter Driver ID"
+              value={returnDriverIdInput}
+              onChange={(e) => setReturnDriverIdInput(e.target.value)}
+              style={{
+                width: '100%', padding: '12px 16px', borderRadius: '12px',
+                border: '1px solid var(--glass-border)', background: 'var(--bg-color)',
+                color: 'var(--text-main)', fontSize: '14px', marginBottom: '24px', boxSizing: 'border-box'
+              }}
+              autoFocus
+            />
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => {
+                  setShowReturnDriverModal(false);
+                  setReturnDriverActionData({ orderId: null });
+                }}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+                  background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmAssignReturnDriver}
+                disabled={!returnDriverIdInput.trim()}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
+                  background: returnDriverIdInput.trim() ? '#6366f1' : '#94a3b8', 
+                  color: '#fff', fontWeight: 600, cursor: returnDriverIdInput.trim() ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Assign
               </button>
             </div>
           </div>
