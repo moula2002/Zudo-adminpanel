@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import { 
-  Receipt, Printer, Search, Filter, Calendar, CheckCircle2, FileText, X, ChevronDown, Edit2, Download
+  Receipt, Printer, Search, Filter, Calendar, CheckCircle2, FileText, X, ChevronDown, Edit2, Download, Table
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const Invoices = () => {
   const [loading, setLoading] = useState(false);
@@ -23,6 +24,7 @@ const Invoices = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [previewOrders, setPreviewOrders] = useState([]);
   const [pageSize, setPageSize] = useState('A5');
+  const [printCopyType, setPrintCopyType] = useState('ORIGINAL FOR RECIPIENT');
   const iframeRef = useRef(null);
 
   const numberToWords = (num) => {
@@ -279,6 +281,27 @@ const Invoices = () => {
     setShowPreview(true);
   };
 
+  const handleBulkExcelDownload = () => {
+    if (filteredOrders.length === 0) return;
+    const excelData = filteredOrders.map(order => ({
+      'Invoice No': customInvoiceNumbers[order._id] || order.invoiceNumber || `snb-686/${order._id.slice(-8).toUpperCase()}`,
+      'Order No': customOrderNumbers[order._id] || order.orderNumber || `snb-${order._id.slice(-8).toUpperCase()}`,
+      'Date': new Date(order.createdAt).toLocaleDateString(),
+      'Buyer Name': order.shippingAddress?.name || order.userId?.name || 'Customer',
+      'Buyer Phone': order.shippingAddress?.phone || order.userId?.phone || '',
+      'Buyer City': order.locationId?.city || '',
+      'Seller Name': order.sellerId?.companyName || order.sellerId?.name || 'Zudo Admin',
+      'Total Amount': order.totalAmount,
+      'Payment Method': order.paymentMethod || 'Prepaid',
+      'Status': order.status
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Invoices");
+    XLSX.writeFile(wb, `Invoices_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   const generatePrintHTML = () => {
     let pagesHtml = '';
 
@@ -404,7 +427,7 @@ const Invoices = () => {
                     <td class="meta-val">${invDate}</td>
                   </tr>
                   <tr>
-                    <td colspan="2" class="meta-doc-type">ORIGINAL FOR RECIPIENT</td>
+                    <td colspan="2" class="meta-doc-type">${printCopyType}</td>
                   </tr>
                 </table>
                 <div class="barcode-container">
@@ -675,15 +698,26 @@ const Invoices = () => {
           <div className="text-sm font-semibold text-[var(--text-main)]">
             Found {filteredOrders.length} matching records
           </div>
-          <button 
-            className="btn-primary flex items-center gap-2"
-            onClick={() => handlePreview(filteredOrders)}
-            disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
-            style={{ opacity: invoiceType === 'seller_generated' ? 0.5 : 1 }}
-          >
-            <FileText size={18} />
-            <span>Preview & Generate All ({filteredOrders.length})</span>
-          </button>
+          <div className="flex gap-4">
+            <button 
+              className="btn-primary flex items-center gap-2"
+              onClick={handleBulkExcelDownload}
+              disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
+              style={{ background: 'linear-gradient(135deg, #10b981, #059669)', opacity: (filteredOrders.length === 0 || invoiceType === 'seller_generated') ? 0.5 : 1 }}
+            >
+              <Table size={18} />
+              <span>Bulk Excel Export</span>
+            </button>
+            <button 
+              className="btn-primary flex items-center gap-2"
+              onClick={() => handlePreview(filteredOrders)}
+              disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
+              style={{ opacity: invoiceType === 'seller_generated' ? 0.5 : 1 }}
+            >
+              <FileText size={18} />
+              <span>Preview & Generate All ({filteredOrders.length})</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -837,6 +871,19 @@ const Invoices = () => {
                 Invoice Print Preview
               </h2>
               <div className="flex gap-4 ml-8">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold uppercase" style={{ color: 'var(--text-dim)' }}>Copy Type:</label>
+                  <select 
+                    className="input-field" 
+                    style={{ padding: '6px 12px', minHeight: 'auto', fontSize: '13px', background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)' }}
+                    value={printCopyType}
+                    onChange={e => setPrintCopyType(e.target.value)}
+                  >
+                    <option value="ORIGINAL FOR RECIPIENT">Original for Recipient</option>
+                    <option value="DUPLICATE FOR TRANSPORTER">Duplicate for Transporter</option>
+                    <option value="TRIPLICATE FOR SUPPLIER">Triplicate for Supplier</option>
+                  </select>
+                </div>
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-bold uppercase" style={{ color: 'var(--text-dim)' }}>Page Size:</label>
                   <select 
