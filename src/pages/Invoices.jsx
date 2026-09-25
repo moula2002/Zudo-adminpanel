@@ -644,7 +644,8 @@ const Invoices = () => {
               <input 
                 type="text" 
                 placeholder="Buyer or Seller Name" 
-                className="input-field pl-9" 
+                className="input-field" 
+                style={{ paddingLeft: '36px' }}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
