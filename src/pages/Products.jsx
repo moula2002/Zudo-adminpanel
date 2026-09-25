@@ -107,9 +107,9 @@ const Products = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '16px', overflowX: 'auto', paddingBottom: '8px' }}>
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'nowrap', minWidth: 'max-content' }}>
-          <div style={{ position: 'relative', width: '300px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '12px', overflowX: 'auto', paddingBottom: '8px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'nowrap', minWidth: 'max-content' }}>
+          <div style={{ position: 'relative', width: '240px' }}>
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-dim)' }} />
             <input
               type="text"
@@ -120,7 +120,7 @@ const Products = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <div style={{ position: 'relative', width: '200px' }}>
+          <div style={{ position: 'relative', width: '160px' }}>
             <Filter size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-dim)' }} />
             <select
               className="input-field"
@@ -134,7 +134,7 @@ const Products = () => {
               ))}
             </select>
           </div>
-          <div style={{ position: 'relative', width: '200px' }}>
+          <div style={{ position: 'relative', width: '160px' }}>
             <Filter size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-dim)' }} />
             <select
               className="input-field"
