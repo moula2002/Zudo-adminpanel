@@ -90,6 +90,9 @@ const Invoices = () => {
   // Edit Pricing State
   // Map of orderId -> itemIndex -> newPrice
   const [customPrices, setCustomPrices] = useState({});
+  const [customItemNames, setCustomItemNames] = useState({});
+  const [customItemQuantities, setCustomItemQuantities] = useState({});
+  
   const [customInvoiceNumbers, setCustomInvoiceNumbers] = useState({});
   const [customOrderNumbers, setCustomOrderNumbers] = useState({});
 
@@ -242,9 +245,33 @@ const Invoices = () => {
     }));
   };
 
+  const handleItemNameChange = (orderId, itemIndex, newName) => {
+    setCustomItemNames(prev => ({
+      ...prev,
+      [`${orderId}_${itemIndex}`]: newName
+    }));
+  };
+
+  const handleItemQuantityChange = (orderId, itemIndex, newQty) => {
+    setCustomItemQuantities(prev => ({
+      ...prev,
+      [`${orderId}_${itemIndex}`]: Number(newQty)
+    }));
+  };
+
   const calculateItemPrice = (orderId, itemIndex, originalPrice) => {
     const key = `${orderId}_${itemIndex}`;
     return customPrices[key] !== undefined ? customPrices[key] : originalPrice;
+  };
+
+  const calculateItemName = (orderId, itemIndex, originalName) => {
+    const key = `${orderId}_${itemIndex}`;
+    return customItemNames[key] !== undefined ? customItemNames[key] : originalName;
+  };
+
+  const calculateItemQuantity = (orderId, itemIndex, originalQty) => {
+    const key = `${orderId}_${itemIndex}`;
+    return customItemQuantities[key] !== undefined ? customItemQuantities[key] : originalQty;
   };
 
   const handlePreview = (selectedOrders = filteredOrders) => {
@@ -274,9 +301,18 @@ const Invoices = () => {
       let grandTotal = 0;
 
       const itemsHtml = order.items.map((item, i) => {
+        const itemIdentifier = item.itemIndex !== undefined ? item.itemIndex : i;
+        const orderIdentifier = item.parentOrderId || order._id;
+
         const rawPrice = item.price || 0;
-        const currentPrice = calculateItemPrice(item.parentOrderId || order._id, item.itemIndex !== undefined ? item.itemIndex : i, rawPrice);
-        const itemTotal = currentPrice * item.quantity;
+        const rawName = item.name || 'Unknown Item';
+        const rawQty = item.quantity || 1;
+
+        const currentPrice = calculateItemPrice(orderIdentifier, itemIdentifier, rawPrice);
+        const currentName = calculateItemName(orderIdentifier, itemIdentifier, rawName);
+        const currentQty = calculateItemQuantity(orderIdentifier, itemIdentifier, rawQty);
+
+        const itemTotal = currentPrice * currentQty;
         
         const gstPercent = item.gstPercent || item.productId?.gstPercent || item.product?.gstPercent || productGstMap[item.productId?._id || item.productId] || 0;
         const halfGstPercent = gstPercent / 2;
@@ -285,7 +321,7 @@ const Invoices = () => {
         const cgst = taxableValue * (halfGstPercent / 100);
         const sgst = taxableValue * (halfGstPercent / 100);
         
-        totalQty += item.quantity;
+        totalQty += currentQty;
         totalTaxableValue += taxableValue;
         totalCgst += cgst;
         totalSgst += sgst;
@@ -298,10 +334,10 @@ const Invoices = () => {
           <tr class="item-row">
             <td style="text-align: center; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${i + 1}</td>
             <td style="text-align: left; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">
-              <div style="font-weight: 700; color: #000; font-size: 9px; line-height: 1.1;">${item.name}</div>
+              <div style="font-weight: 700; color: #000; font-size: 9px; line-height: 1.1;">${currentName}</div>
               <div style="font-size: 7.5px; color: #555; margin-top: 1px;">HSN:${hsnCode}</div>
             </td>
-            <td style="text-align: right; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${item.quantity}</td>
+            <td style="text-align: right; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${currentQty}</td>
             <td style="text-align: left; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${unitLabel}</td>
             <td style="text-align: right; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${currentPrice.toFixed(2)}</td>
             <td style="text-align: right; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${taxableValue.toFixed(2)}</td>
@@ -866,17 +902,38 @@ const Invoices = () => {
                       {order.items.map((item, index) => {
                         const rawPrice = item.price || 0;
                         const currentPrice = calculateItemPrice(order._id, index, rawPrice);
+                        const rawName = item.name || '';
+                        const currentName = calculateItemName(order._id, index, rawName);
+                        const rawQty = item.quantity || 1;
+                        const currentQty = calculateItemQuantity(order._id, index, rawQty);
+
                         return (
-                          <div key={index} className="flex flex-col gap-1">
-                            <span className="text-xs truncate" style={{ color: 'var(--text-main)' }}>{item.name}</span>
+                          <div key={index} className="flex flex-col gap-2 p-3 rounded-lg" style={{ background: 'var(--bg-color)', border: '1px solid var(--glass-border)' }}>
+                            <input 
+                              type="text" 
+                              className="input-field w-full text-xs"
+                              style={{ padding: '6px 8px', minHeight: 'auto', background: 'var(--card-bg)' }}
+                              value={currentName}
+                              onChange={e => handleItemNameChange(order._id, index, e.target.value)}
+                              placeholder="Item Name"
+                            />
                             <div className="flex items-center gap-2">
-                              <span className="text-xs line-through" style={{ color: 'var(--text-dim)' }}>₹{rawPrice.toFixed(2)}</span>
+                              <div className="text-xs line-through w-12" style={{ color: 'var(--text-dim)' }}>₹{rawPrice.toFixed(2)}</div>
                               <input 
                                 type="number" 
                                 className="input-field flex-1"
-                                style={{ padding: '6px', fontSize: '13px', minHeight: 'auto' }}
+                                style={{ padding: '6px 8px', fontSize: '12px', minHeight: 'auto', background: 'var(--card-bg)' }}
                                 value={currentPrice}
                                 onChange={e => handlePriceChange(order._id, index, e.target.value)}
+                                placeholder="Price"
+                              />
+                              <input 
+                                type="number" 
+                                className="input-field w-16"
+                                style={{ padding: '6px 8px', fontSize: '12px', minHeight: 'auto', background: 'var(--card-bg)' }}
+                                value={currentQty}
+                                onChange={e => handleItemQuantityChange(order._id, index, e.target.value)}
+                                placeholder="Qty"
                               />
                             </div>
                           </div>
