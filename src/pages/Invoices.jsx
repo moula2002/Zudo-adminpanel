@@ -169,6 +169,11 @@ const Invoices = () => {
   const applyFilters = () => {
     let result = [...orders];
 
+    // Invoice Type Filter
+    if (invoiceType === 'purchase') {
+      result = result.filter(o => o.sellerId);
+    }
+
     // City Filter
     if (cityFilter !== 'All') {
       result = result.filter(o => o.locationId?.city === cityFilter);
@@ -311,13 +316,18 @@ const Invoices = () => {
       const orderNo = order.orderNumber || order._id.slice(-8).toUpperCase();
       const barcodeValue = `${order._id.slice(-8)}-${order.userId?._id?.slice(-8) || '00000000'}-${orderNo}`;
 
-      const sellerName = order.sellerId?.companyName || order.sellerId?.name || 'SNB TRADING.CO';
-      const sellerGst = order.sellerId?.gstNumber || '29BQHPG3242G1ZYNO';
-      const sellerAddress = order.sellerId?.address || '307 ashrya layout vishweshwaria 7th block kodigehalli post opp cii institute magadi main road bangalore 560091';
+      const isPurchase = invoiceType === 'purchase';
+      const adminName = 'SNB TRADING.CO';
+      const adminGst = '29BQHPG3242G1ZYNO';
+      const adminAddress = '307 ashrya layout vishweshwaria 7th block kodigehalli post opp cii institute magadi main road bangalore 560091';
 
-      const buyerName = order.shippingAddress?.name || order.userId?.name || 'Customer';
-      const buyerAddress = order.shippingAddress?.address || order.userId?.address || 'No, 123 Main Street, Bengaluru, Karnataka';
-      const buyerPhone = order.shippingAddress?.phone || order.userId?.phone || '';
+      const sellerName = order.sellerId?.companyName || order.sellerId?.name || adminName;
+      const sellerGst = order.sellerId?.gstNumber || adminGst;
+      const sellerAddress = order.sellerId?.address || adminAddress;
+
+      const buyerName = isPurchase ? adminName : (order.shippingAddress?.name || order.userId?.name || 'Customer');
+      const buyerAddress = isPurchase ? adminAddress : (order.shippingAddress?.address || order.userId?.address || 'No, 123 Main Street, Bengaluru, Karnataka');
+      const buyerPhone = isPurchase ? '' : (order.shippingAddress?.phone || order.userId?.phone || '');
 
       const netPayableInWords = numberToWords(Math.round(grandTotal));
 
@@ -327,7 +337,7 @@ const Invoices = () => {
             <!-- Header Grid -->
             <div class="header-section">
               <div class="header-left">
-                <div class="tax-invoice-title">Tax Invoice</div>
+                <div class="tax-invoice-title">${isPurchase ? 'Purchase Invoice' : 'Tax Invoice'}</div>
                 <div class="seller-info">
                   <strong>${sellerName}</strong><br/>
                   <strong>GSTIN:${sellerGst}</strong><br/>
