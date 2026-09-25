@@ -77,6 +77,7 @@ const Products = () => {
     const exportData = filteredProducts.map(product => ({
       ID: product._id,
       'Product Name': product.name,
+      'Seller': product.sellerName || 'Zudo Official',
       Category: product.categoryId?.name || product.categoryId,
       Subcategory: product.subCategoryId?.name || 'No Subcategory',
       'B2C Price (₹)': product.price,
@@ -156,6 +157,7 @@ const Products = () => {
           <thead>
             <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'var(--card-bg)' }}>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Product</th>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Seller</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Category</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2C Size Value</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2B Size Value</th>
@@ -166,9 +168,9 @@ const Products = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" style={{ padding: '48px', textAlign: 'center' }}><Loader2 className="animate-spin" style={{ margin: '0 auto' }} /></td></tr>
+              <tr><td colSpan="8" style={{ padding: '48px', textAlign: 'center' }}><Loader2 className="animate-spin" style={{ margin: '0 auto' }} /></td></tr>
             ) : filteredProducts.length === 0 ? (
-              <tr><td colSpan="7" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>No products found matching your search or filter.</td></tr>
+              <tr><td colSpan="8" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>No products found matching your search or filter.</td></tr>
             ) : filteredProducts.map(product => (
               <tr key={product._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                 <td style={{ padding: '16px 24px' }}>
@@ -176,6 +178,9 @@ const Products = () => {
                     <img src={getFullUrl(product.imageUrl)} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/40x40?text=No+Image'; }} alt="" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
                     <span>{product.name}</span>
                   </div>
+                </td>
+                <td style={{ padding: '16px 24px', fontWeight: 600, color: 'var(--primary)' }}>
+                  {product.sellerName || 'Zudo Official'}
                 </td>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>

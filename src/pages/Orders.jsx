@@ -1167,6 +1167,7 @@ const Orders = () => {
                       <img src={item.image} style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }} alt="" />
                       <div style={{ flex: 1 }}>
                         <p style={{ fontSize: '12px', fontWeight: 600 }}>{item.name}</p>
+                        <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: '2px 0' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.seller?.name || item.seller?.businessName || 'Zudo Official'}</strong></p>
                         <p style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{item.quantity} units</p>
                       </div>
                     </div>

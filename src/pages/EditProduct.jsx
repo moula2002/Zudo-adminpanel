@@ -35,6 +35,7 @@ const EditProduct = () => {
     sku: '',
     gstPercent: '0',
     sellerId: '',
+    sellerName: '',
     imageUrl: '',
     pdfUrl: ''
   });
@@ -71,6 +72,7 @@ const EditProduct = () => {
           sku: p.sku || '',
           gstPercent: p.gstPercent !== undefined ? String(p.gstPercent) : '0',
           sellerId: p.sellerId || '',
+          sellerName: p.sellerName || 'Zudo Official',
           imageUrl: p.imageUrl || '',
           pdfUrl: p.pdfUrl || ''
         });
@@ -263,6 +265,16 @@ const EditProduct = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Seller</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={formData.sellerName}
+                    disabled
+                    style={{ fontSize: '16px', padding: '15px 20px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-main)', cursor: 'not-allowed' }}
+                  />
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Product Name</label>
                   <input
