@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import api from '../utils/api';
+import { getFullUrl } from '../utils/media_utils';
 import { 
   FileSpreadsheet, 
   Download, 
@@ -88,27 +89,24 @@ const Reports = () => {
       icon: Store,
       color: '#f59e0b',
       mapFn: (data) => data.map((seller) => ({
-        'Seller ID': seller._id,
-        'Business Name': seller.businessName || seller.storeName || seller.companyName || seller.name,
-        'Owner Name': seller.name,
-        'Email ID': seller.email,
-        'Mobile Number': seller.phone,
-        'Approval Status': seller.isApproved ? 'Approved' : 'Pending',
-        'Verification Status': seller.status || 'Pending',
-        'GST Number': seller.gstNumber || 'N/A',
-        'PAN Number': seller.panNumber || 'N/A',
-        'Food License URL': seller.foodLicenseDoc ? seller.foodLicenseDoc : 'N/A',
-        'Bank Name': seller.bankDetails?.bankName || 'N/A',
-        'Account Number': seller.bankDetails?.accountNumber || 'N/A',
-        'IFSC Code': seller.bankDetails?.ifscCode || 'N/A',
-        'Wallet Balance (INR)': seller.wallet || 0,
-        'Total Earned (INR)': seller.totalEarned || 0,
-        'Commission Type': seller.commissionType || 'Default',
-        'Operational Zone': seller.locationId?.city || 'Global',
-        'Business Address': seller.address ? `${seller.address.street || ''}, ${seller.address.city || ''}, ${seller.address.state || ''}`.trim() : 'N/A',
-        'Category Depth': (seller.categories || []).length,
-        'Onboarding Date': new Date(seller.createdAt).toLocaleString(),
-        'Last Updated': new Date(seller.updatedAt).toLocaleString()
+        'Merchant ID': seller._id,
+        Name: seller.name,
+        Email: seller.email,
+        'Business/Store Name': seller.businessName || seller.storeName || 'Undisclosed',
+        'Business Address': seller.businessAddress || 'Not listed',
+        Phone: seller.phone || 'No phone',
+        'GST Registration': seller.gstNumber || 'N/A',
+        'PAN Card No.': seller.panNumber || 'N/A',
+        'Allowed Credit Terms (Days)': seller.creditDays || 0,
+        'Store Logo URL': seller.storePic ? getFullUrl(seller.storePic) : 'N/A',
+        'GST Document URL': seller.gstDoc ? getFullUrl(seller.gstDoc) : 'N/A',
+        'PAN Document URL': seller.panDoc ? getFullUrl(seller.panDoc) : 'N/A',
+        'Trade Licence URL': seller.tradeLicenseDoc ? getFullUrl(seller.tradeLicenseDoc) : 'N/A',
+        'RMC/AMPC URL': seller.rmcAmpcDoc ? getFullUrl(seller.rmcAmpcDoc) : 'N/A',
+        'Food Licence URL': seller.foodLicenseDoc ? getFullUrl(seller.foodLicenseDoc) : 'N/A',
+        'Verification Status': seller.status || 'pending',
+        'Verified Access': seller.isVerified ? 'Verified' : 'Limited Access',
+        'Approval Status': seller.isApproved ? 'Approved' : 'Pending'
       }))
     },
     {
