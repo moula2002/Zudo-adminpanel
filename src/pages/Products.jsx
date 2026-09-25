@@ -13,6 +13,7 @@ const Products = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedSeller, setSelectedSeller] = useState('');
   const [deleteModalData, setDeleteModalData] = useState({ show: false, productId: null, productName: '' });
 
   useEffect(() => {
@@ -33,10 +34,13 @@ const Products = () => {
     fetchData();
   }, []);
 
+  const uniqueSellers = Array.from(new Set(products.map(p => p.sellerName || 'Zudo Official')));
+
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory ? product.categoryId?._id === selectedCategory || product.categoryId === selectedCategory : true;
-    return matchesSearch && matchesCategory;
+    const matchesSeller = selectedSeller ? (product.sellerName || 'Zudo Official') === selectedSeller : true;
+    return matchesSearch && matchesCategory && matchesSeller;
   });
 
   const openDeleteModal = (id, name) => {
@@ -127,6 +131,20 @@ const Products = () => {
               <option value="">All Categories</option>
               {categories.map(cat => (
                 <option key={cat._id} value={cat._id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ position: 'relative', width: '200px' }}>
+            <Filter size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-dim)' }} />
+            <select
+              className="input-field"
+              style={{ paddingLeft: '40px', appearance: 'none' }}
+              value={selectedSeller}
+              onChange={(e) => setSelectedSeller(e.target.value)}
+            >
+              <option value="">All Sellers</option>
+              {uniqueSellers.map((seller, idx) => (
+                <option key={idx} value={seller}>{seller}</option>
               ))}
             </select>
           </div>
