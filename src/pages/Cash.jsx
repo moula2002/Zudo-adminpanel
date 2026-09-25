@@ -257,7 +257,7 @@ const Cash = () => {
       'Client Phone': t.phone,
       'Flow Type': t.type,
       'Date & Time': new Date(t.date).toLocaleString(),
-      'OTP/Password Verification': t.type === 'B2B' ? (t.password || 'N/A') : (t.otp || 'N/A'),
+      'OTP/Password Verification': t.type === 'B2B' ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'N/A'),
       'Amount (₹)': t.amount,
       Method: t.paymentMethod || 'Cash',
       Description: t.description || ''
@@ -599,8 +599,8 @@ const Cash = () => {
                       </div>
                     </td>
                     <td style={{ padding: '20px 32px' }}>
-                      <div style={{ fontSize: '13px', fontFamily: 'monospace', color: '#f59e0b', fontWeight: 700 }}>
-                        {t.type === 'B2B' ? (t.password || 'N/A') : (t.otp || 'N/A')}
+                      <div style={{ fontSize: '13px', color: '#10b981', fontWeight: 700 }}>
+                        {t.type === 'B2B' ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'N/A')}
                       </div>
                     </td>
                     <td style={{ padding: '20px 32px', textAlign: 'center' }}>
