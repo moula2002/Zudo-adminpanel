@@ -91,6 +91,7 @@ const Invoices = () => {
   // Map of orderId -> itemIndex -> newPrice
   const [customPrices, setCustomPrices] = useState({});
   const [customInvoiceNumbers, setCustomInvoiceNumbers] = useState({});
+  const [customOrderNumbers, setCustomOrderNumbers] = useState({});
 
   const [sellerInvoices, setSellerInvoices] = useState([]);
 
@@ -234,6 +235,13 @@ const Invoices = () => {
     }));
   };
 
+  const handleOrderNumberChange = (orderId, newOrdNo) => {
+    setCustomOrderNumbers(prev => ({
+      ...prev,
+      [orderId]: newOrdNo
+    }));
+  };
+
   const calculateItemPrice = (orderId, itemIndex, originalPrice) => {
     const key = `${orderId}_${itemIndex}`;
     return customPrices[key] !== undefined ? customPrices[key] : originalPrice;
@@ -313,7 +321,8 @@ const Invoices = () => {
       const defaultInvNo = order.invoiceNumber || `snb-686/${order._id.slice(-8).toUpperCase()}`;
       const invNo = customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : defaultInvNo;
       const invDate = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const orderNo = order.orderNumber || order._id.slice(-8).toUpperCase();
+      const defaultOrderNo = order.orderNumber || `snb-${order._id.slice(-8).toUpperCase()}`;
+      const orderNo = customOrderNumbers[order._id] !== undefined ? customOrderNumbers[order._id] : defaultOrderNo;
       const barcodeValue = `${order._id.slice(-8)}-${order.userId?._id?.slice(-8) || '00000000'}-${orderNo}`;
 
       const isPurchase = invoiceType === 'purchase';
@@ -842,7 +851,17 @@ const Invoices = () => {
                         onChange={e => handleInvoiceNumberChange(order._id, e.target.value)}
                       />
                     </div>
-                    <div className="text-xs font-bold mb-3" style={{ color: 'var(--primary)' }}>Order snb-686/{order._id.slice(-8).toUpperCase()} Items</div>
+                    <div className="flex flex-col gap-2 mb-4">
+                      <div className="text-xs font-bold" style={{ color: 'var(--primary)' }}>Order Number</div>
+                      <input 
+                        type="text" 
+                        className="input-field w-full"
+                        style={{ padding: '6px', fontSize: '13px', minHeight: 'auto' }}
+                        value={customOrderNumbers[order._id] !== undefined ? customOrderNumbers[order._id] : (order.orderNumber || `snb-${order._id.slice(-8).toUpperCase()}`)}
+                        onChange={e => handleOrderNumberChange(order._id, e.target.value)}
+                      />
+                    </div>
+                    <div className="text-xs font-bold mb-3" style={{ color: 'var(--primary)' }}>Order Items</div>
                     <div className="flex flex-col gap-3">
                       {order.items.map((item, index) => {
                         const rawPrice = item.price || 0;
