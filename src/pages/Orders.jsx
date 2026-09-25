@@ -30,7 +30,7 @@ const Orders = () => {
   const [activeType, setActiveType] = useState(user.targetSegment && user.targetSegment !== 'Both' ? user.targetSegment : 'All');
   const [cashStats, setCashStats] = useState({ b2b: 0, b2c: 0 });
   const [cashCollectors, setCashCollectors] = useState([]);
-  const [daysFilter, setDaysFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('');
 
   // Manual Order Creation & Editing States
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -907,15 +907,14 @@ const Orders = () => {
     
     const typeMatch = activeType === 'All' || (order.userId?.role || 'b2c').toUpperCase() === activeType;
 
-    let daysMatch = true;
-    if (daysFilter !== 'All') {
-      const orderDate = new Date(order.createdAt);
-      const now = new Date();
-      const diffDays = (now - orderDate) / (1000 * 60 * 60 * 24);
-      daysMatch = diffDays <= Number(daysFilter);
+    let dateMatch = true;
+    if (dateFilter) {
+      // Compare local date strings by ignoring time
+      const orderDate = new Date(order.createdAt).toLocaleDateString('en-CA'); // YYYY-MM-DD
+      dateMatch = orderDate === dateFilter;
     }
 
-    return statusMatch && typeMatch && daysMatch;
+    return statusMatch && typeMatch && dateMatch;
   });
 
   if (loading) return (
@@ -991,21 +990,29 @@ const Orders = () => {
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Timeframe:</span>
-            <select
-              value={daysFilter}
-              onChange={(e) => setDaysFilter(e.target.value)}
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date:</span>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
               style={{
                 padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                 background: 'var(--glass-bg)', color: 'var(--text-main)',
                 border: '1px solid var(--glass-border)', outline: 'none'
               }}
-            >
-              <option value="All" style={{ background: 'var(--card-bg)' }}>All Time</option>
-              <option value="1" style={{ background: 'var(--card-bg)' }}>Last 1 Day</option>
-              <option value="7" style={{ background: 'var(--card-bg)' }}>Last 7 Days</option>
-              <option value="30" style={{ background: 'var(--card-bg)' }}>Last 30 Days</option>
-            </select>
+            />
+            {dateFilter && (
+              <button 
+                onClick={() => setDateFilter('')}
+                style={{ 
+                  background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+                title="Clear Date"
+              >
+                <XCircle size={16} />
+              </button>
+            )}
             <button
               onClick={printTodayManifest}
               style={{
