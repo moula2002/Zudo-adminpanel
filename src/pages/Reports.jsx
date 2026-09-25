@@ -97,6 +97,7 @@ const Reports = () => {
         'Verification Status': seller.status || 'Pending',
         'GST Number': seller.gstNumber || 'N/A',
         'PAN Number': seller.panNumber || 'N/A',
+        'Food License URL': seller.foodLicenseDoc ? seller.foodLicenseDoc : 'N/A',
         'Bank Name': seller.bankDetails?.bankName || 'N/A',
         'Account Number': seller.bankDetails?.accountNumber || 'N/A',
         'IFSC Code': seller.bankDetails?.ifscCode || 'N/A',
