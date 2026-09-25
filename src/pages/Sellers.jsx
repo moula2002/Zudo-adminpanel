@@ -153,10 +153,20 @@ const Sellers = () => {
       Name: seller.name,
       Email: seller.email,
       'Business/Store Name': seller.businessName || seller.storeName || 'Undisclosed',
+      'Business Address': seller.businessAddress || 'Not listed',
       Phone: seller.phone || 'No phone',
-      'Credit Days': seller.creditDays || 0,
+      'GST Registration': seller.gstNumber || 'N/A',
+      'PAN Card No.': seller.panNumber || 'N/A',
+      'Allowed Credit Terms (Days)': seller.creditDays || 0,
+      'Store Logo URL': seller.storePic ? getFullUrl(seller.storePic) : 'N/A',
+      'GST Document URL': seller.gstDoc ? getFullUrl(seller.gstDoc) : 'N/A',
+      'PAN Document URL': seller.panDoc ? getFullUrl(seller.panDoc) : 'N/A',
+      'Trade Licence URL': seller.tradeLicenseDoc ? getFullUrl(seller.tradeLicenseDoc) : 'N/A',
+      'RMC/AMPC URL': seller.rmcAmpcDoc ? getFullUrl(seller.rmcAmpcDoc) : 'N/A',
+      'Food Licence URL': seller.foodLicenseDoc ? getFullUrl(seller.foodLicenseDoc) : 'N/A',
       'Verification Status': seller.status || 'pending',
-      'Verified Access': seller.isVerified ? 'Verified' : 'Limited Access'
+      'Verified Access': seller.isVerified ? 'Verified' : 'Limited Access',
+      'Approval Status': seller.isApproved ? 'Approved' : 'Pending'
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
