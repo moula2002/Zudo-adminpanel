@@ -110,6 +110,7 @@ const Orders = () => {
       setEoItems(editingOrder.items.map(item => ({
         productId: item.productId?._id || item.productId || item.product,
         name: item.name,
+        sellerName: item.seller?.name || item.seller?.businessName || item.sellerName,
         quantity: item.quantity,
         price: item.price
       })));
@@ -2158,7 +2159,7 @@ const Orders = () => {
                                   <div style={{ flex: 1 }}>
                                     <p style={{ fontWeight: 700, fontSize: '12px', margin: 0 }}>{p.name}</p>
                                     <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: 0 }}>
-                                      ₹{coSegment === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
+                                      By: <strong style={{ color: 'var(--primary)' }}>{p.sellerName || 'Zudo Official'}</strong> • ₹{coSegment === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
                                     </p>
                                   </div>
                                 </button>
@@ -2192,6 +2193,7 @@ const Orders = () => {
                             setCoItems([...coItems, {
                               productId: prod._id,
                               name: prod.name,
+                              sellerName: prod.sellerName,
                               quantity: coSelectedQty,
                               price: coSegment === 'b2b' ? (prod.b2bPrice || prod.price) : prod.price
                             }]);
@@ -2221,7 +2223,10 @@ const Orders = () => {
                             <tbody>
                               {coItems.map((item, index) => (
                                 <tr key={index} style={{ borderBottom: index < coItems.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
-                                  <td style={{ padding: '12px 16px', fontWeight: 600 }}>{item.name}</td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <div style={{ fontWeight: 600 }}>{item.name}</div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
+                                  </td>
                                   <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>{item.quantity}</td>
                                   <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--primary)' }}>₹{(item.price * item.quantity).toLocaleString()}</td>
                                   <td style={{ padding: '12px 16px', textAlign: 'center' }}>
@@ -2436,7 +2441,7 @@ const Orders = () => {
                               <div style={{ flex: 1 }}>
                                 <p style={{ fontWeight: 700, fontSize: '12px', margin: 0 }}>{p.name}</p>
                                 <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: 0 }}>
-                                  ₹{editingOrder.userId?.role === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
+                                  By: <strong style={{ color: 'var(--primary)' }}>{p.sellerName || 'Zudo Official'}</strong> • ₹{editingOrder.userId?.role === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
                                 </p>
                               </div>
                             </button>
@@ -2470,6 +2475,7 @@ const Orders = () => {
                         setEoItems([...eoItems, {
                           productId: prod._id,
                           name: prod.name,
+                          sellerName: prod.sellerName,
                           quantity: eoSelectedQty,
                           price: userRole === 'b2b' ? (prod.b2bPrice || prod.price) : prod.price
                         }]);
@@ -2506,7 +2512,10 @@ const Orders = () => {
                         </tr>
                       ) : eoItems.map((item, index) => (
                         <tr key={index} style={{ borderBottom: index < eoItems.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
-                          <td style={{ padding: '12px 16px', fontWeight: 600 }}>{item.name}</td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: 600 }}>{item.name}</div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
+                          </td>
                           <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                               <button 
