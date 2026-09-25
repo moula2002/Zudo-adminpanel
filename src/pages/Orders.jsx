@@ -306,15 +306,30 @@ const Orders = () => {
   };
 
   const exportOrders = () => {
-    const exportData = filteredOrders.map(o => ({
-      ID: o._id,
-      Customer: o.userId?.name || 'Guest',
-      Type: o.userId?.role || 'B2C',
-      Amount: o.totalAmount,
-      Status: o.orderStatus,
-      Payment: o.paymentMethod,
-      Date: new Date(o.createdAt).toLocaleDateString()
-    }));
+    const exportData = filteredOrders.map(o => {
+      const itemsList = o.items ? o.items.map(item => `${item.name} (Qty: ${item.quantity} | ₹${item.price})`).join('; ') : 'No items';
+      
+      return {
+        'Order ID': o._id,
+        'Date & Time': new Date(o.createdAt).toLocaleString(),
+        'Customer Name': o.userId?.name || 'Guest',
+        'Customer Email': o.userId?.email || 'N/A',
+        'Customer Phone': o.userId?.phone || o.shippingAddress?.phone || 'N/A',
+        'Segment': (o.userId?.role || 'B2C').toUpperCase(),
+        'Order Status': o.orderStatus,
+        'Total Amount (INR)': o.totalAmount,
+        'Payment Method': o.paymentMethod,
+        'Payment Status': o.paymentStatus || 'Pending',
+        'Shipping Name': o.shippingAddress?.name || 'N/A',
+        'Shipping Phone': o.shippingAddress?.phone || 'N/A',
+        'Shipping Address': o.shippingAddress ? `${o.shippingAddress.address || ''}, ${o.shippingAddress.city || ''}, ${o.shippingAddress.state || ''} - ${o.shippingAddress.pincode || ''}`.replace(/,\s*,/g, ',').replace(/^[,\s]+|[,\s]+$/g, '') : 'N/A',
+        'Items Ordered': itemsList,
+        'Assigned Driver': o.driverId?.name || 'Unassigned',
+        'Driver Phone': o.driverId?.phone || 'N/A',
+        'Assigned Cash Collector': o.cashPersonId?.name || 'Unassigned',
+        'Cash Collector Phone': o.cashPersonId?.phone || 'N/A'
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Orders");
