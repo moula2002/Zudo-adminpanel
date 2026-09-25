@@ -33,17 +33,27 @@ const Reports = () => {
       endpoint: '/orders/admin/all',
       icon: ShoppingBag,
       color: '#6366f1',
-      mapFn: (data) => data.map((order, idx) => ({
+      mapFn: (data) => data.map((order) => ({
         'Order ID': order._id,
         'Customer Name': order.userId?.name || 'Anonymous',
         'Customer Email': order.userId?.email || 'N/A',
+        'Customer Phone': order.userId?.phone || order.shippingAddress?.phone || 'N/A',
         'Customer Segment': order.userId?.role?.toUpperCase() || 'B2C',
-        'Amount (INR)': order.totalAmount,
+        'Order Status': order.orderStatus,
         'Payment Status': order.paymentStatus,
         'Payment Method': order.paymentMethod,
-        'Order Status': order.orderStatus,
+        'Total Amount (INR)': order.totalAmount,
+        'Tax / GST (INR)': order.taxAmount || 0,
+        'Discount Applied (INR)': order.discountAmount || 0,
+        'Total Items': (order.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0),
+        'Items Detail': (order.items || []).map(i => `${i.name} (x${i.quantity})`).join(', '),
+        'Shipping Address': order.shippingAddress ? `${order.shippingAddress.address || ''}, ${order.shippingAddress.city || ''}, ${order.shippingAddress.state || ''} - ${order.shippingAddress.pincode || ''}`.trim() : 'N/A',
         'City Zone': order.locationId?.city || 'Global',
-        'Date Placed': new Date(order.createdAt).toLocaleString()
+        'Driver Assigned': order.driverId?.name || 'Unassigned',
+        'Delivery Status': order.deliveryStatus || 'N/A',
+        'Admin Notes': order.adminNotes || 'N/A',
+        'Date Placed': new Date(order.createdAt).toLocaleString(),
+        'Last Updated': new Date(order.updatedAt).toLocaleString()
       }))
     },
     {
@@ -56,12 +66,18 @@ const Reports = () => {
       mapFn: (data) => data.map((user) => ({
         'User ID': user._id,
         'Full Name': user.name,
+        'Business Name': user.businessName || 'N/A',
         'Email Address': user.email,
         'Contact Number': user.phone || 'N/A',
         'Profile Status': user.status || 'Active',
         'Customer Segment': user.role?.toUpperCase() || 'B2C',
+        'Account Verification': user.isVerified ? 'Verified' : 'Unverified',
+        'GST Number': user.gstNumber || 'N/A',
+        'Wallet Balance (INR)': user.wallet || 0,
+        'Default Address': (user.addresses && user.addresses.length > 0) ? `${user.addresses[0].address || ''}, ${user.addresses[0].city || ''}`.trim() : 'N/A',
         'Operational Zone ID': user.locationId || 'Global',
-        'Date Registered': new Date(user.createdAt).toLocaleDateString()
+        'Date Registered': new Date(user.createdAt).toLocaleString(),
+        'Last Updated': new Date(user.updatedAt).toLocaleString()
       }))
     },
     {
@@ -73,14 +89,25 @@ const Reports = () => {
       color: '#f59e0b',
       mapFn: (data) => data.map((seller) => ({
         'Seller ID': seller._id,
-        'Business Name': seller.companyName || seller.name,
+        'Business Name': seller.businessName || seller.storeName || seller.companyName || seller.name,
         'Owner Name': seller.name,
         'Email ID': seller.email,
         'Mobile Number': seller.phone,
-        'Operational Zone': seller.locationId?.city || 'Global',
         'Approval Status': seller.isApproved ? 'Approved' : 'Pending',
+        'Verification Status': seller.status || 'Pending',
+        'GST Number': seller.gstNumber || 'N/A',
+        'PAN Number': seller.panNumber || 'N/A',
+        'Bank Name': seller.bankDetails?.bankName || 'N/A',
+        'Account Number': seller.bankDetails?.accountNumber || 'N/A',
+        'IFSC Code': seller.bankDetails?.ifscCode || 'N/A',
+        'Wallet Balance (INR)': seller.wallet || 0,
+        'Total Earned (INR)': seller.totalEarned || 0,
+        'Commission Type': seller.commissionType || 'Default',
+        'Operational Zone': seller.locationId?.city || 'Global',
+        'Business Address': seller.address ? `${seller.address.street || ''}, ${seller.address.city || ''}, ${seller.address.state || ''}`.trim() : 'N/A',
         'Category Depth': (seller.categories || []).length,
-        'Onboarding Date': new Date(seller.createdAt).toLocaleDateString()
+        'Onboarding Date': new Date(seller.createdAt).toLocaleString(),
+        'Last Updated': new Date(seller.updatedAt).toLocaleString()
       }))
     },
     {
@@ -95,10 +122,17 @@ const Reports = () => {
         'Full Name': driver.name,
         'Email Address': driver.email,
         'Mobile Phone': driver.phone,
-        'Duty Status': driver.status ? 'On Duty' : 'Off Duty',
+        'Duty Status': driver.status === 'active' ? 'On Duty' : 'Off Duty',
         'Approval Status': driver.isApproved ? 'Approved' : 'Suspended',
+        'Vehicle Type': driver.vehicleType || 'N/A',
+        'Vehicle Number': driver.vehicleNumber || 'N/A',
+        'License Number': driver.licenseNumber || 'N/A',
+        'Cash Management Enabled': driver.cashManagement ? 'Yes' : 'No',
+        'Wallet Balance (INR)': driver.wallet || 0,
+        'Completed Deliveries': driver.completedDeliveries || 0,
         'Operational Zone': driver.locationId?.city || 'Global',
-        'Registration Date': new Date(driver.createdAt).toLocaleDateString()
+        'Registration Date': new Date(driver.createdAt).toLocaleString(),
+        'Last Updated': new Date(driver.updatedAt).toLocaleString()
       }))
     },
     {
@@ -110,11 +144,17 @@ const Reports = () => {
       color: '#3b82f6',
       mapFn: (data) => data.map((item) => ({
         'Seller ID': item.seller?._id || 'N/A',
-        'Merchant Name': item.seller?.companyName || item.seller?.name || 'Unknown',
+        'Merchant Business Name': item.seller?.businessName || item.seller?.storeName || item.seller?.companyName || item.seller?.name || 'Unknown',
+        'Merchant Owner': item.seller?.name || 'N/A',
+        'Merchant Email': item.seller?.email || 'N/A',
+        'Merchant Phone': item.seller?.phone || 'N/A',
         'Active Balance (INR)': item.balance || 0,
         'Pending Clearance (INR)': item.pendingBalance || 0,
         'Total Earned (INR)': item.totalEarned || 0,
-        'Last Settled Payout': item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : 'N/A'
+        'Bank Name': item.seller?.bankDetails?.bankName || 'N/A',
+        'Account Number': item.seller?.bankDetails?.accountNumber || 'N/A',
+        'IFSC Code': item.seller?.bankDetails?.ifscCode || 'N/A',
+        'Last Settled Payout': item.updatedAt ? new Date(item.updatedAt).toLocaleString() : 'N/A'
       }))
     },
     {
@@ -125,13 +165,18 @@ const Reports = () => {
       icon: MessageSquare,
       color: '#8b5cf6',
       mapFn: (data) => data.map((review) => ({
+        'Review ID': review._id,
         'Reviewer Name': review.userId?.name || 'Anonymous',
         'Reviewer Email': review.userId?.email || 'N/A',
-        'Product Specifications': review.productId?.name || 'Deleted Product',
+        'Product Name': review.productId?.name || 'Deleted Product',
+        'Product ID': review.productId?._id || 'N/A',
         'Satisfaction Rating': review.rating,
-        'Review Content': review.comment || '',
+        'Review Title': review.title || 'N/A',
+        'Review Content': review.comment || 'N/A',
         'Attachments Count': (review.media || []).length,
-        'Date Received': new Date(review.createdAt).toLocaleDateString()
+        'Verification Status': review.isVerifiedPurchase ? 'Verified Purchase' : 'Unverified',
+        'Approval Status': review.isApproved ? 'Approved' : 'Pending',
+        'Date Received': new Date(review.createdAt).toLocaleString()
       }))
     },
     {
@@ -146,8 +191,12 @@ const Reports = () => {
         'Slot ID': slot._id,
         'Start Time': slot.startTime,
         'End Time': slot.endTime,
+        'Capacity (Orders)': slot.capacity || 'Unlimited',
+        'Current Orders Count': slot.ordersCount || 0,
         'Status': slot.isActive ? 'Active' : 'Inactive',
-        'Operational Zone': slot.locationId || 'Global'
+        'Operational Zone': slot.locationId || 'Global',
+        'Created At': slot.createdAt ? new Date(slot.createdAt).toLocaleString() : 'N/A',
+        'Last Updated': slot.updatedAt ? new Date(slot.updatedAt).toLocaleString() : 'N/A'
       }))
     },
     {
@@ -157,7 +206,6 @@ const Reports = () => {
       endpoint: '/categories',
       icon: Percent,
       color: '#a855f7',
-      // Dynamic cross-reference map is triggered in the direct builder
       mapFn: (data) => data.map(cat => ({
         'Category Name': cat.name,
         'Subcategories Count': (cat.subCategories || []).length,
@@ -173,14 +221,16 @@ const Reports = () => {
       color: '#14b8a6',
       mapFn: (data) => data.map((tx) => ({
         'Transaction ID': tx._id,
-        'Collector / User': tx.name || 'N/A',
+        'Collector / User Name': tx.name || 'N/A',
         'Phone Reference': tx.phone || 'N/A',
-        'Cash Amount (INR)': tx.amount,
+        'Email Address': tx.email || 'N/A',
         'Ledger Type': tx.type || 'B2C',
-        'Collector Email': tx.email || 'N/A',
+        'Cash Amount (INR)': tx.amount,
         'Deposit Method': tx.paymentMethod || 'Cash',
-        'Notes Description': tx.description || 'Manual Settlement',
-        'Timestamp Record': new Date(tx.createdAt).toLocaleString()
+        'Verification Method': tx.type === 'B2B' ? 'Password' : 'OTP',
+        'Notes / Description': tx.description || 'Manual Settlement',
+        'Transaction Status': 'Completed',
+        'Timestamp Record': new Date(tx.createdAt || tx.date).toLocaleString()
       }))
     }
   ];
@@ -195,7 +245,6 @@ const Reports = () => {
       let finalData = [];
 
       if (report.id === 'commissions') {
-        // Special combined API request
         const [catRes, commRes] = await Promise.all([
           api.get('/categories'),
           api.get('/commissions')
@@ -208,18 +257,26 @@ const Reports = () => {
           if (catComms.length > 0) {
             catComms.forEach(c => {
               finalData.push({
+                'Category ID': cat._id,
                 'Category Name': cat.name,
+                'Subcategories Count': (cat.subCategories || []).length,
+                'Commission ID': c._id,
                 'Packaging Unit': c.unit,
                 'Commission Type': c.commissionType === 'percentage' ? 'Percentage (%)' : 'Flat (₹)',
-                'Commission Rate / Value': c.commissionValue
+                'Commission Rate / Value': c.commissionValue,
+                'Created At': c.createdAt ? new Date(c.createdAt).toLocaleString() : 'N/A'
               });
             });
           } else {
             finalData.push({
+              'Category ID': cat._id,
               'Category Name': cat.name,
+              'Subcategories Count': (cat.subCategories || []).length,
+              'Commission ID': 'N/A',
               'Packaging Unit': 'N/A',
               'Commission Type': 'None',
-              'Commission Rate / Value': 0
+              'Commission Rate / Value': 0,
+              'Created At': 'N/A'
             });
           }
         });
@@ -231,7 +288,7 @@ const Reports = () => {
       setStatusMsg(`Compiling spreadsheet grid...`);
       const ws = XLSX.utils.json_to_sheet(finalData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, report.id.toUpperCase());
+      XLSX.utils.book_append_sheet(wb, ws, report.title.substring(0, 31));
 
       setStatusMsg(`Writing file stream...`);
       XLSX.writeFile(wb, `Zudo_${report.id.charAt(0).toUpperCase() + report.id.slice(1)}_Report.xlsx`);
@@ -254,30 +311,70 @@ const Reports = () => {
     setStatusMsg('Initializing bulk database extraction pipeline...');
 
     try {
-      setStatusMsg('Downloading B2C/B2B Orders Ledger...');
-      const ordersRes = await api.get('/orders/admin/all');
-      
-      setStatusMsg('Downloading Seller Directory...');
-      const sellersRes = await api.get('/sellers');
-      
-      setStatusMsg('Downloading Ledger Settlements...');
-      const paymentsRes = await api.get('/payments/sellers');
-      
-      setStatusMsg('Downloading Logistics Drivers Roster...');
-      const driversRes = await api.get('/drivers');
+      const wb = XLSX.utils.book_new();
+      let totalRevenue = 0;
+      let totalOrders = 0;
+      let activeSellers = 0;
+      let activeDrivers = 0;
+      let activeLocations = 0;
+
+      for (const report of reportTypes) {
+        setStatusMsg(`Downloading ${report.title}...`);
+        let finalData = [];
+
+        if (report.id === 'commissions') {
+          const [catRes, commRes] = await Promise.all([
+            api.get('/categories'),
+            api.get('/commissions')
+          ]);
+          const cats = catRes.data;
+          const comms = commRes.data;
+          cats.forEach(cat => {
+            const catComms = comms.filter(c => c.categoryId === cat._id);
+            if (catComms.length > 0) {
+              catComms.forEach(c => {
+                finalData.push({
+                  'Category ID': cat._id,
+                  'Category Name': cat.name,
+                  'Subcategories Count': (cat.subCategories || []).length,
+                  'Commission ID': c._id,
+                  'Packaging Unit': c.unit,
+                  'Commission Type': c.commissionType === 'percentage' ? 'Percentage (%)' : 'Flat (₹)',
+                  'Commission Rate / Value': c.commissionValue,
+                  'Created At': c.createdAt ? new Date(c.createdAt).toLocaleString() : 'N/A'
+                });
+              });
+            } else {
+              finalData.push({
+                'Category ID': cat._id,
+                'Category Name': cat.name,
+                'Subcategories Count': (cat.subCategories || []).length,
+                'Commission ID': 'N/A',
+                'Packaging Unit': 'N/A',
+                'Commission Type': 'None',
+                'Commission Rate / Value': 0,
+                'Created At': 'N/A'
+              });
+            }
+          });
+        } else {
+          const { data } = await api.get(report.endpoint);
+          finalData = report.mapFn(data);
+
+          if (report.id === 'orders') {
+            totalOrders = data.length;
+            totalRevenue = data.reduce((sum, o) => sum + (o.orderStatus !== 'Cancelled' ? o.totalAmount : 0), 0);
+            activeLocations = [...new Set(data.map(o => o.locationId?.city).filter(Boolean))].length;
+          }
+          if (report.id === 'sellers') activeSellers = data.length;
+          if (report.id === 'drivers') activeDrivers = data.length;
+        }
+
+        const ws = XLSX.utils.json_to_sheet(finalData);
+        XLSX.utils.book_append_sheet(wb, ws, report.title.substring(0, 31));
+      }
 
       setStatusMsg('Compiling Executive KPI Sheet...');
-      const orders = ordersRes.data;
-      const sellers = sellersRes.data;
-      const payments = paymentsRes.data;
-      const drivers = driversRes.data;
-
-      const totalRevenue = orders.reduce((sum, o) => sum + (o.orderStatus !== 'Cancelled' ? o.totalAmount : 0), 0);
-      const activeSellers = sellers.length;
-      const activeDrivers = drivers.length;
-      const totalOrders = orders.length;
-      const activeLocations = [...new Set(orders.map(o => o.locationId?.city).filter(Boolean))].length;
-
       const summaryData = [
         ['ZUDO METRIC EXECUTIVE KPI SUMMARY', ''],
         [],
@@ -292,33 +389,18 @@ const Reports = () => {
         ['Report Generated At', new Date().toLocaleString()],
         ['Security Scope', 'Confidential - Administrative Access Only']
       ];
-
-      setStatusMsg('Formulating sheet grids...');
-      const wb = XLSX.utils.book_new();
-
+      
       const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
       
-      const ordersMapped = reportTypes.find(r => r.id === 'orders').mapFn(orders);
-      const wsOrders = XLSX.utils.json_to_sheet(ordersMapped);
-
-      const sellersMapped = reportTypes.find(r => r.id === 'sellers').mapFn(sellers);
-      const wsSellers = XLSX.utils.json_to_sheet(sellersMapped);
-
-      const paymentsMapped = reportTypes.find(r => r.id === 'payments').mapFn(payments);
-      const wsPayments = XLSX.utils.json_to_sheet(paymentsMapped);
-
-      const driversMapped = reportTypes.find(r => r.id === 'drivers').mapFn(drivers);
-      const wsDrivers = XLSX.utils.json_to_sheet(driversMapped);
-
-      setStatusMsg('Assembling Master Sheets...');
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Executive KPI Overview');
-      XLSX.utils.book_append_sheet(wb, wsOrders, 'Orders Ledger');
-      XLSX.utils.book_append_sheet(wb, wsSellers, 'Seller Directory');
-      XLSX.utils.book_append_sheet(wb, wsPayments, 'Merchant Balances');
-      XLSX.utils.book_append_sheet(wb, wsDrivers, 'Logistics Fleet');
+      const finalWb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(finalWb, wsSummary, 'Executive KPI Overview');
+      
+      wb.SheetNames.forEach(name => {
+        XLSX.utils.book_append_sheet(finalWb, wb.Sheets[name], name);
+      });
 
       setStatusMsg('Downloading Master Audit Workbook...');
-      XLSX.writeFile(wb, 'Zudo_Master_Operational_Audit.xlsx');
+      XLSX.writeFile(finalWb, 'Zudo_Master_Operational_Audit.xlsx');
       setStatusMsg('Master Audit Spreadsheet Generated Successfully!');
     } catch (err) {
       console.error(err);
