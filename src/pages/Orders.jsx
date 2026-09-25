@@ -237,6 +237,17 @@ const Orders = () => {
     }
   };
 
+  const handleDeleteOrder = async (orderId) => {
+    if (!window.confirm('Are you sure you want to permanently delete this order?')) return;
+    try {
+      await axios.delete(`/orders/admin/${orderId}`);
+      fetchOrders();
+    } catch (error) {
+      console.error('Failed to delete order:', error);
+      alert('Failed to delete order');
+    }
+  };
+
   const handleReturnAction = async (orderId, action) => {
     try {
       const endpoint = action === 'approve' ? 'return-approve' : 'return-reject';
@@ -1349,8 +1360,9 @@ const Orders = () => {
                       </button>
                     )}
                     {['Pending', 'Packed'].includes(order.orderStatus) && (
-                      <button onClick={() => handleUpdateStatus(order._id, 'Cancelled')} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Cancel Order</button>
+                      <button onClick={() => handleUpdateStatus(order._id, 'Cancelled')} style={{ background: 'transparent', border: 'none', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Cancel Order</button>
                     )}
+                    <button onClick={() => handleDeleteOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Delete Order</button>
                   </div>
                 )}
               </div>
