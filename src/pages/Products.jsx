@@ -134,6 +134,8 @@ const Products = () => {
               ))}
             </select>
           </div>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <div style={{ position: 'relative', width: '200px' }}>
             <Filter size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-dim)' }} />
             <select
@@ -148,8 +150,6 @@ const Products = () => {
               ))}
             </select>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button
             onClick={exportProducts}
             className="btn-primary"
