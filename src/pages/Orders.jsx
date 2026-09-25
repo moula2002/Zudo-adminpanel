@@ -20,6 +20,8 @@ const Orders = () => {
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [statusActionData, setStatusActionData] = useState({ orderId: null, status: null });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteOrderId, setDeleteOrderId] = useState(null);
   const [showReturnDriverModal, setShowReturnDriverModal] = useState(false);
   const [returnDriverActionData, setReturnDriverActionData] = useState({ orderId: null });
   const [returnDriverIdInput, setReturnDriverIdInput] = useState('');
@@ -237,14 +239,22 @@ const Orders = () => {
     }
   };
 
-  const handleDeleteOrder = async (orderId) => {
-    if (!window.confirm('Are you sure you want to permanently delete this order?')) return;
+  const handleDeleteOrder = (orderId) => {
+    setDeleteOrderId(orderId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteOrder = async () => {
+    if (!deleteOrderId) return;
     try {
-      await axios.delete(`/orders/admin/${orderId}`);
+      await axios.delete(`/orders/admin/${deleteOrderId}`);
       fetchOrders();
     } catch (error) {
       console.error('Failed to delete order:', error);
       alert('Failed to delete order');
+    } finally {
+      setShowDeleteModal(false);
+      setDeleteOrderId(null);
     }
   };
 
@@ -2683,6 +2693,58 @@ const Orders = () => {
                 }}
               >
                 Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div style={{ 
+          position: 'fixed', inset: 0, 
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+        }}>
+          <div style={{ 
+            background: 'var(--card-bg)', padding: '24px', borderRadius: '24px',
+            border: '1px solid var(--glass-border)', width: '400px', maxWidth: '90%',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
+          }}>
+            <div style={{ 
+              width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(239, 68, 68, 0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+              color: '#ef4444'
+            }}>
+              <Trash2 size={24} />
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
+              Confirm Deletion
+            </h3>
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to permanently delete this order? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteOrderId(null);
+                }}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+                  background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmDeleteOrder}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
+                  background: '#ef4444', color: '#fff', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Delete
               </button>
             </div>
           </div>
