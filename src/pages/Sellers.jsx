@@ -33,7 +33,7 @@ const Sellers = () => {
   const [status, setStatus] = useState({ type: '', message: '' });
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [createData, setCreateData] = useState({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '' });
+  const [createData, setCreateData] = useState({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '', b2b: false, b2c: false });
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -92,7 +92,7 @@ const Sellers = () => {
       await api.post('/sellers', payload);
       setStatus({ type: 'success', message: 'New seller account created successfully!' });
       setShowCreate(false);
-      setCreateData({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '' });
+      setCreateData({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '', b2b: false, b2c: false });
       fetchSellers();
     } catch (err) {
       setStatus({ type: 'error', message: err.response?.data?.message || 'Failed to create seller.' });
@@ -267,7 +267,7 @@ const Sellers = () => {
                 </div>
               </div>
             </div>
-            <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+            <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '24px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Company Name</label>
                 <input type="text" placeholder="e.g. Acme Corp" className="input-field" value={createData.businessName} onChange={e => setCreateData({...createData, businessName: e.target.value})} />
@@ -275,6 +275,17 @@ const Sellers = () => {
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Allowed Credit Days</label>
                 <input type="number" placeholder="e.g. 7" className="input-field" value={createData.creditDays} onChange={e => setCreateData({...createData, creditDays: Number(e.target.value) || 0})} min="0" />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Business Type (Optional)</label>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '48px', background: 'var(--input-bg)', padding: '0 16px', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-main)', fontWeight: 600 }}>
+                    <input type="checkbox" checked={createData.b2b} onChange={e => setCreateData({...createData, b2b: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: '#6366f1' }} /> B2B
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-main)', fontWeight: 600 }}>
+                    <input type="checkbox" checked={createData.b2c} onChange={e => setCreateData({...createData, b2c: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: '#6366f1' }} /> B2C
+                  </label>
+                </div>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -356,10 +367,18 @@ const Sellers = () => {
                           <Building2 size={14} style={{ color: 'var(--text-dim)' }} />
                           {seller.businessName || seller.storeName || <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>Undisclosed</span>}
                         </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <span>{seller.phone || 'No phone'}</span>
                           <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--glass-border)' }} />
                           <span style={{ color: '#6366f1', fontWeight: 700, background: 'rgba(99, 102, 241, 0.08)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', border: '1px solid rgba(99, 102, 241, 0.15)' }}>{seller.creditDays || 0} Credit Days</span>
+                          {(seller.b2b || seller.b2c) && (
+                            <>
+                              <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--glass-border)' }} />
+                              <span style={{ color: '#10b981', fontWeight: 700, background: 'rgba(16, 185, 129, 0.08)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+                                {seller.b2b && seller.b2c ? 'B2B & B2C' : seller.b2b ? 'B2B' : 'B2C'}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </td>
                       <td style={{ padding: '20px 24px' }}>
@@ -605,7 +624,7 @@ const Sellers = () => {
                   />
                 </div>
 
-                <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Allowed Credit Days</label>
                     <input type="number" placeholder="Credit days limit" className="input-field" value={editData.creditDays || 0} onChange={e => setEditData({...editData, creditDays: Number(e.target.value) || 0})} min="0" />
@@ -617,6 +636,17 @@ const Sellers = () => {
                       <option value="approved">Approved & Verified (Full Access)</option>
                       <option value="rejected">Rejected / Blocked</option>
                     </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Business Type</label>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '48px', background: 'var(--input-bg)', padding: '0 16px', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-main)', fontWeight: 600 }}>
+                        <input type="checkbox" checked={editData.b2b || false} onChange={e => setEditData({...editData, b2b: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: '#6366f1' }} /> B2B
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-main)', fontWeight: 600 }}>
+                        <input type="checkbox" checked={editData.b2c || false} onChange={e => setEditData({...editData, b2c: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: '#6366f1' }} /> B2C
+                      </label>
+                    </div>
                   </div>
                 </div>
 
