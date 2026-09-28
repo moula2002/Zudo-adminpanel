@@ -344,6 +344,7 @@ const Orders = () => {
         'Shipping Name': o.shippingAddress?.name || 'N/A',
         'Shipping Phone': o.shippingAddress?.phone || 'N/A',
         'Shipping Address': o.shippingAddress ? `${o.shippingAddress.address || ''}, ${o.shippingAddress.city || ''}, ${o.shippingAddress.state || ''} - ${o.shippingAddress.pincode || ''}`.replace(/,\s*,/g, ',').replace(/^[,\s]+|[,\s]+$/g, '') : 'N/A',
+        'Delivery Slot': o.deliverySlot && o.deliverySlot.startTime ? `${o.deliverySlot.startTime} ${o.deliverySlot.endTime && o.deliverySlot.endTime !== '*' ? `- ${o.deliverySlot.endTime}` : ''}`.trim() : 'N/A',
         'Items Ordered': itemsList,
         'Assigned Driver': o.driverId?.name || 'Unassigned',
         'Driver Phone': o.driverId?.phone || 'N/A',
@@ -554,6 +555,10 @@ const Orders = () => {
                   <td class="info-value"><span style="color: ${(order.userId?.role || 'b2c') === 'b2b' ? '#6366f1' : '#ec4899'}; font-weight: 700;">${(order.userId?.role || 'b2c').toUpperCase()} Segment</span></td>
                 </tr>
                 <tr>
+                  <td style="color: #64748b;">Delivery Slot:</td>
+                  <td class="info-value">${order.deliverySlot && order.deliverySlot.startTime ? `${order.deliverySlot.startTime} ${order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? '- ' + order.deliverySlot.endTime : ''}` : 'N/A'}</td>
+                </tr>
+                <tr>
                   <td style="color: #64748b;">Payment Mode:</td>
                   <td class="info-value">${order.paymentMethod} (${order.paymentStatus === 'Completed' ? 'PAID' : 'COD/PENDING'})</td>
                 </tr>
@@ -699,6 +704,10 @@ const Orders = () => {
                 <tr>
                   <td style="color: #64748b;">Fulfillment:</td>
                   <td class="info-value"><span style="color: ${(order.userId?.role || 'b2c') === 'b2b' ? '#6366f1' : '#ec4899'}; font-weight: 700;">${(order.userId?.role || 'b2c').toUpperCase()} Segment</span></td>
+                </tr>
+                <tr>
+                  <td style="color: #64748b;">Delivery Slot:</td>
+                  <td class="info-value">${order.deliverySlot && order.deliverySlot.startTime ? `${order.deliverySlot.startTime} ${order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? '- ' + order.deliverySlot.endTime : ''}` : 'N/A'}</td>
                 </tr>
                 <tr>
                   <td style="color: #64748b;">Payment Mode:</td>
@@ -1120,6 +1129,17 @@ const Orders = () => {
                     padding: '2px 8px', borderRadius: '6px'
                   }}>{(order.userId?.role || 'b2c').toUpperCase()}</span>
                 </div>
+                {order.deliverySlot && order.deliverySlot.startTime && (
+                  <>
+                    <div style={{ width: '1px', height: '20px', background: 'var(--glass-border)' }}></div>
+                    <div>
+                      <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Delivery Slot</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>
+                        {order.deliverySlot.startTime}{order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? ` - ${order.deliverySlot.endTime}` : ''}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                 <div style={{ textAlign: 'right' }}>
