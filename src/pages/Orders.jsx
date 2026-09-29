@@ -167,6 +167,24 @@ const Orders = () => {
     }
   };
 
+  const handleRefresh = async () => {
+    const loadingToast = toast.loading('Refreshing data...');
+    try {
+      await Promise.all([
+        fetchOrders(),
+        fetchDrivers(),
+        fetchCashStats(),
+        fetchCashCollectors(),
+        fetchUsers(),
+        fetchProducts(),
+        fetchCategories()
+      ]);
+      toast.success('Data refreshed successfully!', { id: loadingToast });
+    } catch (error) {
+      toast.error('Failed to refresh data', { id: loadingToast });
+    }
+  };
+
   const fetchDrivers = async () => {
     try {
       const { data } = await axios.get('/drivers');
@@ -317,7 +335,7 @@ const Orders = () => {
     if (otp === '1234') { // Dummy OTP for demo
       try {
         await axios.put(`/orders/${orderId}/verify-payment`);
-        toast.error('Payment Verified & Collected!');
+        toast.success('Payment Verified & Collected!');
         setShowOtpModal(false);
         setOtp('');
         fetchOrders();
@@ -985,7 +1003,7 @@ const Orders = () => {
           <button onClick={exportOrders} className="btn-primary" style={{ background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Download size={18} /> Export
           </button>
-          <button onClick={fetchOrders} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={handleRefresh} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <RefreshCcw size={18} /> Refresh
           </button>
           <button 
