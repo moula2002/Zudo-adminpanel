@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from '../utils/api';
 import { Truck, Clock, Star, CheckCircle, TrendingUp, BarChart3, Loader2, Plus, Trash2, Edit3, Clock4, ShieldCheck, ShieldAlert, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useSocket } from '../context/SocketContext';
 
 const Deliveries = () => {
   const [stats, setStats] = useState(null);
@@ -11,6 +12,7 @@ const Deliveries = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingSlot, setEditingSlot] = useState(null);
   const [cutoffTimeInput, setCutoffTimeInput] = useState('');
+  const { refreshFlag } = useSocket();
   
   const [formData, setFormData] = useState({
     startTime: '09:00 AM',
@@ -44,7 +46,7 @@ const Deliveries = () => {
 
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [refreshFlag]);
 
   const fetchInitialData = async () => {
     setLoading(true);

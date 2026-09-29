@@ -24,6 +24,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useSocket } from '../context/SocketContext';
 
 const Sellers = () => {
   const [sellers, setSellers] = useState([]);
@@ -32,6 +33,7 @@ const Sellers = () => {
   const [fetchLoading, setFetchLoading] = useState(true);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [searchQuery, setSearchQuery] = useState('');
+  const { refreshFlag } = useSocket();
 
   const [createData, setCreateData] = useState({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '', b2b: false, b2c: false });
   const [selectedSeller, setSelectedSeller] = useState(null);
@@ -56,7 +58,7 @@ const Sellers = () => {
 
   useEffect(() => {
     fetchSellers();
-  }, []);
+  }, [refreshFlag]);
 
   const handleUpdateStatus = async (id, status, isVerified) => {
     setUpdating(true);

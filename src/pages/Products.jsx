@@ -4,12 +4,14 @@ import { getFullUrl } from '../utils/media_utils';
 import { Package, Search, Tag, Loader2, Plus, Filter, Download, Edit3, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
+import { useSocket } from '../context/SocketContext';
 
 const Products = () => {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { refreshFlag } = useSocket();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -32,7 +34,7 @@ const Products = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [refreshFlag]);
 
   const uniqueSellers = Array.from(new Set(products.map(p => p.sellerName || 'Zudo Official')));
 

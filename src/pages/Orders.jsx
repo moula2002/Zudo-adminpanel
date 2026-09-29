@@ -7,6 +7,7 @@ import {
   Edit, Plus, Trash2, X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useSocket } from '../context/SocketContext';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
@@ -29,6 +30,7 @@ const Orders = () => {
   const [assigning, setAssigning] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
   const user = JSON.parse(localStorage.getItem('zudo_admin_user') || '{}');
+  const { refreshFlag } = useSocket();
   const [activeType, setActiveType] = useState(user.targetSegment && user.targetSegment !== 'Both' ? user.targetSegment : 'All');
   const [cashStats, setCashStats] = useState({ b2b: 0, b2c: 0 });
   const [cashCollectors, setCashCollectors] = useState([]);
@@ -105,7 +107,7 @@ const Orders = () => {
     fetchUsers();
     fetchProducts();
     fetchCategories();
-  }, []);
+  }, [refreshFlag]);
 
   useEffect(() => {
     if (editingOrder) {

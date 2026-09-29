@@ -10,6 +10,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 import * as XLSX from 'xlsx';
+import { useSocket } from '../context/SocketContext';
 
 const StatCard = ({ title, value, subValue, icon: Icon, color, trend }) => (
   <div className="glass-card" style={{ flex: 1, padding: '24px', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}>
@@ -45,6 +46,7 @@ const Dashboard = () => {
   const [revenueData, setRevenueData] = useState([]);
   const [loading, setLoading] = useState(true);
   const user = JSON.parse(localStorage.getItem('zudo_admin_user') || '{}');
+  const { refreshFlag } = useSocket();
 
   const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
 
@@ -56,7 +58,7 @@ const Dashboard = () => {
       fetchStats();
     }, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshFlag]);
 
   const fetchStats = async () => {
     try {

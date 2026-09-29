@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
+import { SocketProvider } from './context/SocketContext';
 
 const Login = lazy(() => import('./pages/Login'));
 const DashboardLayout = lazy(() => import('./components/DashboardLayout'));
@@ -47,53 +48,55 @@ const PageLoader = () => (
 function App() {
   return (
     <ThemeProvider>
-      <Router>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Suspense fallback={<PageLoader />}>
-                      <Routes>
-                        <Route path="/" element={<Dashboard />} />
-                        <Route path="/reports" element={<Reports />} />
-                        <Route path="/invoices" element={<Invoices />} />
-                        <Route path="/products" element={<Products />} />
-                        <Route path="/add-product" element={<AddProduct />} />
-                        <Route path="/edit-product/:id" element={<EditProduct />} />
-                        <Route path="/categories" element={<Categories />} />
-                        <Route path="/subcategories" element={<SubCategories />} />
-                        <Route path="/drivers" element={<Drivers />} />
-                        <Route path="/admins" element={<Admins />} />
-                        <Route path="/bulk-upload" element={<BulkUpload />} />
-                        <Route path="/b2b-verification" element={<B2BVerification />} />
-                        <Route path="/users" element={<Users />} />
-                        <Route path="/orders" element={<Orders />} />
-                        <Route path="/reviews" element={<Reviews />} />
-                        <Route path="/deliveries" element={<Deliveries />} />
-                        <Route path="/sellers" element={<Sellers />} />
-                        <Route path="/payments" element={<Payments />} />
-                        <Route path="/cash" element={<Cash />} />
-                        <Route path="/locations" element={<Locations />} />
-                        <Route path="/notifications" element={<Notifications />} />
-                        <Route path="/popup-ads" element={<PopupAds />} />
-                        <Route path="/banners" element={<Banners />} />
-                        <Route path="/profile" element={<Profile />} />
-                        <Route path="/sales" element={<Sales />} />
-                        <Route path="/commissions" element={<Commissions />} />
-                        <Route path="/settings" element={<Settings />} />
-                      </Routes>
-                    </Suspense>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </Suspense>
-      </Router>
+      <SocketProvider>
+        <Router>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <Suspense fallback={<PageLoader />}>
+                        <Routes>
+                          <Route path="/" element={<Dashboard />} />
+                          <Route path="/reports" element={<Reports />} />
+                          <Route path="/invoices" element={<Invoices />} />
+                          <Route path="/products" element={<Products />} />
+                          <Route path="/add-product" element={<AddProduct />} />
+                          <Route path="/edit-product/:id" element={<EditProduct />} />
+                          <Route path="/categories" element={<Categories />} />
+                          <Route path="/subcategories" element={<SubCategories />} />
+                          <Route path="/drivers" element={<Drivers />} />
+                          <Route path="/admins" element={<Admins />} />
+                          <Route path="/bulk-upload" element={<BulkUpload />} />
+                          <Route path="/b2b-verification" element={<B2BVerification />} />
+                          <Route path="/users" element={<Users />} />
+                          <Route path="/orders" element={<Orders />} />
+                          <Route path="/reviews" element={<Reviews />} />
+                          <Route path="/deliveries" element={<Deliveries />} />
+                          <Route path="/sellers" element={<Sellers />} />
+                          <Route path="/payments" element={<Payments />} />
+                          <Route path="/cash" element={<Cash />} />
+                          <Route path="/locations" element={<Locations />} />
+                          <Route path="/notifications" element={<Notifications />} />
+                          <Route path="/popup-ads" element={<PopupAds />} />
+                          <Route path="/banners" element={<Banners />} />
+                          <Route path="/profile" element={<Profile />} />
+                          <Route path="/sales" element={<Sales />} />
+                          <Route path="/commissions" element={<Commissions />} />
+                          <Route path="/settings" element={<Settings />} />
+                        </Routes>
+                      </Suspense>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </Suspense>
+        </Router>
+      </SocketProvider>
     </ThemeProvider>
   );
 }
