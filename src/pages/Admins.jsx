@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import * as XLSX from 'xlsx';
@@ -227,7 +228,7 @@ const Admins = () => {
 
   const handleExport = () => {
     if (!admins || admins.length === 0) {
-      alert("No administrative staff records to export!");
+      toast.error("No administrative staff records to export!");
       return;
     }
 

@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -31,7 +32,7 @@ const SubCategories = () => {
         fetchCategories();
       } catch (error) {
         console.error("Error deleting subcategory", error);
-        alert("Failed to delete subcategory");
+        toast.error("Failed to delete subcategory");
       }
     }
   };
@@ -43,7 +44,7 @@ const SubCategories = () => {
   const handleAddSubCategory = async (e) => {
     e.preventDefault();
     if (!formData.categoryId) {
-      alert('Please select a parent category');
+      toast.error('Please select a parent category');
       return;
     }
     setSubmitting(true);
@@ -63,7 +64,7 @@ const SubCategories = () => {
       fetchCategories();
     } catch (err) {
       console.error(err);
-      alert('Failed to add subcategory');
+      toast.error('Failed to add subcategory');
     } finally {
       setSubmitting(false);
     }

@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { 
@@ -84,7 +85,7 @@ const Payments = () => {
       await api.put(`/seller-invoices/admin/${id}/clear`);
       setSellerInvoices(sellerInvoices.map(inv => inv._id === id ? { ...inv, status: 'Cleared' } : inv));
     } catch (err) {
-      alert('Failed to clear invoice');
+      toast.error('Failed to clear invoice');
     }
   };
 
@@ -99,18 +100,18 @@ const Payments = () => {
       link.click();
       link.remove();
     } catch (err) {
-      alert('Failed to download invoice');
+      toast.error('Failed to download invoice');
     }
   };
   
   const handleGenerateInvoice = async (e) => {
     e.preventDefault();
     if (!generateStartDate || !generateEndDate) {
-      alert("Please select start and end dates.");
+      toast.error("Please select start and end dates.");
       return;
     }
     if (!generateInvoiceNumber) {
-      alert("Please enter an invoice number.");
+      toast.error("Please enter an invoice number.");
       return;
     }
     
@@ -181,7 +182,7 @@ const Payments = () => {
   const handleClearPayment = async (e) => {
     e.preventDefault();
     if (!selectedMerchant || !clearAmount || parseFloat(clearAmount) <= 0) {
-      alert('Please enter a valid payment amount.');
+      toast.error('Please enter a valid payment amount.');
       return;
     }
 

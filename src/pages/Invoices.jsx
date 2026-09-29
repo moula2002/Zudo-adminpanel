@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import { 
@@ -126,7 +127,7 @@ const Invoices = () => {
       await api.put(`/seller-invoices/admin/${id}/clear`);
       setSellerInvoices(sellerInvoices.map(inv => inv._id === id ? { ...inv, status: 'Cleared' } : inv));
     } catch (err) {
-      alert('Failed to clear invoice');
+      toast.error('Failed to clear invoice');
     }
   };
 
@@ -141,7 +142,7 @@ const Invoices = () => {
       link.click();
       link.remove();
     } catch (err) {
-      alert('Failed to download invoice');
+      toast.error('Failed to download invoice');
     }
   };
 

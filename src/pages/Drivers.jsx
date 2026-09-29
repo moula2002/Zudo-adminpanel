@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../utils/api';
 import { Truck, Plus, Search, Mail, Phone, Hash, Car, Loader2, CheckCircle2, Trash2, XCircle, MapPin, MapPinOff, RefreshCw, FileText, Calendar, AlertTriangle, ExternalLink, UploadCloud, Check, Download, Key } from 'lucide-react';
@@ -98,7 +99,7 @@ const Drivers = () => {
       newDocs[index].uploading = false;
       setFormData({ ...formData, documents: newDocs });
     } catch (err) {
-      alert('Failed to upload document file');
+      toast.error('Failed to upload document file');
       const newDocs = [...formData.documents];
       newDocs[index].uploading = false;
       setFormData({ ...formData, documents: newDocs });
@@ -137,7 +138,7 @@ const Drivers = () => {
       });
       setNewDocData(prev => ({ ...prev, url: uploadRes.data.url, uploading: false }));
     } catch (err) {
-      alert('Failed to upload document file');
+      toast.error('Failed to upload document file');
       setNewDocData(prev => ({ ...prev, uploading: false }));
     }
   };
@@ -145,11 +146,11 @@ const Drivers = () => {
   const handleAddOrUpdateDriverDocument = async (e) => {
     e.preventDefault();
     if (!newDocData.url) {
-      alert('Please upload the document file first');
+      toast.error('Please upload the document file first');
       return;
     }
     if (!newDocData.validityDate) {
-      alert('Please select a validity/expiry date');
+      toast.error('Please select a validity/expiry date');
       return;
     }
 
@@ -177,7 +178,7 @@ const Drivers = () => {
       setNewDocData({ name: 'Driving License', url: '', validityDate: '', uploading: false });
       fetchDrivers();
     } catch (err) {
-      alert('Failed to update driver documents');
+      toast.error('Failed to update driver documents');
     }
   };
 
@@ -189,7 +190,7 @@ const Drivers = () => {
       setSelectedDriver(data);
       fetchDrivers();
     } catch (err) {
-      alert('Failed to delete document');
+      toast.error('Failed to delete document');
     }
   };
 
@@ -250,7 +251,7 @@ const Drivers = () => {
       await api.put(`/drivers/${driver._id}`, { type: newType });
       fetchDrivers();
     } catch (err) {
-      alert('Failed to update driver type');
+      toast.error('Failed to update driver type');
     }
   };
 
@@ -261,7 +262,7 @@ const Drivers = () => {
       await api.put(`/drivers/${driver._id}`, { cashManagement: newValue });
       fetchDrivers();
     } catch (err) {
-      alert('Failed to update cash management status');
+      toast.error('Failed to update cash management status');
     }
   };
 
@@ -275,7 +276,7 @@ const Drivers = () => {
       fetchDrivers();
       setTimeout(() => setDeleteSuccessMsg(''), 3000);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete driver');
+      toast.error(err.response?.data?.message || 'Failed to delete driver');
     }
   };
 
@@ -293,7 +294,7 @@ const Drivers = () => {
       setFormData({ name: '', phone: '', email: '', password: '', licenseNumber: '', vehicleDetails: '', vehicleNo: '', drivingLicense: '', aadharNumber: '', type: 'B2C', cashManagement: false, documents: [] });
       fetchDrivers();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to create driver');
+      toast.error(err.response?.data?.message || 'Failed to create driver');
     } finally {
       setSubmitting(false);
     }
@@ -302,16 +303,16 @@ const Drivers = () => {
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     if (!newPassword || newPassword.trim() === '') {
-      alert('Please enter a new password');
+      toast.error('Please enter a new password');
       return;
     }
     setUpdatingPassword(true);
     try {
       await api.put(`/drivers/${selectedDriver._id}`, { password: newPassword });
-      alert('Password updated successfully');
+      toast.success('Password updated successfully');
       setNewPassword('');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update password');
+      toast.error(err.response?.data?.message || 'Failed to update password');
     } finally {
       setUpdatingPassword(false);
     }

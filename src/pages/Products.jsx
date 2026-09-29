@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -56,7 +57,7 @@ const Products = () => {
       setDeleteModalData({ show: false, productId: null, productName: '' });
     } catch (error) {
       console.error("Error deleting product", error);
-      alert("Failed to delete product");
+      toast.error("Failed to delete product");
     }
   };
 

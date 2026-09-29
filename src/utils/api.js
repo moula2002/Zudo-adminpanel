@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import axios from 'axios';
 
 const isLocal = window.location.hostname === 'localhost' ||
@@ -136,9 +137,9 @@ const setupInterceptors = (instance) => {
 
       if (error.response && error.response.status === 401) {
         if (error.response.data && error.response.data.code === 'SESSION_INVALIDATED') {
-          alert('Session expired. You have logged in from another device.');
+          toast.error('Session expired. You have logged in from another device.');
         } else {
-          alert('Session expired. Please log in again.');
+          toast.error('Session expired. Please log in again.');
         }
         localStorage.removeItem('zudo_admin_token');
         localStorage.removeItem('zudo_admin_user');

@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api, { uploadApi, IMAGE_BASE_URL, getImageUrl } from '../utils/api';
@@ -112,7 +113,7 @@ const EditProduct = () => {
         }
       } catch (err) {
         console.error('Failed to fetch data:', err);
-        alert('Failed to load product details');
+        toast.error('Failed to load product details');
       } finally {
         setFetching(false);
       }
@@ -192,7 +193,7 @@ const EditProduct = () => {
       navigate('/products');
     } catch (err) {
       console.error('Update error:', err);
-      alert(err.response?.data?.message || 'Failed to update product');
+      toast.error(err.response?.data?.message || 'Failed to update product');
     } finally {
       setLoading(false);
     }

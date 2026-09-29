@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { MapPin, Plus, Edit2, Trash2, Loader2, CheckCircle2, AlertCircle, X, Building2, Cog } from 'lucide-react';
@@ -112,7 +113,7 @@ const Locations = () => {
       await api.delete(`/locations/${id}`);
       fetchLocations();
     } catch (err) {
-      alert('Failed to delete location');
+      toast.error('Failed to delete location');
     }
   };
 

@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import axios, { getImageUrl } from '../utils/api';
 import { 
@@ -234,7 +235,7 @@ const Orders = () => {
       await axios.put(`/orders/${orderId}/status`, { status });
       fetchOrders();
     } catch (error) {
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     } finally {
       setShowStatusModal(false);
       setStatusActionData({ orderId: null, status: null });
@@ -253,7 +254,7 @@ const Orders = () => {
       fetchOrders();
     } catch (error) {
       console.error('Failed to delete order:', error);
-      alert('Failed to delete order');
+      toast.error('Failed to delete order');
     } finally {
       setShowDeleteModal(false);
       setDeleteOrderId(null);
@@ -266,7 +267,7 @@ const Orders = () => {
       await axios.put(`/orders/${orderId}/${endpoint}`);
       fetchOrders();
     } catch (error) {
-      alert(`Failed to ${action} return`);
+      toast.error(`Failed to ${action} return`);
     }
   };
 
@@ -280,10 +281,10 @@ const Orders = () => {
       if (res.ok) {
         fetchOrders();
       } else {
-        alert('Failed to update return status');
+        toast.error('Failed to update return status');
       }
     } catch (e) {
-      alert('Error updating return status');
+      toast.error('Error updating return status');
     }
   };
 
@@ -301,10 +302,10 @@ const Orders = () => {
     try {
       await axios.put(`/orders/${orderId}/assign-return-driver`, { driverId });
       fetchOrders();
-      alert('Driver assigned successfully');
+      toast.success('Driver assigned successfully');
     } catch (e) {
       const msg = e.response?.data?.message || 'Error assigning return driver';
-      alert('Failed: ' + msg);
+      toast.error('Failed: ' + msg);
     } finally {
       setShowReturnDriverModal(false);
       setReturnDriverActionData({ orderId: null });
@@ -316,15 +317,15 @@ const Orders = () => {
     if (otp === '1234') { // Dummy OTP for demo
       try {
         await axios.put(`/orders/${orderId}/verify-payment`);
-        alert('Payment Verified & Collected!');
+        toast.error('Payment Verified & Collected!');
         setShowOtpModal(false);
         setOtp('');
         fetchOrders();
       } catch (err) {
-        alert('Verification failed on server');
+        toast.error('Verification failed on server');
       }
     } else {
-      alert('Invalid OTP');
+      toast.error('Invalid OTP');
     }
   };
 
@@ -647,7 +648,7 @@ const Orders = () => {
     }
 
     if (todayOrders.length === 0) {
-      alert("No orders found for today to generate manifest.");
+      toast.error("No orders found for today to generate manifest.");
       return;
     }
 
@@ -1501,7 +1502,7 @@ const Orders = () => {
                       setShowDriverModal(false);
                       fetchOrders();
                     } catch (error) {
-                      alert('Failed to assign driver');
+                      toast.error('Failed to assign driver');
                     }
                   }}
                   style={{ 
@@ -2241,12 +2242,12 @@ const Orders = () => {
                           onClick={() => {
                             const prod = products.find(p => p._id === coSelectedProductId);
                             if (!prod) {
-                              alert('Please select a valid product first');
+                              toast.error('Please select a valid product first');
                               return;
                             }
                             // Check if already in list
                             if (coItems.some(item => item.productId === prod._id)) {
-                              alert('Product already added');
+                              toast.error('Product already added');
                               return;
                             }
                             setCoItems([...coItems, {
@@ -2348,11 +2349,11 @@ const Orders = () => {
                   <button 
                     onClick={async () => {
                       if (!coUserId) {
-                        alert('Please select a customer first');
+                        toast.error('Please select a customer first');
                         return;
                       }
                       if (coItems.length === 0) {
-                        alert('Please add at least one product');
+                        toast.error('Please add at least one product');
                         return;
                       }
                       
@@ -2361,7 +2362,7 @@ const Orders = () => {
 
                       if (Object.keys(errors).length > 0) {
                         setCoErrors(errors);
-                        alert("Please fill out the recipient name.");
+                        toast.error("Please fill out the recipient name.");
                         document.getElementById('co-recipient-name')?.focus();
                         return;
                       }
@@ -2373,7 +2374,7 @@ const Orders = () => {
                           shippingAddress: coAddress,
                           paymentMethod: coPaymentMethod
                         });
-                        alert('Manual order successfully created!');
+                        toast.success('Manual order successfully created!');
                         setShowCreateModal(false);
                         setCoSegment('');
                         setCoUserId('');
@@ -2384,7 +2385,7 @@ const Orders = () => {
                         setCoErrors({});
                         fetchOrders();
                       } catch (err) {
-                        alert('Failed to manually create order: ' + (err.response?.data?.message || err.message));
+                        toast.error('Failed to manually create order: ' + (err.response?.data?.message || err.message));
                       }
                     }}
                     className="btn-primary"
@@ -2523,11 +2524,11 @@ const Orders = () => {
                       onClick={() => {
                         const prod = products.find(p => p._id === eoSelectedProductId);
                         if (!prod) {
-                          alert('Please select a valid product first');
+                          toast.error('Please select a valid product first');
                           return;
                         }
                         if (eoItems.some(item => item.productId === prod._id)) {
-                          alert('Product already in list');
+                          toast.error('Product already in list');
                           return;
                         }
                         const userRole = editingOrder.userId?.role || 'b2c';
@@ -2644,7 +2645,7 @@ const Orders = () => {
               <button 
                 onClick={async () => {
                   if (eoItems.length === 0) {
-                    alert('Order must have at least one product');
+                    toast.error('Order must have at least one product');
                     return;
                   }
 
@@ -2652,12 +2653,12 @@ const Orders = () => {
                     await axios.put(`/orders/admin/${editingOrder._id}/items`, {
                       items: eoItems
                     });
-                    alert('Order products successfully updated!');
+                    toast.success('Order products successfully updated!');
                     setShowEditItemsModal(false);
                     setEditingOrder(null);
                     fetchOrders();
                   } catch (err) {
-                    alert('Failed to update order products: ' + (err.response?.data?.message || err.message));
+                    toast.error('Failed to update order products: ' + (err.response?.data?.message || err.message));
                   }
                 }}
                 className="btn-primary"

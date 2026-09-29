@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -83,7 +84,7 @@ const Banners = () => {
       resetForm();
       fetchBanners();
     } catch (err) {
-      alert('Failed to save banner');
+      toast.error('Failed to save banner');
     } finally {
       setSubmitting(false);
     }
@@ -118,7 +119,7 @@ const Banners = () => {
       await api.delete(`/banners/${id}`);
       setBanners(banners.filter(b => b._id !== id));
     } catch (err) {
-      alert('Failed to delete banner');
+      toast.error('Failed to delete banner');
     }
   };
 
@@ -127,7 +128,7 @@ const Banners = () => {
       const { data } = await api.put(`/banners/${banner._id}`, { isActive: !banner.isActive });
       setBanners(banners.map(b => b._id === banner._id ? data : b));
     } catch (err) {
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     }
   };
 

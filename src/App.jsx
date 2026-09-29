@@ -45,10 +45,13 @@ const PageLoader = () => (
   </div>
 );
 
+import { Toaster } from 'react-hot-toast';
+
 function App() {
   return (
     <ThemeProvider>
       <SocketProvider>
+        <Toaster position="top-right" toastOptions={{ duration: 3000, style: { background: 'var(--card-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)', borderRadius: '16px' } }} />
         <Router>
           <Suspense fallback={<PageLoader />}>
             <Routes>

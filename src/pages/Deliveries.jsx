@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import axios from '../utils/api';
 import { Truck, Clock, Star, CheckCircle, TrendingUp, BarChart3, Loader2, Plus, Trash2, Edit3, Clock4, ShieldCheck, ShieldAlert, Download } from 'lucide-react';
@@ -80,7 +81,7 @@ const Deliveries = () => {
       }
       fetchInitialData();
     } catch (err) {
-      alert('Failed to update cutoff');
+      toast.error('Failed to update cutoff');
     } finally {
       setActionLoading(null);
     }
@@ -101,7 +102,7 @@ const Deliveries = () => {
       const { data } = await axios.get('/deliveries/slots');
       setSlots(data);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to save slot');
+      toast.error(err.response?.data?.message || 'Failed to save slot');
     } finally {
       setActionLoading(null);
     }
@@ -124,7 +125,7 @@ const Deliveries = () => {
       await axios.delete(`/deliveries/slots/${id}`);
       setSlots(slots.filter(s => s._id !== id));
     } catch (err) {
-      alert('Failed to delete slot');
+      toast.error('Failed to delete slot');
     } finally {
       setActionLoading(null);
     }
@@ -135,7 +136,7 @@ const Deliveries = () => {
       const { data } = await axios.put(`/deliveries/slots/${slot._id}`, { isActive: !slot.isActive });
       setSlots(slots.map(s => s._id === slot._id ? data : s));
     } catch (err) {
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     }
   };
 

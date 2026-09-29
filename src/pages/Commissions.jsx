@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -117,11 +118,11 @@ const Commissions = () => {
         minimumBillAmountB2C: b2cVal !== null ? b2cVal : minBillAmountB2C,
         targetLocationId: targetLocId
       });
-      alert('Minimum billing settings saved successfully!');
+      toast.success('Minimum billing settings saved successfully!');
       fetchCategories();
     } catch (err) {
       console.error(err);
-      alert('Failed to save minimum billing settings');
+      toast.error('Failed to save minimum billing settings');
     } finally {
       setUpdatingMinBill(false);
     }
@@ -147,19 +148,19 @@ const Commissions = () => {
   const handleAddRule = () => {
     const unitName = newRule.unit === 'custom' ? customUnit.trim() : newRule.unit;
     if (!unitName) {
-      alert('Please enter a valid unit name');
+      toast.error('Please enter a valid unit name');
       return;
     }
     const val = parseFloat(newRule.commissionValue);
     if (isNaN(val) || val < 0) {
-      alert('Please enter a valid commission value');
+      toast.error('Please enter a valid commission value');
       return;
     }
 
     const pincodeValue = newRule.pincode.trim() || 'All';
     // Check if unit rule already exists
     if (commissionsList.some(r => r.unit.toLowerCase() === unitName.toLowerCase() && (r.pincode || 'All') === pincodeValue)) {
-      alert(`A commission rule for unit "${unitName}" and pincode "${pincodeValue}" already exists.`);
+      toast.error(`A commission rule for unit "${unitName}" and pincode "${pincodeValue}" already exists.`);
       return;
     }
 
@@ -199,7 +200,7 @@ const Commissions = () => {
       fetchCategories();
     } catch (err) {
       console.error(err);
-      alert('Failed to save commissions settings');
+      toast.error('Failed to save commissions settings');
     } finally {
       setSubmitting(false);
     }

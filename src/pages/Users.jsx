@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -54,7 +55,7 @@ const Users = () => {
       fetchUsers();
     } catch (error) {
       console.error('Error updating user:', error);
-      alert(error.response?.data?.message || 'Error updating user');
+      toast.error(error.response?.data?.message || 'Error updating user');
     }
   };
 
@@ -65,7 +66,7 @@ const Users = () => {
       fetchUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
-      alert(error.response?.data?.message || 'Error deleting user');
+      toast.error(error.response?.data?.message || 'Error deleting user');
     }
   };
 
@@ -77,7 +78,7 @@ const Users = () => {
       fetchUsers();
     } catch (error) {
       console.error('Error blocking/unblocking user:', error);
-      alert(error.response?.data?.message || 'Error updating user status');
+      toast.error(error.response?.data?.message || 'Error updating user status');
     }
   };
 

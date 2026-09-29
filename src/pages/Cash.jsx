@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import axios from '../utils/api';
 import {
@@ -181,12 +182,12 @@ const Cash = () => {
           setCollectSuccess(false);
         }, 2000);
       } else {
-        alert('Invalid OTP. Please try again.');
+        toast.error('Invalid OTP. Please try again.');
       }
     } catch (error) {
       console.error('Verification error:', error);
       const message = error.response?.data?.message || 'Failed to process collection';
-      alert(message);
+      toast.error(message);
     } finally {
       setVerifying(false);
     }
@@ -214,7 +215,7 @@ const Cash = () => {
       setTransactions(transactions.filter(t => (t._id || t.id) !== deleteModalData.id));
       setDeleteModalData({ show: false, id: null });
     } catch (error) {
-      alert('Failed to delete transaction');
+      toast.error('Failed to delete transaction');
     }
   };
 
@@ -244,7 +245,7 @@ const Cash = () => {
         paymentMethod: 'Cash'
       });
     } catch (error) {
-      alert(editId ? 'Failed to update transaction' : 'Failed to record transaction');
+      toast.error(editId ? 'Failed to update transaction' : 'Failed to record transaction');
     } finally {
       setLoading(false);
     }

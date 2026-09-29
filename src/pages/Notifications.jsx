@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import { notificationApi as api, getImageUrl } from '../utils/api';
 import { 
@@ -110,7 +111,7 @@ const Notifications = () => {
       await api.delete(`/notifications/${id}`);
       setNotifications(prev => prev.filter(n => n._id !== id));
     } catch (error) {
-      alert('Failed to delete notification');
+      toast.error('Failed to delete notification');
     }
   };
 

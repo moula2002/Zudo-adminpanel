@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -72,7 +73,7 @@ const Sellers = () => {
       setShowDetails(false);
       setStatus({ type: 'success', message: `Seller account updated successfully!` });
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update seller status');
+      toast.error(err.response?.data?.message || 'Failed to update seller status');
     } finally {
       setUpdating(false);
     }
