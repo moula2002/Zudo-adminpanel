@@ -266,9 +266,12 @@ const Orders = () => {
   };
 
   const confirmDeleteOrder = async () => {
-    if (!deleteOrderId) return;
+    const idToDelete = deleteOrderId;
+    if (!idToDelete) return;
+    setShowDeleteModal(false);
+    setDeleteOrderId(null);
     try {
-      await axios.delete(`/orders/admin/${deleteOrderId}`);
+      await axios.delete(`/orders/admin/${idToDelete}`);
       fetchOrders();
     } catch (error) {
       console.error('Failed to delete order:', error);
