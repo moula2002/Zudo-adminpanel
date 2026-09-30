@@ -491,6 +491,10 @@ const Sellers = () => {
                    <label style={{ display: 'block', fontSize: '9px', fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '2px' }}>PAN Card No.</label>
                    <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-main)' }}>{selectedSeller.panNumber || 'N/A'}</div>
                 </div>
+                <div style={{ padding: '10px 14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                   <label style={{ display: 'block', fontSize: '9px', fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '2px' }}>QR Option / UPI ID</label>
+                   <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-main)' }}>{selectedSeller.qrOption || 'N/A'}</div>
+                </div>
 
                 <div style={{ gridColumn: '1/-1', padding: '12px 16px', background: 'var(--input-bg)', borderRadius: '14px', border: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                    <div>
@@ -519,7 +523,8 @@ const Sellers = () => {
                   { label: 'PAN Document', url: selectedSeller.panDoc, color: '#ec4899' },
                   { label: 'Trade Licence', url: selectedSeller.tradeLicenseDoc, color: '#eab308' },
                   { label: 'RMC/AMPC', url: selectedSeller.rmcAmpcDoc, color: '#10b981' },
-                  { label: 'Food Licence', url: selectedSeller.foodLicenseDoc, color: '#f97316' }
+                  { label: 'Food Licence', url: selectedSeller.foodLicenseDoc, color: '#f97316' },
+                  { label: 'QR Code', url: selectedSeller.qrCodeDoc, color: '#8b5cf6' }
                 ].filter(doc => doc.url).map((doc, idx) => (
                   <a 
                     key={idx}

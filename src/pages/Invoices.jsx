@@ -511,14 +511,25 @@ const Invoices = () => {
             </table>
 
             <!-- Bottom Summary Section -->
-            <div class="bottom-section">
-              <div class="net-payable-row">
-                <span class="net-payable-label">Net Payable</span>
-                <span class="net-payable-value">Rs. ${grandTotal.toFixed(2)}</span>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; width: 100%;">
+              <div style="flex: 1; display: flex; align-items: flex-end; gap: 12px; padding-top: 5px;">
+                ${order.qrCodeDoc ? `
+                  <img src="${order.qrCodeDoc}" alt="QR" style="width: ${pageSize === 'A5' ? '60px' : '80px'}; height: ${pageSize === 'A5' ? '60px' : '80px'}; border: 1px solid #ccc; padding: 2px; border-radius: 6px;" />
+                  <div style="font-size: ${pageSize === 'A5' ? '9px' : '11px'}; color: #111; font-weight: 700; display: flex; flex-direction: column; gap: 4px;">
+                    <span style="color: #666; font-size: ${pageSize === 'A5' ? '7px' : '9px'}; text-transform: uppercase;">Scan to Pay</span>
+                    ${order.qrOption ? `<span>${order.qrOption}</span>` : ''}
+                  </div>
+                ` : ''}
               </div>
-              <div class="divider-line-short"></div>
-              <div class="words-row">
-                Rupees ${netPayableInWords}
+              <div class="bottom-section" style="margin-top: 0; width: 50%;">
+                <div class="net-payable-row" style="width: 100%;">
+                  <span class="net-payable-label">Net Payable</span>
+                  <span class="net-payable-value">Rs. ${grandTotal.toFixed(2)}</span>
+                </div>
+                <div class="divider-line-short" style="width: 100%;"></div>
+                <div class="words-row" style="width: 100%;">
+                  Rupees ${netPayableInWords}
+                </div>
               </div>
             </div>
           </div>
@@ -694,14 +705,7 @@ const Invoices = () => {
             </select>
           </div>
 
-          <div>
-            <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">Collation</label>
-            <select className="input-field" value={collation} onChange={e => setCollation(e.target.value)}>
-              <option value="All">All</option>
-              <option value="Collated">Collated</option>
-              <option value="Uncollated">Uncollated</option>
-            </select>
-          </div>
+          
 
           
         </div>
