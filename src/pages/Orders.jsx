@@ -1264,17 +1264,22 @@ const Orders = () => {
                 <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <QrCode size={12} /> Payment QR
                 </p>
-                {order.qrCodeDoc ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(34, 197, 94, 0.05)', borderRadius: '12px', border: '1px solid rgba(34, 197, 94, 0.1)' }}>
-                    <img src={order.qrCodeDoc} alt="QR" style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'contain', background: '#fff' }} />
-                    <div>
-                      <div style={{ fontSize: '11px', color: '#666', fontWeight: 600 }}>Seller QR Option</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: 700 }}>{order.qrOption || 'N/A'}</div>
+                {(() => {
+                  const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
+                  const qrCodeDoc = orderSeller?.qrCodeDoc;
+                  const qrOption = orderSeller?.qrOption;
+                  return qrCodeDoc ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(34, 197, 94, 0.05)', borderRadius: '12px', border: '1px solid rgba(34, 197, 94, 0.1)' }}>
+                      <img src={qrCodeDoc} alt="QR" style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'contain', background: '#fff' }} />
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#666', fontWeight: 600 }}>Seller QR Option</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: 700 }}>{qrOption || 'N/A'}</div>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>No QR assigned for this order</div>
-                )}
+                  ) : (
+                    <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>QR Code Not Available</div>
+                  );
+                })()}
               </div>
 
               {/* Logistics & Controls */}

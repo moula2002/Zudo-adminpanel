@@ -513,13 +513,18 @@ const Invoices = () => {
             <!-- Bottom Summary Section -->
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; width: 100%;">
               <div style="flex: 1; display: flex; align-items: flex-end; gap: 12px; padding-top: 5px;">
-                ${order.qrCodeDoc ? `
-                  <img src="${order.qrCodeDoc}" alt="QR" style="width: ${pageSize === 'A5' ? '60px' : '80px'}; height: ${pageSize === 'A5' ? '60px' : '80px'}; border: 1px solid #ccc; padding: 2px; border-radius: 6px;" />
+                ${(() => {
+                  const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
+                  const qrCodeDoc = orderSeller?.qrCodeDoc || order.qrCodeDoc;
+                  const qrOption = orderSeller?.qrOption || order.qrOption;
+                  return qrCodeDoc ? `
+                  <img src="${qrCodeDoc}" alt="QR" style="width: ${pageSize === 'A5' ? '60px' : '80px'}; height: ${pageSize === 'A5' ? '60px' : '80px'}; border: 1px solid #ccc; padding: 2px; border-radius: 6px; object-fit: contain; background: #fff;" />
                   <div style="font-size: ${pageSize === 'A5' ? '9px' : '11px'}; color: #111; font-weight: 700; display: flex; flex-direction: column; gap: 4px;">
                     <span style="color: #666; font-size: ${pageSize === 'A5' ? '7px' : '9px'}; text-transform: uppercase;">Scan to Pay</span>
-                    ${order.qrOption ? `<span>${order.qrOption}</span>` : ''}
+                    ${qrOption ? `<span>${qrOption}</span>` : ''}
                   </div>
-                ` : ''}
+                ` : `<div style="font-size: ${pageSize === 'A5' ? '9px' : '11px'}; color: #666; font-weight: 600;">QR Code Not Available</div>`;
+                })()}
               </div>
               <div class="bottom-section" style="margin-top: 0; width: 50%;">
                 <div class="net-payable-row" style="width: 100%;">
