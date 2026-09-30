@@ -20,6 +20,7 @@ const Invoices = () => {
   const [customDate, setCustomDate] = useState({ start: '', end: '' });
   const [collation, setCollation] = useState('All'); // 'Collated', 'Uncollated', 'All'
   const [cityFilter, setCityFilter] = useState('All');
+  const [printStatusFilter, setPrintStatusFilter] = useState('All');
 
   // Print Preview
   const [showPreview, setShowPreview] = useState(false);
@@ -181,6 +182,13 @@ const Invoices = () => {
       result = result.filter(o => o.sellerId);
     }
 
+    // Print Status Filter
+    if (printStatusFilter === 'Printed') {
+      result = result.filter(o => o.isPrinted);
+    } else if (printStatusFilter === 'Unprinted') {
+      result = result.filter(o => !o.isPrinted);
+    }
+
     // City Filter
     if (cityFilter !== 'All') {
       result = result.filter(o => o.locationId?.city === cityFilter);
@@ -277,6 +285,29 @@ const Invoices = () => {
     return customItemQuantities[key] !== undefined ? customItemQuantities[key] : originalQty;
   };
 
+  const handleDirectBulkPrint = async (selectedOrders = filteredOrders) => {
+    if (selectedOrders.length === 0) return;
+    if (iframeRef.current) {
+      const html = generatePrintHTML(selectedOrders);
+      const doc = iframeRef.current.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      iframeRef.current.contentWindow.focus();
+      setTimeout(() => {
+        iframeRef.current.contentWindow.print();
+        const orderIds = selectedOrders.map(o => o._id);
+        api.post('/orders/bulk-print-status', { orderIds }).then(() => {
+          toast.success('Orders marked as printed successfully');
+          setOrders(prev => prev.map(o => orderIds.includes(o._id) ? { ...o, isPrinted: true } : o));
+        }).catch(err => {
+          console.error(err);
+          toast.error('Failed to update print status on server');
+        });
+      }, 500);
+    }
+  };
+
   const handlePreview = (selectedOrders = filteredOrders) => {
     setPreviewOrders(selectedOrders);
     setShowPreview(true);
@@ -303,18 +334,18 @@ const Invoices = () => {
     XLSX.writeFile(wb, `Invoices_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const generatePrintHTML = () => {
+  const generatePrintHTML = (ordersList = previewOrders) => {
     let pagesHtml = '';
 
     const ordersToRender = collation === 'Collated' ? [{
       _id: 'COLLATED-' + new Date().getTime().toString().slice(-6),
       createdAt: new Date(),
-      shippingAddress: previewOrders[0]?.shippingAddress,
-      userId: previewOrders[0]?.userId,
-      sellerId: previewOrders[0]?.sellerId,
+      shippingAddress: ordersList[0]?.shippingAddress,
+      userId: ordersList[0]?.userId,
+      sellerId: ordersList[0]?.sellerId,
       paymentMethod: 'Multiple',
-      items: previewOrders.flatMap(o => o.items.map((it, idx) => ({ ...it, parentOrderId: o._id, itemIndex: idx })))
-    }] : previewOrders;
+      items: ordersList.flatMap(o => o.items.map((it, idx) => ({ ...it, parentOrderId: o._id, itemIndex: idx })))
+    }] : ordersList;
 
     pagesHtml = ordersToRender.map((order, orderIndex) => {
       const pageBreakClass = orderIndex > 0 ? 'page-break' : '';
@@ -719,6 +750,15 @@ const Invoices = () => {
               <FileText size={18} />
               <span>Preview & Generate All ({filteredOrders.length})</span>
             </button>
+            <button 
+              className="btn-primary flex items-center gap-2"
+              onClick={() => handleDirectBulkPrint(filteredOrders)}
+              disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
+              style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', opacity: invoiceType === 'seller_generated' ? 0.5 : 1 }}
+            >
+              <Printer size={18} />
+              <span>Bulk Print Page ({filteredOrders.length})</span>
+            </button>
           </div>
         </div>
       </div>
@@ -827,7 +867,10 @@ const Invoices = () => {
                   <tr key={order._id} className="border-b border-[var(--glass-border)] hover:bg-white/5">
                     <td style={{ padding: '16px 24px', fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>
                       snb-686/{order._id.slice(-8).toUpperCase()}
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>{order.userId?.role?.toUpperCase() || 'B2C'}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {order.userId?.role?.toUpperCase() || 'B2C'}
+                        {order.isPrinted && <span style={{ padding: '2px 6px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold' }}>Printed</span>}
+                      </div>
                     </td>
                     <td style={{ padding: '16px 24px' }}>
                       <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{order.shippingAddress?.name || order.userId?.name || 'Customer'}</div>
