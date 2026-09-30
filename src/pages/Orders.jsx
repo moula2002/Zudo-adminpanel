@@ -639,7 +639,7 @@ const Orders = () => {
               const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
               const qrCodeDoc = orderSeller?.qrCodeDoc;
               const qrOption = orderSeller?.qrOption;
-              return qrCodeDoc ? \`
+              return qrCodeDoc ? `
                 <div style="display: flex; gap: 8px; align-items: center; border: 1px solid #e2e8f0; padding: 4px; border-radius: 6px;">
                   <img src="${getImageUrl(qrCodeDoc)}" alt="QR" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: #fff;" />
                   <div style="display: flex; flex-direction: column;">
@@ -647,9 +647,9 @@ const Orders = () => {
                     <span style="font-size: 10px; font-weight: 700; color: #0f172a;">${qrOption || 'N/A'}</span>
                   </div>
                 </div>
-              \` : \`
+              ` : `
                 <div style="font-size: 9px; color: #64748b; font-weight: 600; padding-bottom: 4px;">QR Code Not Available</div>
-              \`;
+              `;
             })()}
             <div class="signatures" style="margin-top: 0; width: auto; flex: 1; display: flex; justify-content: flex-end; gap: 10px;">
               <div class="signature-box" style="margin-top: 0; min-width: 80px;">Security Verification</div>
