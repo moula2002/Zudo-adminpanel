@@ -1,6 +1,6 @@
 import toast from 'react-hot-toast';
 import React, { useState, useEffect, useRef } from 'react';
-import api from '../utils/api';
+import api, { getImageUrl } from '../utils/api';
 import { 
   Receipt, Printer, Search, Filter, Calendar, CheckCircle2, FileText, X, ChevronDown, Edit2, Download, Table
 } from 'lucide-react';
