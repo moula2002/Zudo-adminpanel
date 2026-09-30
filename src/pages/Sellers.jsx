@@ -464,7 +464,7 @@ const Sellers = () => {
       {/* Seller Audit & Verification Modal */}
       {showDetails && selectedSeller && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: 'var(--card-bg)', boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '700px', borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: 'var(--card-bg)', boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)' }}>
             <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)' }}>Account Audit</h3>
@@ -475,7 +475,7 @@ const Sellers = () => {
               </button>
             </div>
             
-            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '75vh', overflowY: 'auto' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ gridColumn: '1/-1', padding: '12px 16px', background: 'var(--input-bg)', borderRadius: '14px', border: '1px solid var(--glass-border)' }}>
                    <label style={{ display: 'block', fontSize: '9px', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Identity</label>
