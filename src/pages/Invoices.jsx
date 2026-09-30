@@ -655,7 +655,6 @@ const Invoices = () => {
             <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">Invoice Type</label>
             <select className="input-field" value={invoiceType} onChange={e => setInvoiceType(e.target.value)}>
               <option value="order">Order Invoice</option>
-              <option value="purchase">Purchase (Seller) Invoice</option>
               <option value="seller_generated">Seller Generated Invoices</option>
             </select>
           </div>
