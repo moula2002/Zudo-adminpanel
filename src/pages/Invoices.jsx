@@ -316,8 +316,8 @@ const Invoices = () => {
   const handleBulkExcelDownload = () => {
     if (filteredOrders.length === 0) return;
     const excelData = filteredOrders.map(order => ({
-      'Invoice No': customInvoiceNumbers[order._id] || order.invoiceNumber || `SNB-701/${order._id.slice(-8).toUpperCase()}`,
-      'Order No': customOrderNumbers[order._id] || order.orderNumber || `snb-${order._id.slice(-8).toUpperCase()}`,
+      'Invoice No': customInvoiceNumbers[order._id] || order.invoiceNumber || `SNB-701/${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`,
+      'Order No': customOrderNumbers[order._id] || order.orderNumber || `snb-${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`,
       'Date': new Date(order.createdAt).toLocaleDateString(),
       'Buyer Name': order.shippingAddress?.name || order.userId?.name || 'Customer',
       'Buyer Phone': order.shippingAddress?.phone || order.userId?.phone || '',
@@ -409,12 +409,12 @@ const Invoices = () => {
         `;
       }).join('');
 
-      const defaultInvNo = order.invoiceNumber || `SNB-701/${order._id.slice(-8).toUpperCase()}`;
+      const defaultInvNo = order.invoiceNumber || `SNB-701/${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`;
       const invNo = customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : defaultInvNo;
       const invDate = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const defaultOrderNo = order.orderNumber || `snb-${order._id.slice(-8).toUpperCase()}`;
+      const defaultOrderNo = order.orderNumber || `snb-${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`;
       const orderNo = customOrderNumbers[order._id] !== undefined ? customOrderNumbers[order._id] : defaultOrderNo;
-      const barcodeValue = `${order._id.slice(-8)}-${order.userId?._id?.slice(-8) || '00000000'}-${orderNo}`;
+      const barcodeValue = `${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}-${order.userId?._id?.slice(-8) || '00000000'}-${orderNo}`;
 
       const isPurchase = invoiceType === 'purchase';
       const adminName = 'SNB TRADING.CO';
@@ -976,7 +976,7 @@ const Invoices = () => {
                         type="text" 
                         className="input-field w-full"
                         style={{ padding: '6px', fontSize: '13px', minHeight: 'auto' }}
-                        value={customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : (order.invoiceNumber || `SNB-701/${order._id.slice(-8).toUpperCase()}`)}
+                        value={customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : (order.invoiceNumber || `SNB-701/${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`)}
                         onChange={e => handleInvoiceNumberChange(order._id, e.target.value)}
                       />
                     </div>
@@ -986,7 +986,7 @@ const Invoices = () => {
                         type="text" 
                         className="input-field w-full"
                         style={{ padding: '6px', fontSize: '13px', minHeight: 'auto' }}
-                        value={customOrderNumbers[order._id] !== undefined ? customOrderNumbers[order._id] : (order.orderNumber || `snb-${order._id.slice(-8).toUpperCase()}`)}
+                        value={customOrderNumbers[order._id] !== undefined ? customOrderNumbers[order._id] : (order.orderNumber || `snb-${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`)}
                         onChange={e => handleOrderNumberChange(order._id, e.target.value)}
                       />
                     </div>

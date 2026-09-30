@@ -415,7 +415,7 @@ const Orders = () => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Manifest #${order._id.slice(-8).toUpperCase()}</title>
+        <title>Manifest #${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
           @page {
