@@ -316,7 +316,7 @@ const Invoices = () => {
   const handleBulkExcelDownload = () => {
     if (filteredOrders.length === 0) return;
     const excelData = filteredOrders.map(order => ({
-      'Invoice No': customInvoiceNumbers[order._id] || order.invoiceNumber || `snb-686/${order._id.slice(-8).toUpperCase()}`,
+      'Invoice No': customInvoiceNumbers[order._id] || order.invoiceNumber || `SNB-701/${order._id.slice(-8).toUpperCase()}`,
       'Order No': customOrderNumbers[order._id] || order.orderNumber || `snb-${order._id.slice(-8).toUpperCase()}`,
       'Date': new Date(order.createdAt).toLocaleDateString(),
       'Buyer Name': order.shippingAddress?.name || order.userId?.name || 'Customer',
@@ -409,7 +409,7 @@ const Invoices = () => {
         `;
       }).join('');
 
-      const defaultInvNo = order.invoiceNumber || `snb-686/${order._id.slice(-8).toUpperCase()}`;
+      const defaultInvNo = order.invoiceNumber || `SNB-701/${order._id.slice(-8).toUpperCase()}`;
       const invNo = customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : defaultInvNo;
       const invDate = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
       const defaultOrderNo = order.orderNumber || `snb-${order._id.slice(-8).toUpperCase()}`;
@@ -867,7 +867,7 @@ const Invoices = () => {
                 {filteredOrders.slice(0, 50).map(order => (
                   <tr key={order._id} className="border-b border-[var(--glass-border)] hover:bg-white/5">
                     <td style={{ padding: '16px 24px', fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>
-                      snb-686/{order._id.slice(-8).toUpperCase()}
+                      SNB-701/{order._id.slice(-8).toUpperCase()}
                       <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {order.userId?.role?.toUpperCase() || 'B2C'}
                         {order.isPrinted && <span style={{ padding: '2px 6px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold' }}>Printed</span>}
@@ -976,7 +976,7 @@ const Invoices = () => {
                         type="text" 
                         className="input-field w-full"
                         style={{ padding: '6px', fontSize: '13px', minHeight: 'auto' }}
-                        value={customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : (order.invoiceNumber || `snb-686/${order._id.slice(-8).toUpperCase()}`)}
+                        value={customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : (order.invoiceNumber || `SNB-701/${order._id.slice(-8).toUpperCase()}`)}
                         onChange={e => handleInvoiceNumberChange(order._id, e.target.value)}
                       />
                     </div>
