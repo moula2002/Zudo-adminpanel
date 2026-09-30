@@ -703,14 +703,7 @@ const Invoices = () => {
             </select>
           </div>
 
-          <div>
-            <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">City Zone</label>
-            <select className="input-field" value={cityFilter} onChange={e => setCityFilter(e.target.value)}>
-              {availableCities.map(city => (
-                <option key={city} value={city}>{city === 'All' ? 'All Cities' : city}</option>
-              ))}
-            </select>
-          </div>
+          
         </div>
 
         {dateFilter === 'Custom' && (
