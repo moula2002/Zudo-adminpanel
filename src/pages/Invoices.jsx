@@ -518,7 +518,7 @@ const Invoices = () => {
                   const qrCodeDoc = orderSeller?.qrCodeDoc || order.qrCodeDoc;
                   const qrOption = orderSeller?.qrOption || order.qrOption;
                   return qrCodeDoc ? `
-                  <img src="${qrCodeDoc}" alt="QR" style="width: ${pageSize === 'A5' ? '60px' : '80px'}; height: ${pageSize === 'A5' ? '60px' : '80px'}; border: 1px solid #ccc; padding: 2px; border-radius: 6px; object-fit: contain; background: #fff;" />
+                  <img src="${getImageUrl(qrCodeDoc)}" alt="QR" style="width: ${pageSize === 'A5' ? '60px' : '80px'}; height: ${pageSize === 'A5' ? '60px' : '80px'}; border: 1px solid #ccc; padding: 2px; border-radius: 6px; object-fit: contain; background: #fff;" />
                   <div style="font-size: ${pageSize === 'A5' ? '9px' : '11px'}; color: #111; font-weight: 700; display: flex; flex-direction: column; gap: 4px;">
                     <span style="color: #666; font-size: ${pageSize === 'A5' ? '7px' : '9px'}; text-transform: uppercase;">Scan to Pay</span>
                     ${qrOption ? `<span>${qrOption}</span>` : ''}
