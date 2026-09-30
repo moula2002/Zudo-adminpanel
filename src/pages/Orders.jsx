@@ -5,7 +5,7 @@ import {
   Package, Truck, CheckCircle, XCircle, Clock, MapPin, MapPinOff, RefreshCw,
   Phone, User, Send, Loader2, Search, Filter, DollarSign, 
   Download, RefreshCcw, ShieldCheck, AlertTriangle, Printer,
-  Edit, Plus, Trash2, X
+  Edit, Plus, Trash2, X, QrCode
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useSocket } from '../context/SocketContext';
