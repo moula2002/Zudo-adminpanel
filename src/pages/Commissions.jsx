@@ -528,33 +528,33 @@ const Commissions = () => {
       {/* Manage Commissions Modal */}
       {selectedCategory && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '560px', borderRadius: '28px', overflow: 'hidden', border: '1px solid var(--glass-border)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
             
             {/* Modal Header */}
-            <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)' }}>
               <div>
-                <h3 style={{ fontSize: '20px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <BadgePercent size={22} className="text-primary" /> {selectedCategory.name}
+                <h3 style={{ fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <BadgePercent size={18} className="text-primary" /> {selectedCategory.name}
                 </h3>
-                <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Configure commission rules per packaging unit</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Configure commission rules per packaging unit</span>
               </div>
               <button onClick={() => setSelectedCategory(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', padding: 0 }}>
                 <XCircle size={24} />
               </button>
             </div>
 
-            <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
               {/* Form to Add New Commission Rule */}
-              <div style={{ background: 'rgba(99, 102, 241, 0.04)', border: '1px solid rgba(99, 102, 241, 0.15)', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div style={{ background: 'rgba(99, 102, 241, 0.04)', border: '1px solid rgba(99, 102, 241, 0.15)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Add Commission Rule
                 </p>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
                   {/* Unit Select */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Unit</label>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Unit</label>
                     <select 
                       className="input-field" 
                       value={newRule.unit} 
@@ -574,7 +574,7 @@ const Commissions = () => {
                   {/* Custom Unit text input */}
                   {showCustomUnitInput && (
                     <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Enter Custom Unit</label>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Enter Custom Unit</label>
                       <input 
                         type="text" 
                         className="input-field" 
@@ -587,7 +587,7 @@ const Commissions = () => {
 
                   {/* Pincode */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Pincode</label>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Pincode</label>
                     <input 
                       type="text" 
                       className="input-field" 
@@ -599,7 +599,7 @@ const Commissions = () => {
 
                   {/* Comm Type */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Type</label>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Type</label>
                     <select 
                       className="input-field" 
                       value={newRule.commissionType} 
@@ -613,7 +613,7 @@ const Commissions = () => {
 
                   {/* Comm Value */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Value</label>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Value</label>
                     <input 
                       type="number" 
                       className="input-field" 
@@ -626,21 +626,21 @@ const Commissions = () => {
                   </div>
                 </div>
 
-                <div style={{ marginTop: '8px' }}>
+                <div style={{ marginTop: '4px' }}>
                   <button 
                     type="button" 
                     className="btn-primary" 
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px 16px', borderRadius: '12px', width: '100%' }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px 12px', borderRadius: '10px', width: '100%', fontSize: '13px' }}
                     onClick={handleAddRule}
                   >
-                    <Plus size={16} /> <span>Add Rule</span>
+                    <Plus size={14} /> <span>Add Rule</span>
                   </button>
                 </div>
               </div>
 
               {/* Existing Rules Table/List */}
               <div>
-                <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Configured Commission Rules
                 </p>
 
@@ -653,26 +653,26 @@ const Commissions = () => {
                           display: 'flex', 
                           justifyContent: 'space-between', 
                           alignItems: 'center', 
-                          padding: '12px 16px', 
+                          padding: '8px 12px', 
                           background: 'var(--input-bg)',
                           border: '1px solid var(--glass-border)',
-                          borderRadius: '14px' 
+                          borderRadius: '10px' 
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontWeight: 700, fontSize: '14px' }}>
-                            {comm.unit} {comm.pincode && comm.pincode !== 'All' ? <span style={{ color: 'var(--primary)', fontSize: '12px', background: 'rgba(99, 102, 241, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>{comm.pincode}</span> : <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>(All)</span>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '12px' }}>
+                            {comm.unit} {comm.pincode && comm.pincode !== 'All' ? <span style={{ color: 'var(--primary)', fontSize: '11px', background: 'rgba(99, 102, 241, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>{comm.pincode}</span> : <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(All)</span>}
                           </span>
-                          <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>—</span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>—</span>
                           <span style={{ 
-                            fontSize: '13px', 
+                            fontSize: '12px', 
                             fontWeight: 600, 
                             color: comm.commissionType === 'percentage' ? 'var(--primary)' : '#10b981',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '4px'
                           }}>
-                            {comm.commissionType === 'percentage' ? <BadgePercent size={14} /> : <Coins size={14} />}
+                            {comm.commissionType === 'percentage' ? <BadgePercent size={12} /> : <Coins size={12} />}
                             {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue}`}
                           </span>
                         </div>
