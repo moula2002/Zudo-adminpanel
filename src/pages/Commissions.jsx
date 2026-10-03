@@ -528,10 +528,10 @@ const Commissions = () => {
       {/* Manage Commissions Modal */}
       {selectedCategory && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 48px)' }}>
             
             {/* Modal Header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)', flexShrink: 0 }}>
               <div>
                 <h3 style={{ fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <BadgePercent size={18} className="text-primary" /> {selectedCategory.name}
@@ -543,7 +543,7 @@ const Commissions = () => {
               </button>
             </div>
 
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
               
               {/* Form to Add New Commission Rule */}
               <div style={{ background: 'rgba(99, 102, 241, 0.04)', border: '1px solid rgba(99, 102, 241, 0.15)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -711,27 +711,26 @@ const Commissions = () => {
                   </div>
                 )}
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px' }}>
-                <button 
-                  className="btn-secondary" 
-                  onClick={() => setSelectedCategory(null)}
-                  style={{ borderRadius: '12px', padding: '10px 20px' }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  className="btn-primary" 
-                  disabled={submitting} 
-                  onClick={handleSaveCommissions}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', padding: '10px 20px' }}
-                >
-                  {submitting ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                  <span>Save Commission Settings</span>
-                </button>
-              </div>
-
+            {/* Action Buttons (Sticky Footer) */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--glass-border)', padding: '16px 20px', background: 'var(--card-bg)', flexShrink: 0 }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => setSelectedCategory(null)}
+                style={{ borderRadius: '12px', padding: '10px 20px' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                disabled={submitting} 
+                onClick={handleSaveCommissions}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', padding: '10px 20px' }}
+              >
+                {submitting ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                <span>Save Commission Settings</span>
+              </button>
             </div>
 
           </div>
