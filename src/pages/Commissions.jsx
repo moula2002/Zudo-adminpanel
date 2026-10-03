@@ -551,9 +551,9 @@ const Commissions = () => {
                   Add Commission Rule
                 </p>
 
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
                   {/* Unit Select */}
-                  <div style={{ flex: '1 1 150px' }}>
+                  <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Unit</label>
                     <select 
                       className="input-field" 
@@ -562,7 +562,7 @@ const Commissions = () => {
                         setNewRule({ ...newRule, unit: e.target.value });
                         setShowCustomUnitInput(e.target.value === 'custom');
                       }}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', width: '100%' }}
                     >
                       {COMMON_UNITS.map(unit => (
                         <option key={unit} value={unit}>{unit}</option>
@@ -573,7 +573,7 @@ const Commissions = () => {
 
                   {/* Custom Unit text input */}
                   {showCustomUnitInput && (
-                    <div style={{ flex: '1 1 150px' }}>
+                    <div>
                       <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Enter Custom Unit</label>
                       <input 
                         type="text" 
@@ -586,7 +586,7 @@ const Commissions = () => {
                   )}
 
                   {/* Pincode */}
-                  <div style={{ flex: '1 1 120px' }}>
+                  <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Pincode</label>
                     <input 
                       type="text" 
@@ -598,13 +598,13 @@ const Commissions = () => {
                   </div>
 
                   {/* Comm Type */}
-                  <div style={{ flex: '1 1 120px' }}>
+                  <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Type</label>
                     <select 
                       className="input-field" 
                       value={newRule.commissionType} 
                       onChange={(e) => setNewRule({ ...newRule, commissionType: e.target.value })}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', width: '100%' }}
                     >
                       <option value="percentage">Percentage (%)</option>
                       <option value="flat">Flat (₹)</option>
@@ -612,7 +612,7 @@ const Commissions = () => {
                   </div>
 
                   {/* Comm Value */}
-                  <div style={{ flex: '1 1 100px' }}>
+                  <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Value</label>
                     <input 
                       type="number" 
@@ -621,18 +621,21 @@ const Commissions = () => {
                       value={newRule.commissionValue} 
                       onChange={(e) => setNewRule({ ...newRule, commissionValue: e.target.value })}
                       min="0"
+                      style={{ width: '100%' }}
                     />
                   </div>
                 </div>
 
-                <button 
-                  type="button" 
-                  className="btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 16px', borderRadius: '12px' }}
-                  onClick={handleAddRule}
-                >
-                  <Plus size={16} /> <span>Add Rule</span>
-                </button>
+                <div style={{ marginTop: '8px' }}>
+                  <button 
+                    type="button" 
+                    className="btn-primary" 
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px 16px', borderRadius: '12px', width: '100%' }}
+                    onClick={handleAddRule}
+                  >
+                    <Plus size={16} /> <span>Add Rule</span>
+                  </button>
+                </div>
               </div>
 
               {/* Existing Rules Table/List */}
