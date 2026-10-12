@@ -171,33 +171,132 @@ const DashboardLayout = ({ children }) => {
     return admin.permissions && admin.permissions.includes(perm);
   };
 
-  const menuItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard', perm: 'view_dashboard' },
-    { to: '/reports', icon: FileSpreadsheet, label: 'Reports Hub', perm: 'view_dashboard' },
-    { to: '/invoices', icon: Receipt, label: 'Invoices', perm: 'manage_invoices' },
-    { to: '/notifications', icon: Bell, label: 'Notifications', perm: 'view_dashboard' },
-    { to: '/popup-ads', icon: Megaphone, label: 'Popup Ads', perm: 'view_dashboard' },
-    { to: '/banners', icon: Image, label: 'Banners', perm: 'view_dashboard' },
-    { to: '/products', icon: Package, label: 'Products', perm: 'manage_products' },
-    { to: '/categories', icon: Layers, label: 'Categories', perm: 'manage_categories' },
-    { to: '/subcategories', icon: Layers, label: 'Sub Categories', perm: 'manage_subcategories' },
-    { to: '/commissions', icon: Percent, label: 'Commissions & Min Billing', perm: 'manage_categories' },
-    { to: '/drivers', icon: Truck, label: 'Drivers', perm: 'manage_drivers' },
-    { to: '/admins', icon: Users, label: 'Admin Management', perm: 'manage_admins' },
-    { to: '/sales', icon: Users, label: 'Sales Team', perm: 'manage_admins' },
-    { to: '/bulk-upload', icon: Upload, label: 'Bulk Upload', perm: 'manage_bulk_upload' },
-    { to: '/b2b-verification', icon: ShieldCheck, label: 'B2B Verification', perm: 'manage_b2b_verification' },
-    { to: '/users', icon: Users, label: 'Users', perm: 'manage_users' },
-    { to: '/orders', icon: ShoppingBag, label: 'Orders', perm: 'manage_orders' },
-    { to: '/reviews', icon: MessageSquare, label: 'Reviews', perm: 'manage_reviews' },
-    { to: '/deliveries', icon: BarChart3, label: 'Deliveries Slots', perm: 'manage_deliveries' },
-    { to: '/sellers', icon: Store, label: 'Sellers', perm: 'manage_sellers' },
-    { to: '/payments', icon: Wallet, label: 'Payments', perm: 'manage_sellers' },
-    { to: '/cash', icon: Wallet, label: 'Cash Management', perm: 'manage_cash' },
-    { to: '/locations', icon: MapPin, label: 'Locations', perm: 'manage_locations' },
-    { to: '/settings', icon: Settings, label: 'Settings', perm: 'view_dashboard' },
-    { to: '/profile', icon: User, label: 'My Profile', perm: 'manage_profile' },
-  ].filter(item => !item.perm || hasPerm(item.perm));
+  const rawMenuItems = [
+    { id: 'dashboard', to: '/', icon: LayoutDashboard, label: 'Dashboard', perm: 'view_dashboard' },
+    { id: 'orders', to: '/orders', icon: ShoppingBag, label: 'Orders', perm: 'manage_orders' },
+    {
+      id: 'invoices',
+      to: '/invoices',
+      icon: Receipt,
+      label: 'Invoices',
+      perm: 'manage_invoices',
+      children: [
+        { id: 'invoices-reports', to: '/reports', icon: FileSpreadsheet, label: 'Reports', perm: 'view_dashboard' }
+      ]
+    },
+    {
+      id: 'products',
+      to: '/products',
+      icon: Package,
+      label: 'Products',
+      perm: 'manage_products',
+      children: [
+        { id: 'products-bulk-upload', to: '/bulk-upload?type=products', icon: Upload, label: 'Bulk Upload', perm: 'manage_bulk_upload' }
+      ]
+    },
+    { id: 'categories', to: '/categories', icon: Layers, label: 'Categories', perm: 'manage_categories' },
+    {
+      id: 'subcategories',
+      to: '/subcategories',
+      icon: Layers,
+      label: 'Subcategories',
+      perm: 'manage_subcategories',
+      children: [
+        { id: 'subcategories-bulk-upload', to: '/bulk-upload?type=categories', icon: Upload, label: 'Bulk Upload', perm: 'manage_bulk_upload' }
+      ]
+    },
+    { id: 'commissions', to: '/commissions', icon: Percent, label: 'Commission Management', perm: 'manage_categories' },
+    { id: 'sales', to: '/sales', icon: Users, label: 'Sales Team', perm: 'manage_admins' },
+    { id: 'drivers', to: '/drivers', icon: Truck, label: 'Drivers', perm: 'manage_drivers' },
+    { id: 'sellers', to: '/sellers', icon: Store, label: 'Sellers', perm: 'manage_sellers' },
+    { id: 'popup-ads', to: '/popup-ads', icon: Megaphone, label: 'Popup Ads', perm: 'view_dashboard' },
+    { id: 'banners', to: '/banners', icon: Image, label: 'Banners', perm: 'view_dashboard' },
+    { id: 'users', to: '/users', icon: Users, label: 'Users', perm: 'manage_users' },
+    { id: 'admins', icon: Users, to: '/admins', label: 'Admin Management', perm: 'manage_admins' },
+    { id: 'b2b-verification', to: '/b2b-verification', icon: ShieldCheck, label: 'B2B Verification', perm: 'manage_b2b_verification' },
+    { id: 'payments', to: '/payments', icon: Wallet, label: 'Payments', perm: 'manage_sellers' },
+    { id: 'cash', to: '/cash', icon: Wallet, label: 'Cash Management', perm: 'manage_cash' },
+    { id: 'locations', to: '/locations', icon: MapPin, label: 'Locations', perm: 'manage_locations' },
+    { id: 'reviews', to: '/reviews', icon: MessageSquare, label: 'Reviews', perm: 'manage_reviews' },
+    { id: 'notifications', to: '/notifications', icon: Bell, label: 'Notifications', perm: 'view_dashboard' },
+    { id: 'settings', to: '/settings', icon: Settings, label: 'Settings', perm: 'view_dashboard' },
+    { id: 'profile', to: '/profile', icon: User, label: 'My Profile', perm: 'manage_profile' }
+  ];
+
+  const menuItems = React.useMemo(() => {
+    return rawMenuItems
+      .map(item => {
+        if (item.children) {
+          return {
+            ...item,
+            children: item.children.filter(c => !c.perm || hasPerm(c.perm))
+          };
+        }
+        return item;
+      })
+      .filter(item => {
+        const hasParentPerm = !item.perm || hasPerm(item.perm);
+        const hasChildPerm = item.children && item.children.length > 0;
+        return hasParentPerm || hasChildPerm;
+      });
+  }, [admin.role, admin.permissions]);
+
+  const [openSubmenus, setOpenSubmenus] = React.useState({});
+
+  const isChildActive = React.useCallback((child, parentItem) => {
+    const [childPath, childSearch] = child.to.split('?');
+    if (location.pathname !== childPath) return false;
+
+    if (childSearch) {
+      if (location.search.includes(childSearch)) return true;
+      if (!location.search && childSearch.includes('products') && parentItem.id === 'products') {
+        return true;
+      }
+      return false;
+    }
+    return true;
+  }, [location.pathname, location.search]);
+
+  // Keep active submenu open automatically
+  React.useEffect(() => {
+    menuItems.forEach(item => {
+      if (item.children) {
+        const isParentActive = location.pathname === item.to;
+        const hasActiveChild = item.children.some(child => isChildActive(child, item));
+        if (isParentActive || hasActiveChild) {
+          setOpenSubmenus(prev => ({ ...prev, [item.id]: true }));
+        }
+      }
+    });
+  }, [location.pathname, location.search, isChildActive, menuItems]);
+
+  const toggleSubmenu = (itemId, e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setOpenSubmenus(prev => ({
+      ...prev,
+      [itemId]: !prev[itemId]
+    }));
+  };
+
+  const getPageTitle = () => {
+    for (const item of menuItems) {
+      if (item.children) {
+        for (const child of item.children) {
+          if (isChildActive(child, item)) {
+            return `${item.label} / ${child.label}`;
+          }
+        }
+      }
+      if (item.to === location.pathname) {
+        return item.label;
+      }
+    }
+    if (location.pathname.startsWith('/edit-product')) return 'Edit Product';
+    if (location.pathname === '/add-product') return 'Add Product';
+    if (location.pathname === '/deliveries') return 'Deliveries Slots';
+    return 'Dashboard';
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', flexDirection: 'row', position: 'relative' }}>
@@ -264,28 +363,174 @@ const DashboardLayout = ({ children }) => {
         </div>
 
         <nav style={{ flex: 1, overflowY: 'auto', paddingRight: '8px' }} className="custom-scrollbar">
-          {menuItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                borderRadius: '12px',
-                marginBottom: '8px',
-                textDecoration: 'none',
-                color: location.pathname === item.to ? '#fff' : 'var(--text-dim)',
-                background: location.pathname === item.to ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
-                transition: '0.3s',
-                boxShadow: location.pathname === item.to ? '0 4px 15px rgba(99, 102, 241, 0.3)' : 'none'
-              }}
-            >
-              <item.icon size={20} />
-              <span style={{ fontWeight: 500 }}>{item.label}</span>
-            </Link>
-          ))}
+          {menuItems.map((item) => {
+            const isParentDirectlyActive = location.pathname === item.to;
+            const hasActiveChild = item.children && item.children.some(c => isChildActive(c, item));
+            const isExpanded = !!openSubmenus[item.id];
+            const hasChildren = item.children && item.children.length > 0;
+
+            return (
+              <div key={item.id} style={{ marginBottom: '6px' }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Link
+                    to={item.to}
+                    onClick={() => {
+                      if (hasChildren && !isExpanded) {
+                        setOpenSubmenus(prev => ({ ...prev, [item.id]: true }));
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '11px 16px',
+                      paddingRight: hasChildren ? '40px' : '16px',
+                      borderRadius: '12px',
+                      width: '100%',
+                      textDecoration: 'none',
+                      color: isParentDirectlyActive ? '#fff' : hasActiveChild ? 'var(--text-main)' : 'var(--text-dim)',
+                      background: isParentDirectlyActive
+                        ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                        : hasActiveChild
+                          ? 'rgba(99, 102, 241, 0.12)'
+                          : 'transparent',
+                      border: hasActiveChild && !isParentDirectlyActive
+                        ? '1px solid rgba(99, 102, 241, 0.25)'
+                        : '1px solid transparent',
+                      transition: 'all 0.25s ease',
+                      boxShadow: isParentDirectlyActive ? '0 4px 15px rgba(99, 102, 241, 0.3)' : 'none',
+                      boxSizing: 'border-box'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isParentDirectlyActive && !hasActiveChild) {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                        e.currentTarget.style.color = 'var(--text-main)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isParentDirectlyActive && !hasActiveChild) {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = 'var(--text-dim)';
+                      }
+                    }}
+                  >
+                    <item.icon size={19} style={{ flexShrink: 0, opacity: isParentDirectlyActive ? 1 : 0.85 }} />
+                    <span style={{ fontWeight: isParentDirectlyActive || hasActiveChild ? 600 : 500, fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {item.label}
+                    </span>
+                  </Link>
+
+                  {hasChildren && (
+                    <button
+                      type="button"
+                      onClick={(e) => toggleSubmenu(item.id, e)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: isParentDirectlyActive ? '#fff' : 'var(--text-dim)',
+                        cursor: 'pointer',
+                        padding: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '6px',
+                        transition: '0.2s',
+                        zIndex: 2
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                      title={isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      <ChevronDown
+                        size={15}
+                        style={{
+                          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                          transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)'
+                        }}
+                      />
+                    </button>
+                  )}
+                </div>
+
+                {hasChildren && isExpanded && (
+                  <div
+                    style={{
+                      margin: '4px 0 6px 20px',
+                      paddingLeft: '14px',
+                      borderLeft: '2px solid rgba(99, 102, 241, 0.25)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}
+                  >
+                    {item.children.map((child) => {
+                      const childActive = isChildActive(child, item);
+                      const ChildIcon = child.icon;
+                      return (
+                        <Link
+                          key={child.id}
+                          to={child.to}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            padding: '9px 12px',
+                            borderRadius: '10px',
+                            textDecoration: 'none',
+                            fontSize: '13px',
+                            color: childActive ? '#fff' : 'var(--text-dim)',
+                            background: childActive
+                              ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.85), rgba(139, 92, 246, 0.85))'
+                              : 'transparent',
+                            boxShadow: childActive ? '0 2px 10px rgba(99, 102, 241, 0.25)' : 'none',
+                            border: childActive ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid transparent',
+                            transition: 'all 0.2s ease',
+                            fontWeight: childActive ? 600 : 500
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!childActive) {
+                              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                              e.currentTarget.style.color = 'var(--text-main)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!childActive) {
+                              e.currentTarget.style.background = 'transparent';
+                              e.currentTarget.style.color = 'var(--text-dim)';
+                            }
+                          }}
+                        >
+                          {ChildIcon ? (
+                            <ChildIcon size={15} style={{ opacity: childActive ? 1 : 0.75, flexShrink: 0 }} />
+                          ) : (
+                            <span style={{
+                              width: '5px',
+                              height: '5px',
+                              borderRadius: '50%',
+                              background: childActive ? '#fff' : 'var(--text-dim)',
+                              display: 'inline-block',
+                              flexShrink: 0
+                            }} />
+                          )}
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {child.label}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="glass-card" style={{ padding: '16px', borderRadius: '16px', marginTop: '24px' }}>
@@ -368,7 +613,7 @@ const DashboardLayout = ({ children }) => {
               </button>
             )}
             <h2 style={{ fontSize: '24px', fontWeight: 700 }}>
-              {menuItems.find(i => i.to === location.pathname)?.label || 'Dashboard'}
+              {getPageTitle()}
             </h2>
           </div>
 
