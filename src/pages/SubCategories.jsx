@@ -2,7 +2,8 @@ import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
-import { Layers, Loader2, Plus, XCircle, Trash2 } from 'lucide-react';
+import { Layers, Loader2, Plus, XCircle, Trash2, Upload, FileSpreadsheet } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const SubCategories = () => {
   const [categories, setCategories] = useState([]);
@@ -84,9 +85,26 @@ const SubCategories = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: 700 }}>SubCategories Management</h2>
-        <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowAddSubCategory(true)}>
-          <Plus size={18} /> <span>Add SubCategory</span>
-        </button>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <Link
+            to="/bulk-upload?type=categories"
+            className="btn-primary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              textDecoration: 'none',
+              background: 'rgba(236, 72, 153, 0.15)',
+              color: '#ec4899',
+              border: '1px solid rgba(236, 72, 153, 0.3)'
+            }}
+          >
+            <Upload size={18} /> <span>Bulk Upload</span>
+          </Link>
+          <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setShowAddSubCategory(true)}>
+            <Plus size={18} /> <span>Add SubCategory</span>
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
@@ -130,6 +148,64 @@ const SubCategories = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Bulk Upload Section Down */}
+      <div className="glass-card" style={{
+        padding: '28px 32px',
+        borderRadius: '24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '20px',
+        background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.08), rgba(99, 102, 241, 0.08))',
+        border: '1px solid rgba(236, 72, 153, 0.25)',
+        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.04)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={{
+            width: '52px',
+            height: '52px',
+            borderRadius: '16px',
+            background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            boxShadow: '0 4px 15px rgba(236, 72, 153, 0.3)'
+          }}>
+            <Upload size={26} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+              Bulk Upload Subcategories
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: '4px 0 0' }}>
+              Import multiple subcategories with their parent categories and images simultaneously via Excel
+            </p>
+          </div>
+        </div>
+
+        <Link
+          to="/bulk-upload?type=categories"
+          className="btn-primary"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            textDecoration: 'none',
+            padding: '12px 24px',
+            borderRadius: '14px',
+            fontWeight: 700,
+            background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+            color: '#fff',
+            boxShadow: '0 4px 20px rgba(236, 72, 153, 0.35)'
+          }}
+        >
+          <FileSpreadsheet size={18} />
+          <span>Launch Bulk Upload</span>
+        </Link>
       </div>
 
       {showAddSubCategory && (

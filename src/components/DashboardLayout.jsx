@@ -241,7 +241,11 @@ const DashboardLayout = ({ children }) => {
       });
   }, [admin.role, admin.permissions]);
 
-  const [openSubmenus, setOpenSubmenus] = React.useState({});
+  const [openSubmenus, setOpenSubmenus] = React.useState({
+    invoices: true,
+    products: true,
+    subcategories: true
+  });
 
   const isChildActive = React.useCallback((child, parentItem) => {
     const [childPath, childSearch] = child.to.split('?');

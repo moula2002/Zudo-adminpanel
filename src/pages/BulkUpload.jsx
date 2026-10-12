@@ -131,34 +131,60 @@ const BulkUpload = () => {
           </span>
         </div>
         <div className="flex-responsive" style={{ display: 'flex', gap: '20px' }}>
-          <div onClick={() => downloadTemplate('products')} className="glass" style={{ 
-            flex: 1, padding: '24px', borderRadius: '20px', cursor: 'pointer', transition: '0.3s',
-            display: 'flex', alignItems: 'center', gap: '16px',
-            border: currentType === 'products' ? '2px solid rgba(99, 102, 241, 0.6)' : '1px solid rgba(255,255,255,0.05)',
-            boxShadow: currentType === 'products' ? '0 4px 20px rgba(99, 102, 241, 0.2)' : 'none'
-          }}>
-            <div style={{ padding: '12px', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '12px', color: '#6366f1' }}>
+          <div 
+            onClick={() => {
+              setSearchParams({ type: 'products' });
+              downloadTemplate('products');
+            }} 
+            className="glass" 
+            style={{ 
+              flex: 1, padding: '24px', borderRadius: '20px', cursor: 'pointer', transition: '0.3s',
+              display: 'flex', alignItems: 'center', gap: '16px',
+              border: currentType === 'products' ? '2px solid rgba(99, 102, 241, 0.8)' : '1px solid rgba(255,255,255,0.05)',
+              background: currentType === 'products' ? 'rgba(99, 102, 241, 0.08)' : 'var(--glass-bg)',
+              boxShadow: currentType === 'products' ? '0 8px 25px rgba(99, 102, 241, 0.25)' : 'none'
+            }}
+          >
+            <div style={{ padding: '12px', background: 'rgba(99, 102, 241, 0.15)', borderRadius: '12px', color: '#6366f1' }}>
               <FileSpreadsheet size={24} />
             </div>
             <div>
-              <p style={{ fontWeight: 600 }}>Products Template</p>
-              <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>For bulk product inventory</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <p style={{ fontWeight: 600, margin: 0 }}>Products Template</p>
+                {currentType === 'products' && (
+                  <span style={{ fontSize: '10px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '2px 8px', borderRadius: '10px', fontWeight: 700, textTransform: 'uppercase' }}>Active Target</span>
+                )}
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0' }}>For bulk product inventory</p>
             </div>
             <Download size={18} style={{ marginLeft: 'auto', color: currentType === 'products' ? '#6366f1' : 'var(--text-dim)' }} />
           </div>
 
-          <div onClick={() => downloadTemplate('categories')} className="glass" style={{ 
-            flex: 1, padding: '24px', borderRadius: '20px', cursor: 'pointer', transition: '0.3s',
-            display: 'flex', alignItems: 'center', gap: '16px',
-            border: currentType === 'categories' ? '2px solid rgba(236, 72, 153, 0.6)' : '1px solid rgba(255,255,255,0.05)',
-            boxShadow: currentType === 'categories' ? '0 4px 20px rgba(236, 72, 153, 0.2)' : 'none'
-          }}>
-            <div style={{ padding: '12px', background: 'rgba(236, 72, 153, 0.1)', borderRadius: '12px', color: '#ec4899' }}>
+          <div 
+            onClick={() => {
+              setSearchParams({ type: 'categories' });
+              downloadTemplate('categories');
+            }} 
+            className="glass" 
+            style={{ 
+              flex: 1, padding: '24px', borderRadius: '20px', cursor: 'pointer', transition: '0.3s',
+              display: 'flex', alignItems: 'center', gap: '16px',
+              border: currentType === 'categories' ? '2px solid rgba(236, 72, 153, 0.8)' : '1px solid rgba(255,255,255,0.05)',
+              background: currentType === 'categories' ? 'rgba(236, 72, 153, 0.08)' : 'var(--glass-bg)',
+              boxShadow: currentType === 'categories' ? '0 8px 25px rgba(236, 72, 153, 0.25)' : 'none'
+            }}
+          >
+            <div style={{ padding: '12px', background: 'rgba(236, 72, 153, 0.15)', borderRadius: '12px', color: '#ec4899' }}>
               <Layers size={24} />
             </div>
             <div>
-              <p style={{ fontWeight: 600 }}>Categories & Subcategories Template</p>
-              <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>For categories & subcategories import</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <p style={{ fontWeight: 600, margin: 0 }}>Categories & Subcategories Template</p>
+                {currentType === 'categories' && (
+                  <span style={{ fontSize: '10px', background: 'rgba(236, 72, 153, 0.2)', color: '#f472b6', padding: '2px 8px', borderRadius: '10px', fontWeight: 700, textTransform: 'uppercase' }}>Active Target</span>
+                )}
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0' }}>For categories & subcategories import</p>
             </div>
             <Download size={18} style={{ marginLeft: 'auto', color: currentType === 'categories' ? '#ec4899' : 'var(--text-dim)' }} />
           </div>
