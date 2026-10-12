@@ -36,7 +36,7 @@ const Reports = () => {
       color: '#6366f1',
       mapFn: (data) => data.map((order) => ({
         'Order ID': order._id,
-        'Customer Name': order.userId?.name || 'Anonymous',
+        'Company / Customer Name': order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.userId?.name || 'Anonymous',
         'Customer Email': order.userId?.email || 'N/A',
         'Customer Phone': order.userId?.phone || order.shippingAddress?.phone || 'N/A',
         'Customer Segment': order.userId?.role?.toUpperCase() || 'B2C',

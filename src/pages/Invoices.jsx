@@ -319,7 +319,7 @@ const Invoices = () => {
       'Invoice No': customInvoiceNumbers[order._id] || order.invoiceNumber || `SNB-701/${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`,
       'Order No': customOrderNumbers[order._id] || order.orderNumber || `snb-${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`,
       'Date': new Date(order.createdAt).toLocaleDateString(),
-      'Buyer Name': order.shippingAddress?.name || order.userId?.name || 'Customer',
+      'Buyer Name': order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer',
       'Buyer Phone': order.shippingAddress?.phone || order.userId?.phone || '',
       'Buyer City': order.locationId?.city || '',
       'Seller Name': order.sellerId?.companyName || order.sellerId?.name || 'Zudo Admin',
@@ -425,7 +425,7 @@ const Invoices = () => {
       const sellerGst = order.sellerId?.gstNumber || adminGst;
       const sellerAddress = order.sellerId?.address || adminAddress;
 
-      const buyerName = isPurchase ? adminName : (order.shippingAddress?.name || order.userId?.name || 'Customer');
+      const buyerName = isPurchase ? adminName : (order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer');
       const buyerAddress = isPurchase ? adminAddress : (order.shippingAddress?.address || order.userId?.address || 'No, 123 Main Street, Bengaluru, Karnataka');
       const buyerPhone = isPurchase ? '' : (order.shippingAddress?.phone || order.userId?.phone || '');
 
@@ -874,7 +874,7 @@ const Invoices = () => {
                       </div>
                     </td>
                     <td style={{ padding: '16px 24px' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{order.shippingAddress?.name || order.userId?.name || 'Customer'}</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer'}</div>
                       <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>Seller: {order.sellerId?.name || 'Zudo Admin'}</div>
                     </td>
                     <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-dim)' }}>

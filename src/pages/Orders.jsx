@@ -5,7 +5,7 @@ import {
   Package, Truck, CheckCircle, XCircle, Clock, MapPin, MapPinOff, RefreshCw,
   Phone, User, Send, Loader2, Search, Filter, DollarSign, 
   Download, RefreshCcw, ShieldCheck, AlertTriangle, Printer,
-  Edit, Plus, Trash2, X, QrCode, Table, LayoutGrid, Navigation, Car
+  Edit, Plus, Trash2, X, QrCode, Table, LayoutGrid, Navigation, Car, Building2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useSocket } from '../context/SocketContext';
@@ -51,6 +51,25 @@ const Orders = () => {
     const phone = found?.phone || (typeof driverRef === 'object' ? driverRef.phone : '');
     return { id, name, vehicle, phone, raw: found || driverRef };
   };
+
+  const getOrderCompanyName = (order) => {
+    if (!order) return 'Guest';
+    const company = order.userId?.businessName || 
+                    order.userId?.companyName || 
+                    order.shippingAddress?.companyName || 
+                    order.shippingAddress?.businessName;
+    if (company && typeof company === 'string' && company.trim()) {
+      return company.trim();
+    }
+    return order.userId?.name || order.shippingAddress?.name || 'Guest';
+  };
+
+  const getSellerCompanyName = (seller) => {
+    if (!seller) return 'Zudo Official';
+    if (typeof seller === 'string') return seller;
+    return seller.businessName || seller.storeName || seller.companyName || seller.name || 'Zudo Official';
+  };
+
   const [loading, setLoading] = useState(true);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [showDriverModal, setShowDriverModal] = useState(false);
@@ -212,7 +231,7 @@ const Orders = () => {
       setEoItems(editingOrder.items.map(item => ({
         productId: item.productId?._id || item.productId || item.product,
         name: item.name,
-        sellerName: item.seller?.name || item.seller?.businessName || item.sellerName,
+        sellerName: item.seller?.businessName || item.seller?.storeName || item.seller?.companyName || item.seller?.name || item.sellerName,
         quantity: item.quantity,
         price: item.price
       })));
@@ -463,7 +482,7 @@ const Orders = () => {
       return {
         'Order ID': o._id,
         'Date & Time': new Date(o.createdAt).toLocaleString(),
-        'Customer Name': o.userId?.name || 'Guest',
+        'Company Name': getOrderCompanyName(o),
         'Customer Email': o.userId?.email || 'N/A',
         'Customer Phone': o.userId?.phone || o.shippingAddress?.phone || 'N/A',
         'Segment': (o.userId?.role || 'B2C').toUpperCase(),
@@ -471,7 +490,7 @@ const Orders = () => {
         'Total Amount (INR)': o.totalAmount,
         'Payment Method': o.paymentMethod,
         'Payment Status': o.paymentStatus || 'Pending',
-        'Shipping Name': o.shippingAddress?.name || 'N/A',
+        'Shipping Company / Name': getOrderCompanyName(o),
         'Shipping Phone': o.shippingAddress?.phone || 'N/A',
         'Shipping Address': o.shippingAddress ? `${o.shippingAddress.address || ''}, ${o.shippingAddress.city || ''}, ${o.shippingAddress.state || ''} - ${o.shippingAddress.pincode || ''}`.replace(/,\s*,/g, ',').replace(/^[,\s]+|[,\s]+$/g, '') : 'N/A',
         'Delivery Slot': o.deliverySlot && o.deliverySlot.startTime ? `${o.deliverySlot.startTime} ${o.deliverySlot.endTime && o.deliverySlot.endTime !== '*' ? `- ${o.deliverySlot.endTime}` : ''}`.trim() : 'N/A',
@@ -700,8 +719,8 @@ const Orders = () => {
             </div>
             
             <div class="info-box">
-              <div class="info-title">Delivery Consignee</div>
-              <div class="info-value">${order.shippingAddress.name}</div>
+              <div class="info-title">Company / Delivery Consignee</div>
+              <div class="info-value">${getOrderCompanyName(order)}</div>
               <div class="info-subvalue">📞 ${order.shippingAddress.phone}</div>
               <div class="info-subvalue" style="margin-top: 3px; font-size: 8px; line-height: 1.2;">📍 ${order.shippingAddress.address}, ${order.shippingAddress.city}</div>
             </div>
@@ -869,8 +888,8 @@ const Orders = () => {
             </div>
             
             <div class="info-box">
-              <div class="info-title">Delivery Consignee</div>
-              <div class="info-value">${order.shippingAddress.name}</div>
+              <div class="info-title">Company / Delivery Consignee</div>
+              <div class="info-value">${getOrderCompanyName(order)}</div>
               <div class="info-subvalue">📞 ${order.shippingAddress.phone}</div>
               <div class="info-subvalue" style="margin-top: 3px; font-size: 8px; line-height: 1.2;">📍 ${order.shippingAddress.address}, ${order.shippingAddress.city}</div>
             </div>
@@ -1315,7 +1334,7 @@ const Orders = () => {
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'var(--card-bg)' }}>
                     <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Order Ref</th>
-                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Customer & Destination</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Company & Destination</th>
                     <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Drivers</th>
                     <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 1</th>
                     <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 2</th>
@@ -1370,7 +1389,7 @@ const Orders = () => {
                         <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '220px' }}>
                             <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-main)' }}>
-                              {order.userId?.name || 'Guest'}
+                              {getOrderCompanyName(order)}
                             </span>
                             <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <Phone size={11} /> {order.shippingAddress?.phone}
@@ -1732,10 +1751,10 @@ const Orders = () => {
               {/* Customer Intel */}
               <div>
                 <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <User size={12} /> Customer Intel
+                  <Building2 size={12} /> Company Intel
                 </p>
                 <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
-                  <p style={{ fontWeight: 700, marginBottom: '4px' }}>{order.userId?.name || 'Guest'}</p>
+                  <p style={{ fontWeight: 700, marginBottom: '4px' }}>{getOrderCompanyName(order)}</p>
                   <p style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={12} /> {order.shippingAddress.phone}</p>
                   <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '12px', lineHeight: '1.4' }}>{order.shippingAddress.address}, {order.shippingAddress.city}</p>
                 </div>
@@ -1837,7 +1856,7 @@ const Orders = () => {
                       <img src={item.image} style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }} alt="" />
                       <div style={{ flex: 1 }}>
                         <p style={{ fontSize: '12px', fontWeight: 600 }}>{item.name}</p>
-                        <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: '2px 0' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.seller?.name || item.seller?.businessName || 'Zudo Official'}</strong></p>
+                        <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: '2px 0' }}>By: <strong style={{ color: 'var(--primary)' }}>{getSellerCompanyName(item.seller)}</strong></p>
                         <p style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{item.quantity} units</p>
                       </div>
                     </div>
@@ -2634,6 +2653,7 @@ const Orders = () => {
                             (u.role || '').toLowerCase() === coSegment.toLowerCase() && (
                               !userSearchTerm ||
                               u.name?.toLowerCase().includes(userSearchTerm.toLowerCase()) || 
+                              u.businessName?.toLowerCase().includes(userSearchTerm.toLowerCase()) || 
                               u.email?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
                               u.phone?.includes(userSearchTerm)
                             )
@@ -2649,7 +2669,7 @@ const Orders = () => {
                                   : null;
 
                                 setCoAddress({
-                                  name: u.name || '',
+                                  name: u.businessName || u.name || '',
                                   phone: defaultAddr ? (defaultAddr.phone || u.phone || '') : (u.phone || ''),
                                   address: defaultAddr ? (defaultAddr.address || u.address || '') : (u.address || ''),
                                   city: defaultAddr ? (defaultAddr.city || u.city || '') : (u.city || ''),
@@ -2662,7 +2682,7 @@ const Orders = () => {
                               onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
                             >
                               <div>
-                                <p style={{ fontWeight: 700, fontSize: '13px', margin: 0 }}>{u.name}</p>
+                                <p style={{ fontWeight: 700, fontSize: '13px', margin: 0 }}>{u.businessName || u.name}</p>
                                 <p style={{ fontSize: '11px', color: 'var(--text-dim)', margin: 0 }}>{u.email} • {u.phone || 'No phone'}</p>
                               </div>
                               <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', background: u.role === 'b2b' ? 'rgba(99,102,241,0.1)' : 'rgba(236,72,153,0.1)', color: u.role === 'b2b' ? 'var(--primary)' : '#ec4899' }}>
@@ -2678,7 +2698,7 @@ const Orders = () => {
                           <div style={{ flex: 1 }}>
                             <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Selected Customer ({coSegment.toUpperCase()})</span>
                             <p style={{ fontWeight: 700, margin: '2px 0 0', fontSize: '14px' }}>
-                              {users.find(u => u._id === coUserId)?.name}
+                              {users.find(u => u._id === coUserId)?.businessName || users.find(u => u._id === coUserId)?.name}
                             </p>
                           </div>
                           <button 
