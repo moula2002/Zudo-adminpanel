@@ -5,8 +5,8 @@ import * as XLSX from 'xlsx';
 import { Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, Layers } from 'lucide-react';
 
 const BulkUpload = () => {
-  const [searchParams] = useSearchParams();
-  const currentType = searchParams.get('type') || 'products';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentType = searchParams.get('type') || 'categories';
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });

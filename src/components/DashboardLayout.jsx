@@ -184,16 +184,7 @@ const DashboardLayout = ({ children }) => {
         { id: 'invoices-reports', to: '/reports', icon: FileSpreadsheet, label: 'Reports', perm: 'view_dashboard' }
       ]
     },
-    {
-      id: 'products',
-      to: '/products',
-      icon: Package,
-      label: 'Products',
-      perm: 'manage_products',
-      children: [
-        { id: 'products-bulk-upload', to: '/bulk-upload?type=products', icon: Upload, label: 'Bulk Upload', perm: 'manage_bulk_upload' }
-      ]
-    },
+    { id: 'products', to: '/products', icon: Package, label: 'Products', perm: 'manage_products' },
     { id: 'categories', to: '/categories', icon: Layers, label: 'Categories', perm: 'manage_categories' },
     {
       id: 'subcategories',
@@ -243,7 +234,6 @@ const DashboardLayout = ({ children }) => {
 
   const [openSubmenus, setOpenSubmenus] = React.useState({
     invoices: true,
-    products: true,
     subcategories: true
   });
 
@@ -253,7 +243,7 @@ const DashboardLayout = ({ children }) => {
 
     if (childSearch) {
       if (location.search.includes(childSearch)) return true;
-      if (!location.search && childSearch.includes('products') && parentItem.id === 'products') {
+      if (!location.search && parentItem.id === 'subcategories') {
         return true;
       }
       return false;
