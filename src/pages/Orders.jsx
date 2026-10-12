@@ -1,11 +1,11 @@
 import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
-import axios, { getImageUrl } from '../utils/api';
+import axios, { getImageUrl, clearApiCache } from '../utils/api';
 import { 
   Package, Truck, CheckCircle, XCircle, Clock, MapPin, MapPinOff, RefreshCw,
   Phone, User, Send, Loader2, Search, Filter, DollarSign, 
   Download, RefreshCcw, ShieldCheck, AlertTriangle, Printer,
-  Edit, Plus, Trash2, X, QrCode
+  Edit, Plus, Trash2, X, QrCode, Table, LayoutGrid, Navigation, Car
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useSocket } from '../context/SocketContext';
@@ -13,6 +13,44 @@ import { useSocket } from '../context/SocketContext';
 const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [allDrivers, setAllDrivers] = useState([]);
+  const [viewMode, setViewMode] = useState('table');
+  const [orderRoutes, setOrderRoutes] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('zudo_order_routes') || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const updateOrderRoute = async (orderId, routeKey, val) => {
+    setOrderRoutes(prev => {
+      const updated = {
+        ...prev,
+        [orderId]: {
+          ...(prev[orderId] || {}),
+          [routeKey]: val
+        }
+      };
+      localStorage.setItem('zudo_order_routes', JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      await axios.put(`/orders/${orderId}/routes`, { [routeKey]: val });
+    } catch (e) {
+      // Local state & offline fallback continue seamlessly
+    }
+  };
+
+  const getDriverDetails = (driverRef) => {
+    if (!driverRef) return null;
+    const id = typeof driverRef === 'object' ? (driverRef._id || driverRef.id) : driverRef;
+    const found = allDrivers.find(d => d._id === id) || drivers.find(d => d._id === id);
+    const name = found?.name || (typeof driverRef === 'object' ? driverRef.name : 'Assigned Driver');
+    const vehicle = found?.vehicleNo || found?.vehicleDetails || (typeof driverRef === 'object' ? (driverRef.vehicleNo || driverRef.vehicleDetails) : '');
+    const phone = found?.phone || (typeof driverRef === 'object' ? driverRef.phone : '');
+    return { id, name, vehicle, phone, raw: found || driverRef };
+  };
   const [loading, setLoading] = useState(true);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [showDriverModal, setShowDriverModal] = useState(false);
@@ -84,21 +122,80 @@ const Orders = () => {
     setLocationError(null);
     try {
       const { data } = await axios.get(`/drivers/${driverId}/location`);
-      setDriverLocation(data);
+      if (data && data.active === false) {
+        // Fall back to driver's stored currentLocation from allDrivers or drivers list
+        const matched = allDrivers.find(d => d._id === driverId) || drivers.find(d => d._id === driverId);
+        if (matched?.currentLocation && matched.currentLocation.lat != null) {
+          setDriverLocation({
+            lat: matched.currentLocation.lat,
+            lng: matched.currentLocation.lng,
+            updatedAt: matched.currentLocation.updatedAt || new Date().toISOString(),
+            isLastKnown: true
+          });
+          setLocationError(null);
+        } else {
+          setLocationError(data.message || 'Driver live location is not available right now.');
+          setDriverLocation(null);
+        }
+      } else if (data && data.lat != null) {
+        setDriverLocation(data);
+      } else {
+        const matched = allDrivers.find(d => d._id === driverId) || drivers.find(d => d._id === driverId);
+        if (matched?.currentLocation && matched.currentLocation.lat != null) {
+          setDriverLocation({
+            lat: matched.currentLocation.lat,
+            lng: matched.currentLocation.lng,
+            updatedAt: matched.currentLocation.updatedAt || new Date().toISOString(),
+            isLastKnown: true
+          });
+          setLocationError(null);
+        } else {
+          setLocationError('Driver live location is not available right now.');
+          setDriverLocation(null);
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch driver live location', err);
-      setLocationError(err.response?.data?.message || 'Driver live location is not available right now.');
-      setDriverLocation(null);
+      const matched = allDrivers.find(d => d._id === driverId) || drivers.find(d => d._id === driverId);
+      if (matched?.currentLocation && matched.currentLocation.lat != null) {
+        setDriverLocation({
+          lat: matched.currentLocation.lat,
+          lng: matched.currentLocation.lng,
+          updatedAt: matched.currentLocation.updatedAt || new Date().toISOString(),
+          isLastKnown: true
+        });
+        setLocationError(null);
+      } else {
+        setLocationError(err.response?.data?.message || 'Driver live location is not available right now.');
+        setDriverLocation(null);
+      }
     } finally {
       setLoadingLocation(false);
     }
   };
 
-  const handleTrackDriver = (driver) => {
-    setTrackingDriver(driver);
+  const handleTrackDriver = (driverRef) => {
+    const driverId = typeof driverRef === 'object' ? driverRef._id : driverRef;
+    const fullDriver = allDrivers.find(d => d._id === driverId) || drivers.find(d => d._id === driverId) || driverRef;
+    setTrackingDriver(fullDriver);
     setShowTrackingModal(true);
-    fetchDriverLocation(driver._id);
+    fetchDriverLocation(driverId);
   };
+
+  useEffect(() => {
+    let interval;
+    if (showTrackingModal && trackingDriver) {
+      interval = setInterval(() => {
+        const driverId = trackingDriver._id || trackingDriver;
+        if (driverId) {
+          fetchDriverLocation(driverId);
+        }
+      }, 10000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showTrackingModal, trackingDriver]);
 
   useEffect(() => {
     fetchOrders();
@@ -156,10 +253,11 @@ const Orders = () => {
     }
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (skipCache = false) => {
     try {
-      const { data } = await axios.get('/orders/admin/all');
-      setOrders(data);
+      const config = skipCache ? { skipCache: true, headers: { 'Cache-Control': 'no-cache' } } : {};
+      const { data } = await axios.get('/orders/admin/all', config);
+      setOrders(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -170,14 +268,15 @@ const Orders = () => {
   const handleRefresh = async () => {
     const loadingToast = toast.loading('Refreshing data...');
     try {
+      clearApiCache();
       await Promise.all([
-        fetchOrders(),
-        fetchDrivers(),
-        fetchCashStats(),
-        fetchCashCollectors(),
-        fetchUsers(),
-        fetchProducts(),
-        fetchCategories()
+        fetchOrders(true),
+        fetchDrivers(true),
+        fetchCashStats(true),
+        fetchCashCollectors(true),
+        fetchUsers(true),
+        fetchProducts(true),
+        fetchCategories(true)
       ]);
       toast.success('Data refreshed successfully!', { id: loadingToast });
     } catch (error) {
@@ -185,10 +284,13 @@ const Orders = () => {
     }
   };
 
-  const fetchDrivers = async () => {
+  const fetchDrivers = async (skipCache = false) => {
     try {
-      const { data } = await axios.get('/drivers');
-      setDrivers(data.filter(d => d.status === 'active'));
+      const config = skipCache ? { skipCache: true, headers: { 'Cache-Control': 'no-cache' } } : {};
+      const { data } = await axios.get('/drivers', config);
+      const list = Array.isArray(data) ? data : [];
+      setAllDrivers(list);
+      setDrivers(list.filter(d => d.status === 'active'));
     } catch (error) {
       console.error('Error fetching drivers:', error);
     }
@@ -374,8 +476,12 @@ const Orders = () => {
         'Shipping Address': o.shippingAddress ? `${o.shippingAddress.address || ''}, ${o.shippingAddress.city || ''}, ${o.shippingAddress.state || ''} - ${o.shippingAddress.pincode || ''}`.replace(/,\s*,/g, ',').replace(/^[,\s]+|[,\s]+$/g, '') : 'N/A',
         'Delivery Slot': o.deliverySlot && o.deliverySlot.startTime ? `${o.deliverySlot.startTime} ${o.deliverySlot.endTime && o.deliverySlot.endTime !== '*' ? `- ${o.deliverySlot.endTime}` : ''}`.trim() : 'N/A',
         'Items Ordered': itemsList,
-        'Assigned Driver': o.driverId?.name || 'Unassigned',
-        'Driver Phone': o.driverId?.phone || 'N/A',
+        'Drivers': getDriverDetails(o.driverId)?.name || o.driverId?.name || 'Unassigned',
+        'Vehicle Number': getDriverDetails(o.driverId)?.vehicle || 'N/A',
+        'Driver Phone': getDriverDetails(o.driverId)?.phone || o.driverId?.phone || 'N/A',
+        'Route 1': orderRoutes[o._id]?.route1 || (o.shippingAddress?.city ? `${o.shippingAddress.city} Central Hub` : 'Route 1 - Hub'),
+        'Route 2': orderRoutes[o._id]?.route2 || (o.deliverySlot?.startTime ? `Slot ${o.deliverySlot.startTime}` : 'Route 2 - Transit'),
+        'Route 3': orderRoutes[o._id]?.route3 || (o.shippingAddress?.pincode ? `Pincode ${o.shippingAddress.pincode}` : 'Route 3 - Final Drop'),
         'Assigned Cash Collector': o.cashPersonId?.name || 'Unassigned',
         'Cash Collector Phone': o.cashPersonId?.phone || 'N/A'
       };
@@ -1038,6 +1144,51 @@ const Orders = () => {
           >
             <Plus size={18} /> Create Order
           </button>
+
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--glass-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: viewMode === 'table' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'table' ? '#fff' : 'var(--text-dim)',
+                transition: 'all 0.2s'
+              }}
+              title="Table View (with Drivers & Route Columns)"
+            >
+              <Table size={14} /> Table View
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: viewMode === 'cards' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'cards' ? '#fff' : 'var(--text-dim)',
+                transition: 'all 0.2s'
+              }}
+              title="Card View"
+            >
+              <LayoutGrid size={14} /> Cards View
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1151,13 +1302,393 @@ const Orders = () => {
       </div>
 
       {/* Orders List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {filteredOrders.length === 0 ? (
-          <div className="glass-card" style={{ padding: '80px', textAlign: 'center', borderRadius: '32px' }}>
-            <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.2 }} />
-            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)' }}>No orders match the selected criteria</h3>
-          </div>
-        ) : filteredOrders.map(order => (
+      {viewMode === 'table' ? (
+        <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
+          {filteredOrders.length === 0 ? (
+            <div style={{ padding: '80px', textAlign: 'center' }}>
+              <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.2 }} />
+              <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)' }}>No orders match the selected criteria</h3>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1100px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'var(--card-bg)' }}>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Order Ref</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Customer & Destination</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Drivers</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 1</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 2</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 3</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Total & Status</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOrders.map(order => {
+                    const isReturn = (order.returnStatus === 'Approved') || (order.items && order.items.some(i => ['Return Approved', 'Picked Up from Customer', 'Returned to Seller'].includes(i.returnStatus)));
+                    const dInfo = getDriverDetails(isReturn ? order.returnDriverId : order.driverId);
+                    const r1Val = orderRoutes[order._id]?.route1 ?? (order.route1 || (order.shippingAddress?.city ? `${order.shippingAddress.city} Central Hub` : 'Route 1 - Hub'));
+                    const r2Val = orderRoutes[order._id]?.route2 ?? (order.route2 || (order.deliverySlot?.startTime ? `Slot ${order.deliverySlot.startTime}` : 'Route 2 - Transit'));
+                    const r3Val = orderRoutes[order._id]?.route3 ?? (order.route3 || (order.shippingAddress?.pincode ? `Pin ${order.shippingAddress.pincode}` : 'Route 3 - Final Drop'));
+
+                    return (
+                      <tr 
+                        key={order._id}
+                        style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s' }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        {/* Order Ref */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-main)', fontFamily: 'monospace' }}>
+                                #{order._id.slice(-8).toUpperCase()}
+                              </span>
+                              <span style={{
+                                fontSize: '9px', fontWeight: 800,
+                                color: (order.userId?.role || 'b2c') === 'b2b' ? 'var(--primary)' : '#ec4899',
+                                background: (order.userId?.role || 'b2c') === 'b2b' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
+                                padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase'
+                              }}>
+                                {(order.userId?.role || 'b2c').toUpperCase()}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                              {new Date(order.createdAt).toLocaleDateString()}
+                            </span>
+                            {order.deliverySlot?.startTime && (
+                              <span style={{ fontSize: '10px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Clock size={10} /> {order.deliverySlot.startTime}{order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? ` - ${order.deliverySlot.endTime}` : ''}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Customer & Destination */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '220px' }}>
+                            <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-main)' }}>
+                              {order.userId?.name || 'Guest'}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Phone size={11} /> {order.shippingAddress?.phone}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: '1.3', whiteSpace: 'normal' }}>
+                              {order.shippingAddress?.address ? `${order.shippingAddress.address}, ${order.shippingAddress.city}` : 'No address'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Drivers Column */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
+                            {dInfo ? (
+                              <div style={{ background: 'var(--card-bg)', padding: '8px 12px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                  <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-main)' }}>
+                                    {dInfo.name}
+                                  </span>
+                                  {isReturn && (
+                                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: '4px' }}>
+                                      Return
+                                    </span>
+                                  )}
+                                </div>
+                                {dInfo.vehicle && (
+                                  <div style={{ marginTop: '3px' }}>
+                                    <span style={{
+                                      fontSize: '11px', fontWeight: 800, color: 'var(--primary)',
+                                      background: 'rgba(99, 102, 241, 0.12)', padding: '2px 6px',
+                                      borderRadius: '6px', fontFamily: 'monospace', letterSpacing: '0.5px'
+                                    }}>
+                                      🚗 {dInfo.vehicle}
+                                    </span>
+                                  </div>
+                                )}
+                                <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedOrderId(order._id);
+                                      setDriverModalType(isReturn ? 'return' : 'delivery');
+                                      setShowDriverModal(true);
+                                    }}
+                                    style={{
+                                      background: 'none', border: 'none', color: 'var(--primary)',
+                                      fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0
+                                    }}
+                                  >
+                                    Change
+                                  </button>
+                                  <span style={{ color: 'var(--glass-border)' }}>•</span>
+                                  <button
+                                    onClick={() => handleTrackDriver(isReturn ? order.returnDriverId : order.driverId)}
+                                    style={{
+                                      background: 'none', border: 'none', color: '#22c55e',
+                                      fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0,
+                                      display: 'inline-flex', alignItems: 'center', gap: '3px'
+                                    }}
+                                  >
+                                    <MapPin size={10} /> Track GPS
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setSelectedOrderId(order._id);
+                                  setDriverModalType(isReturn ? 'return' : 'delivery');
+                                  setShowDriverModal(true);
+                                }}
+                                style={{
+                                  background: 'rgba(99, 102, 241, 0.1)',
+                                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                                  color: 'var(--primary)',
+                                  padding: '8px 12px',
+                                  borderRadius: '10px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  transition: '0.2s'
+                                }}
+                              >
+                                <Truck size={13} /> {isReturn ? 'Assign Return Driver' : 'Assign Driver'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Route 1 */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ minWidth: '130px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                type="text"
+                                value={r1Val}
+                                onChange={(e) => updateOrderRoute(order._id, 'route1', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  fontSize: '11px',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  border: '1px solid var(--glass-border)',
+                                  background: 'var(--input-bg)',
+                                  color: 'var(--text-main)',
+                                  fontWeight: 600,
+                                  transition: '0.2s border-color'
+                                }}
+                                title="Edit Route 1"
+                                placeholder="Route 1..."
+                              />
+                            </div>
+                            <span style={{ fontSize: '9px', color: 'var(--text-dim)', display: 'block', marginTop: '2px' }}>
+                              Primary Hub
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Route 2 */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ minWidth: '130px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                type="text"
+                                value={r2Val}
+                                onChange={(e) => updateOrderRoute(order._id, 'route2', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  fontSize: '11px',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  border: '1px solid var(--glass-border)',
+                                  background: 'var(--input-bg)',
+                                  color: 'var(--text-main)',
+                                  fontWeight: 600,
+                                  transition: '0.2s border-color'
+                                }}
+                                title="Edit Route 2"
+                                placeholder="Route 2..."
+                              />
+                            </div>
+                            <span style={{ fontSize: '9px', color: 'var(--text-dim)', display: 'block', marginTop: '2px' }}>
+                              Transit Slot
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Route 3 */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ minWidth: '130px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                type="text"
+                                value={r3Val}
+                                onChange={(e) => updateOrderRoute(order._id, 'route3', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  fontSize: '11px',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  border: '1px solid var(--glass-border)',
+                                  background: 'var(--input-bg)',
+                                  color: 'var(--text-main)',
+                                  fontWeight: 600,
+                                  transition: '0.2s border-color'
+                                }}
+                                title="Edit Route 3"
+                                placeholder="Route 3..."
+                              />
+                            </div>
+                            <span style={{ fontSize: '9px', color: 'var(--text-dim)', display: 'block', marginTop: '2px' }}>
+                              Final Drop
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Total & Status */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '140px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--primary)' }}>
+                                ₹{order.totalAmount.toLocaleString()}
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
+                                {order.paymentMethod || 'COD'}
+                              </span>
+                            </div>
+
+                            <select
+                              value={order.orderStatus}
+                              onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '8px',
+                                background: 'var(--glass-bg)',
+                                border: '1px solid var(--glass-border)',
+                                color: 'var(--text-main)',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+
+                            <div>
+                              {getStatusBadge(order.orderStatus, order.returnStatus)}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                            {(order.driverId || order.returnDriverId) && (
+                              <button
+                                onClick={() => handleTrackDriver(order.driverId || order.returnDriverId)}
+                                style={{
+                                  background: 'rgba(34, 197, 94, 0.1)',
+                                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                                  color: '#22c55e',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 700
+                                }}
+                                title="Track Driver Live GPS"
+                              >
+                                <MapPin size={12} />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => printManifest(order)}
+                              style={{
+                                background: 'rgba(99, 102, 241, 0.1)',
+                                border: '1px solid rgba(99, 102, 241, 0.3)',
+                                color: 'var(--primary)',
+                                padding: '6px 8px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700
+                              }}
+                              title="Download / Print Manifest"
+                            >
+                              <Download size={12} />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setEditingOrder(order);
+                                setShowEditItemsModal(true);
+                              }}
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid var(--glass-border)',
+                                color: 'var(--text-main)',
+                                padding: '6px 8px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700
+                              }}
+                              title="Edit Items"
+                            >
+                              <Edit size={12} />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteOrder(order._id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: '6px',
+                                borderRadius: '8px'
+                              }}
+                              title="Delete Order"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Cards View */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {filteredOrders.length === 0 ? (
+            <div className="glass-card" style={{ padding: '80px', textAlign: 'center', borderRadius: '32px' }}>
+              <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.2 }} />
+              <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)' }}>No orders match the selected criteria</h3>
+            </div>
+          ) : filteredOrders.map(order => (
           <div key={order._id} className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
             {/* Order Header */}
             <div style={{ padding: '20px 24px', background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1207,6 +1738,42 @@ const Orders = () => {
                   <p style={{ fontWeight: 700, marginBottom: '4px' }}>{order.userId?.name || 'Guest'}</p>
                   <p style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={12} /> {order.shippingAddress.phone}</p>
                   <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '12px', lineHeight: '1.4' }}>{order.shippingAddress.address}, {order.shippingAddress.city}</p>
+                </div>
+              </div>
+
+              {/* Delivery Routes */}
+              <div>
+                <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Navigation size={12} /> Delivery Routes
+                </p>
+                <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 1 (Hub)</span>
+                    <input
+                      type="text"
+                      value={orderRoutes[order._id]?.route1 ?? (order.shippingAddress?.city ? `${order.shippingAddress.city} Central Hub` : 'Route 1 - Hub')}
+                      onChange={(e) => updateOrderRoute(order._id, 'route1', e.target.value)}
+                      style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 2 (Transit)</span>
+                    <input
+                      type="text"
+                      value={orderRoutes[order._id]?.route2 ?? (order.deliverySlot?.startTime ? `Slot ${order.deliverySlot.startTime}` : 'Route 2 - Transit')}
+                      onChange={(e) => updateOrderRoute(order._id, 'route2', e.target.value)}
+                      style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 3 (Final Drop)</span>
+                    <input
+                      type="text"
+                      value={orderRoutes[order._id]?.route3 ?? (order.shippingAddress?.pincode ? `Pin ${order.shippingAddress.pincode}` : 'Route 3 - Final Drop')}
+                      onChange={(e) => updateOrderRoute(order._id, 'route3', e.target.value)}
+                      style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1372,7 +1939,14 @@ const Orders = () => {
                       className="btn-primary" 
                       style={{ width: '100%', padding: '10px', background: order.returnDriverId ? 'rgba(99, 102, 241, 0.1)' : '#10b981', color: order.returnDriverId ? 'var(--primary)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                     >
-                      <Truck size={14} /> {order.returnDriverId ? `Return Driver: ${order.returnDriverId.name || 'Assigned'}` : 'Assign Return Driver'}
+                      <Truck size={14} /> {(() => {
+                        const retDInfo = getDriverDetails(order.returnDriverId);
+                        return retDInfo ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            Return Driver: <strong>{retDInfo.name}</strong> {retDInfo.vehicle ? `🚗 ${retDInfo.vehicle}` : ''}
+                          </span>
+                        ) : 'Assign Return Driver';
+                      })()}
                     </button>
                   </div>
                 ) : (
@@ -1405,7 +1979,14 @@ const Orders = () => {
                             className="btn-primary" 
                             style={{ flex: 1, padding: '10px', background: order.driverId ? 'rgba(99, 102, 241, 0.1)' : 'var(--primary)', color: order.driverId ? 'var(--primary)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                           >
-                            <Truck size={14} /> {order.driverId ? `Driver: ${order.driverId.name}` : 'Assign Driver'}
+                            <Truck size={14} /> {(() => {
+                              const dInfo = getDriverDetails(order.driverId);
+                              return dInfo ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                  Driver: <strong>{dInfo.name}</strong> {dInfo.vehicle ? `🚗 ${dInfo.vehicle}` : ''}
+                                </span>
+                              ) : 'Assign Driver';
+                            })()}
                           </button>
                           
                           {order.driverId && (
@@ -1467,7 +2048,8 @@ const Orders = () => {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
 
       {/* OTP Modal */}
       {showOtpModal && (
@@ -1577,8 +2159,27 @@ const Orders = () => {
                 >
                   <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{driver.name[0]}</div>
                   <div style={{ flex: 1, textAlign: 'left' }}>
-                    <p style={{ fontWeight: 700, fontSize: '15px' }}>{driver.name}</p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{driver.vehicleDetails}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <p style={{ fontWeight: 700, fontSize: '15px', margin: 0 }}>{driver.name}</p>
+                      {(driver.vehicleNo || driver.vehicleDetails) && (
+                        <span style={{ 
+                          fontSize: '11px', 
+                          fontWeight: 700, 
+                          color: 'var(--primary)', 
+                          background: 'rgba(99, 102, 241, 0.15)', 
+                          border: '1px solid rgba(99, 102, 241, 0.3)', 
+                          padding: '2px 8px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          letterSpacing: '0.5px'
+                        }}>
+                          🚗 {driver.vehicleNo || driver.vehicleDetails}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0' }}>
+                      📞 {driver.phone} {driver.vehicleDetails && driver.vehicleNo && driver.vehicleDetails !== driver.vehicleNo ? `• ${driver.vehicleDetails}` : ''}
+                    </p>
                   </div>
                 </button>
               ))}
@@ -1593,7 +2194,14 @@ const Orders = () => {
             <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                 <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Driver Tracking</h3>
-                <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{trackingDriver.name} • {trackingDriver.phone}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{trackingDriver.name} • {trackingDriver.phone}</span>
+                  {getDriverDetails(trackingDriver)?.vehicle && (
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', background: 'rgba(99, 102, 241, 0.15)', padding: '1px 6px', borderRadius: '4px' }}>
+                      🚗 {getDriverDetails(trackingDriver).vehicle}
+                    </span>
+                  )}
+                </span>
               </div>
               <button onClick={() => setShowTrackingModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}><XCircle size={24} /></button>
             </div>

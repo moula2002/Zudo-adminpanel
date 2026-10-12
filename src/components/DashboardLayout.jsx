@@ -205,7 +205,7 @@ const DashboardLayout = ({ children }) => {
         { id: 'subcategories-bulk-upload', to: '/bulk-upload?type=categories', icon: Upload, label: 'Bulk Upload', perm: 'manage_bulk_upload' }
       ]
     },
-    { id: 'commissions', to: '/commissions', icon: Percent, label: 'Commission Management', perm: 'manage_categories' },
+    { id: 'commissions', to: '/commissions', icon: Percent, label: 'Commission Management', perm: 'view_dashboard' },
     { id: 'sales', to: '/sales', icon: Users, label: 'Sales Team', perm: 'manage_admins' },
     { id: 'drivers', to: '/drivers', icon: Truck, label: 'Drivers', perm: 'manage_drivers' },
     { id: 'sellers', to: '/sellers', icon: Store, label: 'Sellers', perm: 'manage_sellers' },

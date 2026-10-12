@@ -44,9 +44,22 @@ const emitLoadState = () => {
 
 export const getActiveRequests = () => activeRequests;
 
+export const clearApiCache = (urlPattern) => {
+  if (urlPattern) {
+    for (const key of apiCache.keys()) {
+      if (key.includes(urlPattern)) {
+        apiCache.delete(key);
+      }
+    }
+  } else {
+    apiCache.clear();
+  }
+};
+
 export const cancelAllPendingRequests = () => {
   globalAbortController.abort(); // Abort all inflight requests
   globalAbortController = new AbortController(); // Create a fresh controller for new requests
+  apiCache.clear();
   // Reset the delay queue, but enforce a wait to prevent instant 429s from the just-aborted requests hitting the server
   globalApiQueue = new Promise(resolve => setTimeout(resolve, GLOBAL_REQUEST_DELAY)); 
 };
@@ -59,8 +72,16 @@ const setupInterceptors = (instance) => {
     // Determine the expected location header for the cache key
     const currentDbName = localStorage.getItem('zudo_admin_db_name') || localStorage.getItem('zudo_admin_location') || 'global';
 
-    // Check Cache before queuing to save network requests instantly
-    if (config.method === 'get') {
+    // Check if explicit refresh/skipCache requested
+    const shouldSkipCache = config.skipCache || 
+      config.headers?.['Cache-Control'] === 'no-cache' || 
+      config.headers?.['pragma'] === 'no-cache';
+
+    if (shouldSkipCache) {
+      const cacheKey = `${config.url}-${currentDbName}`;
+      apiCache.delete(cacheKey);
+    }
+    if (config.method === 'get' && !shouldSkipCache) {
       const cacheKey = `${config.url}-${currentDbName}`;
       const cached = apiCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < 120000) { // 2 minute cache

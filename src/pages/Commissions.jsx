@@ -76,38 +76,48 @@ const Commissions = () => {
   const [customUnit, setCustomUnit] = useState('');
   const [showCustomUnitInput, setShowCustomUnitInput] = useState(false);
 
-  const fetchCategories = () => {
+  const fetchCategories = async () => {
     setLoading(true);
-    Promise.all([
-      api.get('/categories'),
-      api.get('/commissions'),
-      api.get('/commissions/minimum-billing')
-    ]).then(([catRes, commRes, billRes]) => {
-      const cats = catRes.data;
-      const comms = commRes.data;
+    try {
+      const [catRes, commRes, billRes] = await Promise.allSettled([
+        api.get('/categories'),
+        api.get('/commissions'),
+        api.get('/commissions/minimum-billing')
+      ]);
+
+      const rawCats = catRes.status === 'fulfilled' ? catRes.value.data : [];
+      const cats = Array.isArray(rawCats) ? rawCats : (rawCats?.categories || rawCats?.data || []);
+
+      const rawComms = commRes.status === 'fulfilled' ? commRes.value.data : [];
+      const comms = Array.isArray(rawComms) ? rawComms : (rawComms?.commissions || rawComms?.data || []);
 
       // Dynamically map independent commissions data to their categories
       const mappedCats = cats.map(cat => ({
         ...cat,
-        commissions: comms.filter(c => c.categoryId === cat._id)
+        commissions: comms.filter(c => {
+          const cCatId = c.categoryId?._id || c.categoryId;
+          return cCatId === cat._id;
+        })
       }));
 
       setCategories(mappedCats);
 
-      if (billRes.data.isGlobal) {
-        setIsGlobalMinBill(true);
-        setMinBillData(billRes.data.data);
-      } else {
-        setIsGlobalMinBill(false);
-        setMinBillAmountB2B(billRes.data.minimumBillAmountB2B);
-        setMinBillAmountB2C(billRes.data.minimumBillAmountB2C);
+      if (billRes.status === 'fulfilled' && billRes.value?.data) {
+        const billData = billRes.value.data;
+        if (billData.isGlobal) {
+          setIsGlobalMinBill(true);
+          setMinBillData(Array.isArray(billData.data) ? billData.data : []);
+        } else {
+          setIsGlobalMinBill(false);
+          setMinBillAmountB2B(billData.minimumBillAmountB2B ?? '');
+          setMinBillAmountB2C(billData.minimumBillAmountB2C ?? '');
+        }
       }
-
+    } catch (err) {
+      console.error('Error loading commissions data:', err);
+    } finally {
       setLoading(false);
-    }).catch(err => {
-      console.error(err);
-      setLoading(false);
-    });
+    }
   };
 
   const handleSaveMinBill = async (targetLocId = null, b2bVal = null, b2cVal = null) => {

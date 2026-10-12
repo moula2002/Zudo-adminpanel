@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
-import { BASE_DOMAIN } from '../utils/api';
+import { BASE_DOMAIN, clearApiCache } from '../utils/api';
 
 const SocketContext = createContext();
 
@@ -29,6 +29,7 @@ export const SocketProvider = ({ children }) => {
 
     newSocket.on('data_updated', (data) => {
       console.log('Real-time update received:', data);
+      clearApiCache();
       setRefreshFlag(prev => prev + 1);
     });
 
