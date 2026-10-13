@@ -91,6 +91,9 @@ const Products = () => {
       'Seller': product.sellerName || 'Zudo Official',
       Category: product.categoryId?.name || product.categoryId,
       Subcategory: product.subCategoryId?.name || 'No Subcategory',
+      'Seller Price (₹)': product.sellerPrice ?? product.price,
+      'Commission': product.commissionValue != null ? `${product.commissionValue}${product.commissionType === 'percentage' ? '%' : ' flat'}` : '0 flat',
+      'Customer Price (₹)': product.price,
       'B2C Price (₹)': product.price,
       'B2B Price (₹)': product.b2bPrice,
       'GST %': product.gstPercent || 0,
@@ -184,6 +187,7 @@ const Products = () => {
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Product</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Seller</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Category</th>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Pricing (Seller / Comm / Customer)</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2C Size Value</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2B Size Value</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>GST %</th>
@@ -193,9 +197,9 @@ const Products = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="8" style={{ padding: '48px', textAlign: 'center' }}><Loader2 className="animate-spin" style={{ margin: '0 auto' }} /></td></tr>
+              <tr><td colSpan="9" style={{ padding: '48px', textAlign: 'center' }}><Loader2 className="animate-spin" style={{ margin: '0 auto' }} /></td></tr>
             ) : filteredProducts.length === 0 ? (
-              <tr><td colSpan="8" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>No products found matching your search or filter.</td></tr>
+              <tr><td colSpan="9" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>No products found matching your search or filter.</td></tr>
             ) : filteredProducts.map(product => (
               <tr key={product._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                 <td style={{ padding: '16px 24px' }}>
@@ -211,6 +215,13 @@ const Products = () => {
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontSize: '14px' }}>{product.categoryId?.name}</span>
                     <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{product.subCategoryId?.name || 'No Subcategory'}</span>
+                  </div>
+                </td>
+                <td style={{ padding: '16px 24px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--text-dim)' }}>Seller: <strong style={{ color: 'var(--text-main)' }}>₹{product.sellerPrice ?? product.price ?? 0}</strong></span>
+                    <span style={{ fontSize: '11px', color: '#6366f1' }}>Comm: {product.commissionValue != null ? `${product.commissionValue}${product.commissionType === 'percentage' ? '%' : ' flat'}` : '₹0'}</span>
+                    <span style={{ fontWeight: 600, color: '#10b981' }}>Cust: ₹{product.price ?? 0}</span>
                   </div>
                 </td>
                 <td style={{ padding: '16px 24px' }}>{getVariantSizes(product.b2c)}</td>

@@ -167,35 +167,20 @@ const DashboardLayout = ({ children }) => {
   };
 
   const hasPerm = (perm) => {
-    if (admin.role === 'super_admin') return true;
+    if (admin.role === 'super_admin' || admin.role === 'manager') return true;
+    if (perm === 'manage_profile') return true;
     return admin.permissions && admin.permissions.includes(perm);
   };
 
   const rawMenuItems = [
     { id: 'dashboard', to: '/', icon: LayoutDashboard, label: 'Dashboard', perm: 'view_dashboard' },
     { id: 'orders', to: '/orders', icon: ShoppingBag, label: 'Orders', perm: 'manage_orders' },
-    {
-      id: 'invoices',
-      to: '/invoices',
-      icon: Receipt,
-      label: 'Invoices',
-      perm: 'manage_invoices',
-      children: [
-        { id: 'invoices-reports', to: '/reports', icon: FileSpreadsheet, label: 'Reports', perm: 'view_dashboard' }
-      ]
-    },
+    { id: 'invoices', to: '/invoices', icon: Receipt, label: 'Invoices', perm: 'manage_invoices' },
+    { id: 'reports', to: '/reports', icon: FileSpreadsheet, label: 'Reports', perm: 'view_dashboard' },
     { id: 'products', to: '/products', icon: Package, label: 'Products', perm: 'manage_products' },
     { id: 'categories', to: '/categories', icon: Layers, label: 'Categories', perm: 'manage_categories' },
-    {
-      id: 'subcategories',
-      to: '/subcategories',
-      icon: Layers,
-      label: 'Subcategories',
-      perm: 'manage_subcategories',
-      children: [
-        { id: 'subcategories-bulk-upload', to: '/bulk-upload?type=categories', icon: Upload, label: 'Bulk Upload', perm: 'manage_bulk_upload' }
-      ]
-    },
+    { id: 'subcategories', to: '/subcategories', icon: Layers, label: 'Subcategories', perm: 'manage_subcategories' },
+    { id: 'bulk-upload', to: '/bulk-upload', icon: Upload, label: 'Bulk Upload', perm: 'manage_bulk_upload' },
     { id: 'commissions', to: '/commissions', icon: Percent, label: 'Commission Management', perm: 'view_dashboard' },
     { id: 'sales', to: '/sales', icon: Users, label: 'Sales Team', perm: 'manage_admins' },
     { id: 'drivers', to: '/drivers', icon: Truck, label: 'Drivers', perm: 'manage_drivers' },
@@ -203,7 +188,7 @@ const DashboardLayout = ({ children }) => {
     { id: 'popup-ads', to: '/popup-ads', icon: Megaphone, label: 'Popup Ads', perm: 'view_dashboard' },
     { id: 'banners', to: '/banners', icon: Image, label: 'Banners', perm: 'view_dashboard' },
     { id: 'users', to: '/users', icon: Users, label: 'Users', perm: 'manage_users' },
-    { id: 'admins', icon: Users, to: '/admins', label: 'Admin Management', perm: 'manage_admins' },
+    { id: 'admins', to: '/admins', icon: Users, label: 'Admin Management', perm: 'manage_admins' },
     { id: 'b2b-verification', to: '/b2b-verification', icon: ShieldCheck, label: 'B2B Verification', perm: 'manage_b2b_verification' },
     { id: 'payments', to: '/payments', icon: Wallet, label: 'Payments', perm: 'manage_sellers' },
     { id: 'cash', to: '/cash', icon: Wallet, label: 'Cash Management', perm: 'manage_cash' },
@@ -232,37 +217,47 @@ const DashboardLayout = ({ children }) => {
       });
   }, [admin.role, admin.permissions]);
 
-  const [openSubmenus, setOpenSubmenus] = React.useState({
-    invoices: true,
-    subcategories: true
-  });
+  const [openSubmenus, setOpenSubmenus] = React.useState({});
+  const navRef = React.useRef(null);
 
-  const isChildActive = React.useCallback((child, parentItem) => {
-    const [childPath, childSearch] = child.to.split('?');
-    if (location.pathname !== childPath) return false;
-
-    if (childSearch) {
-      if (location.search.includes(childSearch)) return true;
-      if (!location.search && parentItem.id === 'subcategories') {
-        return true;
-      }
-      return false;
+  const isItemActive = React.useCallback((item) => {
+    if (item.to === '/') {
+      return location.pathname === '/';
     }
-    return true;
-  }, [location.pathname, location.search]);
+    if (location.pathname === item.to) {
+      return true;
+    }
+    if (item.id === 'products' && (location.pathname === '/add-product' || location.pathname.startsWith('/edit-product/'))) {
+      return true;
+    }
+    if (item.children && item.children.length > 0) {
+      return item.children.some(c => location.pathname === c.to.split('?')[0]);
+    }
+    return false;
+  }, [location.pathname]);
 
-  // Keep active submenu open automatically
+  // Keep active submenu open automatically if children exist
   React.useEffect(() => {
     menuItems.forEach(item => {
       if (item.children) {
         const isParentActive = location.pathname === item.to;
-        const hasActiveChild = item.children.some(child => isChildActive(child, item));
+        const hasActiveChild = item.children.some(child => location.pathname === child.to.split('?')[0]);
         if (isParentActive || hasActiveChild) {
           setOpenSubmenus(prev => ({ ...prev, [item.id]: true }));
         }
       }
     });
-  }, [location.pathname, location.search, isChildActive, menuItems]);
+  }, [location.pathname, menuItems]);
+
+  // Auto scroll active sidebar item into view smoothly on route change or initial load
+  React.useEffect(() => {
+    if (navRef.current) {
+      const activeEl = navRef.current.querySelector('[data-active="true"]');
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [location.pathname]);
 
   const toggleSubmenu = (itemId, e) => {
     e.stopPropagation();
@@ -277,7 +272,7 @@ const DashboardLayout = ({ children }) => {
     for (const item of menuItems) {
       if (item.children) {
         for (const child of item.children) {
-          if (isChildActive(child, item)) {
+          if (location.pathname === child.to.split('?')[0]) {
             return `${item.label} / ${child.label}`;
           }
         }
@@ -312,29 +307,32 @@ const DashboardLayout = ({ children }) => {
       {/* Sidebar */}
       <aside className="glass animate-slide" style={{
         width: '280px',
-        padding: '32px 16px',
+        padding: '24px 14px',
         margin: isMobile ? '0' : '16px',
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
         height: isMobile ? '100vh' : 'calc(100vh - 32px)',
         zIndex: isMobile ? 999 : 10,
-        top: isMobile ? 0 : undefined,
-        left: isMobile ? 0 : undefined,
+        top: isMobile ? 0 : '16px',
+        left: isMobile ? 0 : '16px',
+        bottom: isMobile ? 0 : '16px',
         borderRadius: isMobile ? '0 24px 24px 0' : '16px',
         transform: isMobile ? (sidebarOpen ? 'translateX(0)' : 'translateX(-110%)') : 'none',
-        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin 0.3s, height 0.3s, border-radius 0.3s'
+        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin 0.3s, height 0.3s, border-radius 0.3s',
+        boxSizing: 'border-box'
       }}>
-        <div style={{ padding: '0 16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '4px 12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <div>
             <h1 style={{
-              fontSize: '28px',
+              fontSize: '26px',
               fontWeight: 800,
               background: 'linear-gradient(135deg, #6366f1, #ec4899)',
               WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
+              WebkitTextFillColor: 'transparent',
+              letterSpacing: '0.5px'
             }}>ZUDO</h1>
-            <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>Admin Panel v1.0</p>
+            <p style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px', fontWeight: 500 }}>Admin Panel v1.0</p>
           </div>
           {isMobile && (
             <button
@@ -356,19 +354,33 @@ const DashboardLayout = ({ children }) => {
           )}
         </div>
 
-        <nav style={{ flex: 1, overflowY: 'auto', paddingRight: '8px' }} className="custom-scrollbar">
+        <nav
+          ref={navRef}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            paddingRight: '6px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '3px'
+          }}
+          className="custom-scrollbar"
+        >
           {menuItems.map((item) => {
-            const isParentDirectlyActive = location.pathname === item.to;
-            const hasActiveChild = item.children && item.children.some(c => isChildActive(c, item));
-            const isExpanded = !!openSubmenus[item.id];
+            const isActive = isItemActive(item);
             const hasChildren = item.children && item.children.length > 0;
+            const isExpanded = !!openSubmenus[item.id];
 
             return (
-              <div key={item.id} style={{ marginBottom: '6px' }}>
+              <div key={item.id} style={{ position: 'relative' }}>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                   <Link
                     to={item.to}
+                    data-active={isActive ? 'true' : 'false'}
                     onClick={() => {
+                      if (isMobile) setSidebarOpen(false);
                       if (hasChildren && !isExpanded) {
                         setOpenSubmenus(prev => ({ ...prev, [item.id]: true }));
                       }
@@ -377,39 +389,42 @@ const DashboardLayout = ({ children }) => {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '12px',
-                      padding: '11px 16px',
-                      paddingRight: hasChildren ? '40px' : '16px',
+                      padding: '10px 14px',
+                      paddingRight: hasChildren ? '36px' : '14px',
                       borderRadius: '12px',
                       width: '100%',
                       textDecoration: 'none',
-                      color: isParentDirectlyActive ? '#fff' : hasActiveChild ? 'var(--text-main)' : 'var(--text-dim)',
-                      background: isParentDirectlyActive
+                      color: isActive ? '#ffffff' : 'var(--text-dim)',
+                      background: isActive
                         ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
-                        : hasActiveChild
-                          ? 'rgba(99, 102, 241, 0.12)'
-                          : 'transparent',
-                      border: hasActiveChild && !isParentDirectlyActive
-                        ? '1px solid rgba(99, 102, 241, 0.25)'
-                        : '1px solid transparent',
-                      transition: 'all 0.25s ease',
-                      boxShadow: isParentDirectlyActive ? '0 4px 15px rgba(99, 102, 241, 0.3)' : 'none',
+                        : 'transparent',
+                      border: '1px solid transparent',
+                      transition: 'all 0.2s ease',
+                      boxShadow: isActive ? '0 4px 15px rgba(99, 102, 241, 0.35)' : 'none',
                       boxSizing: 'border-box'
                     }}
                     onMouseEnter={(e) => {
-                      if (!isParentDirectlyActive && !hasActiveChild) {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                      if (!isActive) {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
                         e.currentTarget.style.color = 'var(--text-main)';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (!isParentDirectlyActive && !hasActiveChild) {
+                      if (!isActive) {
                         e.currentTarget.style.background = 'transparent';
                         e.currentTarget.style.color = 'var(--text-dim)';
                       }
                     }}
+                    title={item.label}
                   >
-                    <item.icon size={19} style={{ flexShrink: 0, opacity: isParentDirectlyActive ? 1 : 0.85 }} />
-                    <span style={{ fontWeight: isParentDirectlyActive || hasActiveChild ? 600 : 500, fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <item.icon size={18} style={{ flexShrink: 0, opacity: isActive ? 1 : 0.85 }} />
+                    <span style={{
+                      fontWeight: isActive ? 600 : 500,
+                      fontSize: '13.5px',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
                       {item.label}
                     </span>
                   </Link>
@@ -425,7 +440,7 @@ const DashboardLayout = ({ children }) => {
                         transform: 'translateY(-50%)',
                         background: 'transparent',
                         border: 'none',
-                        color: isParentDirectlyActive ? '#fff' : 'var(--text-dim)',
+                        color: isActive ? '#fff' : 'var(--text-dim)',
                         cursor: 'pointer',
                         padding: '6px',
                         display: 'flex',
@@ -444,7 +459,7 @@ const DashboardLayout = ({ children }) => {
                       title={isExpanded ? 'Collapse' : 'Expand'}
                     >
                       <ChevronDown
-                        size={15}
+                        size={14}
                         style={{
                           transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                           transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)'
@@ -457,32 +472,36 @@ const DashboardLayout = ({ children }) => {
                 {hasChildren && isExpanded && (
                   <div
                     style={{
-                      margin: '4px 0 6px 20px',
-                      paddingLeft: '14px',
+                      margin: '4px 0 6px 18px',
+                      paddingLeft: '12px',
                       borderLeft: '2px solid rgba(99, 102, 241, 0.25)',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '4px'
+                      gap: '3px'
                     }}
                   >
                     {item.children.map((child) => {
-                      const childActive = isChildActive(child, item);
+                      const childActive = location.pathname === child.to.split('?')[0];
                       const ChildIcon = child.icon;
                       return (
                         <Link
                           key={child.id}
                           to={child.to}
+                          data-active={childActive ? 'true' : 'false'}
+                          onClick={() => {
+                            if (isMobile) setSidebarOpen(false);
+                          }}
                           style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: '10px',
-                            padding: '9px 12px',
+                            padding: '8px 12px',
                             borderRadius: '10px',
                             textDecoration: 'none',
                             fontSize: '13px',
-                            color: childActive ? '#fff' : 'var(--text-dim)',
+                            color: childActive ? '#ffffff' : 'var(--text-dim)',
                             background: childActive
-                              ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.85), rgba(139, 92, 246, 0.85))'
+                              ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9))'
                               : 'transparent',
                             boxShadow: childActive ? '0 2px 10px rgba(99, 102, 241, 0.25)' : 'none',
                             border: childActive ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid transparent',
@@ -501,9 +520,10 @@ const DashboardLayout = ({ children }) => {
                               e.currentTarget.style.color = 'var(--text-dim)';
                             }
                           }}
+                          title={child.label}
                         >
                           {ChildIcon ? (
-                            <ChildIcon size={15} style={{ opacity: childActive ? 1 : 0.75, flexShrink: 0 }} />
+                            <ChildIcon size={14} style={{ opacity: childActive ? 1 : 0.75, flexShrink: 0 }} />
                           ) : (
                             <span style={{
                               width: '5px',
@@ -527,32 +547,34 @@ const DashboardLayout = ({ children }) => {
           })}
         </nav>
 
-        <div className="glass-card" style={{ padding: '16px', borderRadius: '16px', marginTop: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        <div className="glass-card" style={{ padding: '12px 14px', borderRadius: '14px', marginTop: '14px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: '36px',
+              height: '36px',
               borderRadius: '10px',
               background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 'bold',
-              color: 'white'
+              color: 'white',
+              flexShrink: 0,
+              fontSize: '15px'
             }}>
-              {admin.name?.[0]}
+              {admin.name?.[0] || 'A'}
             </div>
-            <div style={{ overflow: 'hidden' }}>
-              <p style={{ fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{admin.name}</p>
-              <p style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'capitalize' }}>{admin.role?.replace('_', ' ')}</p>
+            <div style={{ overflow: 'hidden', minWidth: 0 }}>
+              <p style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{admin.name || 'Admin'}</p>
+              <p style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'capitalize', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{admin.role?.replace('_', ' ') || 'Super Admin'}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
             style={{
               width: '100%',
-              padding: '10px',
-              borderRadius: '10px',
+              padding: '8px 12px',
+              borderRadius: '9px',
               border: 'none',
               background: 'var(--glass-bg)',
               color: 'var(--text-main)',
@@ -560,10 +582,13 @@ const DashboardLayout = ({ children }) => {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+              transition: 'all 0.2s ease'
             }}
           >
-            <LogOut size={18} />
+            <LogOut size={16} />
             <span>Logout</span>
           </button>
         </div>
