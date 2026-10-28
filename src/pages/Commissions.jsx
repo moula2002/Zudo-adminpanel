@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const COMMON_UNITS = ['pcs', 'g', 'kg', 'ltr', 'ml'];
+const COMMON_UNITS = ['pcs', 'g', 'kg', 'ltr', 'ml', 'bag'];
 
 const Commissions = () => {
   const [categories, setCategories] = useState([]);

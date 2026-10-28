@@ -25,6 +25,7 @@ const AddProduct = () => {
     unit: 'pcs',
     sellerId: '',
     stock: 0,
+    stockStatus: 'Available',
     description: '',
     image: null,
     pdf: null
@@ -238,6 +239,7 @@ const AddProduct = () => {
                 <option value="kg">kg</option>
                 <option value="ltr">ltr</option>
                 <option value="ml">ml</option>
+                <option value="bag">bag</option>
               </select>
             </div>
           </div>

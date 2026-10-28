@@ -32,6 +32,7 @@ const EditProduct = () => {
     categoryId: '',
     subCategoryId: '',
     stock: '',
+    stockStatus: 'Available',
     sku: '',
     gstPercent: '0',
     sellerId: '',
@@ -376,6 +377,7 @@ const EditProduct = () => {
                     <option value="kg">kg</option>
                     <option value="ltr">ltr</option>
                     <option value="ml">ml</option>
+                    <option value="bag">bag</option>
                   </select>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
