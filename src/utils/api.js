@@ -133,6 +133,17 @@ const setupInterceptors = (instance) => {
           data: response.data,
           timestamp: Date.now()
         });
+      } else {
+        // Automatically invalidate related GET cache on mutations (POST, PUT, DELETE, PATCH)
+        const rawUrl = response.config?.url || '';
+        const cleanUrl = rawUrl.split('?')[0];
+        const segments = cleanUrl.split('/').filter(Boolean);
+        const rootSegment = segments[0] ? `/${segments[0]}` : '';
+        if (rootSegment) {
+          clearApiCache(rootSegment);
+        } else {
+          clearApiCache();
+        }
       }
       activeRequests = Math.max(0, activeRequests - 1);
       emitLoadState();

@@ -34,6 +34,8 @@ const EditProduct = () => {
     subCategoryId: '',
     stock: '',
     sku: '',
+    hsn: '',
+    stockStatus: 'Available',
     gstPercent: '0',
     sellerId: '',
     sellerName: '',
@@ -71,6 +73,8 @@ const EditProduct = () => {
           subCategoryId: p.subCategoryId?._id || p.subCategoryId || '',
           stock: p.stock || '',
           sku: p.sku || '',
+          hsn: p.hsn || '',
+          stockStatus: p.stockStatus || 'Available',
           gstPercent: p.gstPercent !== undefined ? String(p.gstPercent) : '0',
           sellerId: p.sellerId || '',
           sellerName: p.sellerName || 'Zudo Official',
@@ -386,9 +390,12 @@ const EditProduct = () => {
                   >
                     <option value="pcs">pcs</option>
                     <option value="g">g</option>
-                    <option value="kg">kg</option>
-                    <option value="ltr">ltr</option>
-                    <option value="ml">ml</option>
+                          <option value="kg">kg</option>
+                          <option value="ltr">ltr</option>
+                          <option value="ml">ml</option>
+                          <option value="pcs">pcs</option>
+                          <option value="bag">bag</option>
+                    <option value="bag">bag</option>
                   </select>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -402,16 +409,7 @@ const EditProduct = () => {
                     required
                   />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>SKU (Optional)</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    placeholder="SKU-XYZ-001"
-                    value={formData.sku}
-                    onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                  />
-                </div>
+                
               </div>
 
               {/* Pricing Breakdown Hint */}
@@ -500,9 +498,11 @@ const EditProduct = () => {
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px', fontWeight: 600 }}>Unit *</label>
                               <select className="input-field" value={variant.packetSizeUnit} onChange={(e) => handleB2cChange(index, 'packetSizeUnit', e.target.value)} required style={{ height: '36px', padding: '0 8px', fontSize: '13px', cursor: 'pointer' }}>
                                 <option value="g">g</option>
-                                <option value="kg">kg</option>
-                                <option value="ltr">ltr</option>
-                                <option value="ml">ml</option>
+                          <option value="kg">kg</option>
+                          <option value="ltr">ltr</option>
+                          <option value="ml">ml</option>
+                          <option value="pcs">pcs</option>
+                          <option value="bag">bag</option>
                               </select>
                             </div>
                             <div style={{ flex: 1.5 }}>
@@ -542,9 +542,11 @@ const EditProduct = () => {
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px', fontWeight: 600 }}>Unit *</label>
                               <select className="input-field" value={variant.packetSizeUnit} onChange={(e) => handleB2bChange(index, 'packetSizeUnit', e.target.value)} required style={{ height: '36px', padding: '0 8px', fontSize: '13px', cursor: 'pointer' }}>
                                 <option value="g">g</option>
-                                <option value="kg">kg</option>
-                                <option value="ltr">ltr</option>
-                                <option value="ml">ml</option>
+                          <option value="kg">kg</option>
+                          <option value="ltr">ltr</option>
+                          <option value="ml">ml</option>
+                          <option value="pcs">pcs</option>
+                          <option value="bag">bag</option>
                               </select>
                             </div>
                             <div style={{ flex: 1.5 }}>
@@ -661,7 +663,7 @@ const EditProduct = () => {
                     disabled={!formData.categoryId}
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
-                    <option value="">Select Sub-Category</option>
+                    <option value="">Select Sub-Category (Optional)</option>
                     {selectedCategory?.subCategories?.map(sub => (
                       <option key={sub._id} value={sub._id}>{sub.name}</option>
                     ))}

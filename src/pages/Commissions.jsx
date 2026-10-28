@@ -1,6 +1,6 @@
 import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
-import api from '../utils/api';
+import api, { clearApiCache } from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
 import { 
   Percent, 
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const COMMON_UNITS = ['pcs', 'g', 'kg', 'ltr', 'ml'];
+const COMMON_UNITS = ['pcs', 'g', 'kg', 'ltr', 'ml', 'bag'];
 
 const Commissions = () => {
   const [categories, setCategories] = useState([]);
@@ -76,13 +76,16 @@ const Commissions = () => {
   const [customUnit, setCustomUnit] = useState('');
   const [showCustomUnitInput, setShowCustomUnitInput] = useState(false);
 
-  const fetchCategories = async () => {
-    setLoading(true);
+  const fetchCategories = async (skipCache = false) => {
+    if (!skipCache) {
+      setLoading(true);
+    }
     try {
+      const cacheOpts = skipCache ? { skipCache: true, headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } } : {};
       const [catRes, commRes, billRes] = await Promise.allSettled([
-        api.get('/categories'),
-        api.get('/commissions'),
-        api.get('/commissions/minimum-billing')
+        api.get('/categories', cacheOpts),
+        api.get('/commissions', cacheOpts),
+        api.get('/commissions/minimum-billing', cacheOpts)
       ]);
 
       const rawCats = catRes.status === 'fulfilled' ? catRes.value.data : [];
@@ -122,17 +125,53 @@ const Commissions = () => {
 
   const handleSaveMinBill = async (targetLocId = null, b2bVal = null, b2cVal = null) => {
     setUpdatingMinBill(true);
+    const finalB2B = b2bVal !== null ? b2bVal : minBillAmountB2B;
+    const finalB2C = b2cVal !== null ? b2cVal : minBillAmountB2C;
+
+    // Immediately update local UI state so new price displays right away
+    if (!isGlobalMinBill) {
+      setMinBillAmountB2B(finalB2B);
+      setMinBillAmountB2C(finalB2C);
+    } else if (targetLocId) {
+      setMinBillData(prev => prev.map(item => 
+        item.locationId === targetLocId 
+          ? { ...item, minimumBillAmountB2B: finalB2B, minimumBillAmountB2C: finalB2C } 
+          : item
+      ));
+    } else {
+      setMinBillData(prev => prev.map(item => ({
+        ...item,
+        minimumBillAmountB2B: finalB2B,
+        minimumBillAmountB2C: finalB2C
+      })));
+    }
+
     try {
-      await api.put('/commissions/minimum-billing', {
-        minimumBillAmountB2B: b2bVal !== null ? b2bVal : minBillAmountB2B,
-        minimumBillAmountB2C: b2cVal !== null ? b2cVal : minBillAmountB2C,
+      const res = await api.put('/commissions/minimum-billing', {
+        minimumBillAmountB2B: finalB2B,
+        minimumBillAmountB2C: finalB2C,
         targetLocationId: targetLocId
       });
+
+      // Clear memory cache for commissions and minimum billing
+      clearApiCache('/commissions');
+
+      // If backend returns validated values, sync state
+      if (res.data?.minimumBillAmountB2B !== undefined && !isGlobalMinBill) {
+        setMinBillAmountB2B(res.data.minimumBillAmountB2B);
+      }
+      if (res.data?.minimumBillAmountB2C !== undefined && !isGlobalMinBill) {
+        setMinBillAmountB2C(res.data.minimumBillAmountB2C);
+      }
+
       toast.success('Minimum billing settings saved successfully!');
-      fetchCategories();
+      // Re-fetch fresh data from server with cache bypassed
+      await fetchCategories(true);
     } catch (err) {
       console.error(err);
       toast.error('Failed to save minimum billing settings');
+      // Re-fetch to restore accurate state on error
+      fetchCategories(true);
     } finally {
       setUpdatingMinBill(false);
     }
@@ -206,8 +245,10 @@ const Commissions = () => {
       await api.put(`/commissions/category/${selectedCategory._id}`, {
         commissions: commissionsList
       });
+      clearApiCache('/commissions');
       setSelectedCategory(null);
-      fetchCategories();
+      toast.success('Commission settings saved successfully!');
+      await fetchCategories(true);
     } catch (err) {
       console.error(err);
       toast.error('Failed to save commissions settings');
