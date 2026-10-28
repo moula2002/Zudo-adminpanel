@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -31,7 +32,7 @@ const Categories = () => {
         fetchCategories();
       } catch (error) {
         console.error("Error deleting category", error);
-        alert("Failed to delete category");
+        toast.error("Failed to delete category");
       }
     }
   };
@@ -43,7 +44,7 @@ const Categories = () => {
         fetchCategories();
       } catch (error) {
         console.error("Error deleting subcategory", error);
-        alert("Failed to delete subcategory");
+        toast.error("Failed to delete subcategory");
       }
     }
   };
@@ -71,7 +72,7 @@ const Categories = () => {
       fetchCategories();
     } catch (err) {
       console.error(err);
-      alert('Failed to add category');
+      toast.error('Failed to add category');
     } finally {
       setSubmitting(false);
     }

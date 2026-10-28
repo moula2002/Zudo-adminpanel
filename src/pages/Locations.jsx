@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { MapPin, Plus, Edit2, Trash2, Loader2, CheckCircle2, AlertCircle, X, Building2, Cog } from 'lucide-react';
@@ -13,6 +14,8 @@ const Locations = () => {
   const [status, setStatus] = useState({ type: '', message: '' });
   const [pinSearch, setPinSearch] = useState('');
   const [manualPincode, setManualPincode] = useState('');
+  const [isCustomState, setIsCustomState] = useState(false);
+  const [isCustomCity, setIsCustomCity] = useState(false);
 
 
   useEffect(() => {
@@ -54,10 +57,10 @@ const Locations = () => {
 
   const handleSelectAllPincodes = () => {
     if (formData.state && formData.city) {
-      const allPins = locationData[formData.state][formData.city] || [];
+      const allPins = (locationData[formData.state] || {})[formData.city] || [];
       const currentPins = formData.pincode ? formData.pincode.split(',').map(p => p.trim()) : [];
 
-      if (currentPins.length === allPins.length) {
+      if (currentPins.length === allPins.length && allPins.length > 0) {
         setFormData({ ...formData, pincode: '' });
       } else {
         setFormData({ ...formData, pincode: allPins.join(', ') });
@@ -112,7 +115,7 @@ const Locations = () => {
       await api.delete(`/locations/${id}`);
       fetchLocations();
     } catch (err) {
-      alert('Failed to delete location');
+      toast.error('Failed to delete location');
     }
   };
 
@@ -173,47 +176,90 @@ const Locations = () => {
 
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '600px', borderRadius: '32px', overflow: 'hidden' }}>
-            <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '600px', borderRadius: '32px', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 48px)' }}>
+            <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <h3 style={{ fontSize: '20px', fontWeight: 800 }}>{editingLocation ? 'Edit Location' : 'Add New Location'}</h3>
               <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}><X size={24} /></button>
             </div>
-            <form onSubmit={handleSubmit} style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '8px', display: 'block' }}>State</label>
-                  <select
-                    className="input-field"
-                    required
-                    value={formData.state}
-                    onChange={e => {
-                      const state = e.target.value;
-                      setFormData({ ...formData, state, city: '', pincode: '' });
-                    }}
-                  >
-                    <option value="">Select State</option>
-                    {Object.keys(locationData).sort().map(state => (
-                      <option key={state} value={state}>{state}</option>
-                    ))}
-                  </select>
+                  {!isCustomState ? (
+                    <select
+                      className="input-field"
+                      required
+                      value={formData.state}
+                      onChange={e => {
+                        if (e.target.value === 'custom') {
+                          setIsCustomState(true);
+                          setFormData({ ...formData, state: '', city: '', pincode: '' });
+                          setIsCustomCity(true);
+                        } else {
+                          setFormData({ ...formData, state: e.target.value, city: '', pincode: '' });
+                          setIsCustomCity(false);
+                        }
+                      }}
+                    >
+                      <option value="">Select State</option>
+                      {Object.keys(locationData).sort().map(state => (
+                        <option key={state} value={state}>{state}</option>
+                      ))}
+                      <option value="custom">+ Custom State</option>
+                    </select>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input 
+                        type="text" 
+                        placeholder="Enter custom state" 
+                        className="input-field"
+                        required
+                        value={formData.state}
+                        onChange={e => setFormData({ ...formData, state: e.target.value })}
+                      />
+                      <button type="button" onClick={() => { setIsCustomState(false); setIsCustomCity(false); setFormData({ ...formData, state: '', city: '', pincode: '' }); }} className="btn-secondary" style={{ padding: '0 12px', borderRadius: '12px' }}><X size={16} /></button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '8px', display: 'block' }}>City</label>
-                  <select
-                    className="input-field"
-                    required
-                    disabled={!formData.state}
-                    value={formData.city}
-                    onChange={e => {
-                      const city = e.target.value;
-                      setFormData({ ...formData, city, pincode: '' });
-                    }}
-                  >
-                    <option value="">Select City</option>
-                    {formData.state && Object.keys(locationData[formData.state]).sort().map(city => (
-                      <option key={city} value={city}>{city}</option>
-                    ))}
-                  </select>
+                  {!isCustomCity ? (
+                    <select
+                      className="input-field"
+                      required
+                      disabled={!formData.state && !isCustomState}
+                      value={formData.city}
+                      onChange={e => {
+                        if (e.target.value === 'custom') {
+                          setIsCustomCity(true);
+                          setFormData({ ...formData, city: '', pincode: '' });
+                        } else {
+                          setFormData({ ...formData, city: e.target.value, pincode: '' });
+                        }
+                      }}
+                    >
+                      <option value="">Select City</option>
+                      {formData.state && locationData[formData.state] && Object.keys(locationData[formData.state]).sort().map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                      <option value="custom">+ Custom City</option>
+                    </select>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input 
+                        type="text" 
+                        placeholder="Enter custom city" 
+                        className="input-field"
+                        required
+                        value={formData.city}
+                        onChange={e => setFormData({ ...formData, city: e.target.value })}
+                      />
+                      {!isCustomState && (
+                        <button type="button" onClick={() => { setIsCustomCity(false); setFormData({ ...formData, city: '', pincode: '' }); }} className="btn-secondary" style={{ padding: '0 12px', borderRadius: '12px' }}><X size={16} /></button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div style={{ gridColumn: '1/-1' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -336,8 +382,8 @@ const Locations = () => {
                     />
                   </div>
                 </div>
-              </div>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+              </div>              </div>
+              <div style={{ display: 'flex', gap: '12px', padding: '20px 32px', borderTop: '1px solid var(--glass-border)', background: 'var(--card-bg)', flexShrink: 0 }}>
                 <button type="button" onClick={() => setShowForm(false)} className="btn-primary" style={{ flex: 1, background: 'var(--glass-bg)', color: 'var(--text-main)' }}>Cancel</button>
                 <button type="submit" disabled={loading} className="btn-primary" style={{ flex: 2 }}>
                   {loading ? <Loader2 className="animate-spin" /> : editingLocation ? 'Update Location' : 'Save Location'}

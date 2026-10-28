@@ -1,16 +1,75 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
-import axios, { getImageUrl } from '../utils/api';
+import axios, { getImageUrl, clearApiCache } from '../utils/api';
 import { 
   Package, Truck, CheckCircle, XCircle, Clock, MapPin, MapPinOff, RefreshCw,
   Phone, User, Send, Loader2, Search, Filter, DollarSign, 
   Download, RefreshCcw, ShieldCheck, AlertTriangle, Printer,
-  Edit, Plus, Trash2, X
+  Edit, Plus, Trash2, X, QrCode, Table, LayoutGrid, Navigation, Car, Building2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useSocket } from '../context/SocketContext';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [allDrivers, setAllDrivers] = useState([]);
+  const [viewMode, setViewMode] = useState('table');
+  const [orderRoutes, setOrderRoutes] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('zudo_order_routes') || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const updateOrderRoute = async (orderId, routeKey, val) => {
+    setOrderRoutes(prev => {
+      const updated = {
+        ...prev,
+        [orderId]: {
+          ...(prev[orderId] || {}),
+          [routeKey]: val
+        }
+      };
+      localStorage.setItem('zudo_order_routes', JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      await axios.put(`/orders/${orderId}/routes`, { [routeKey]: val });
+    } catch (e) {
+      // Local state & offline fallback continue seamlessly
+    }
+  };
+
+  const getDriverDetails = (driverRef) => {
+    if (!driverRef) return null;
+    const id = typeof driverRef === 'object' ? (driverRef._id || driverRef.id) : driverRef;
+    const found = allDrivers.find(d => d._id === id) || drivers.find(d => d._id === id);
+    const name = found?.name || (typeof driverRef === 'object' ? driverRef.name : 'Assigned Driver');
+    const vehicle = found?.vehicleNo || found?.vehicleDetails || (typeof driverRef === 'object' ? (driverRef.vehicleNo || driverRef.vehicleDetails) : '');
+    const phone = found?.phone || (typeof driverRef === 'object' ? driverRef.phone : '');
+    return { id, name, vehicle, phone, raw: found || driverRef };
+  };
+
+  const getOrderCompanyName = (order) => {
+    if (!order) return 'Guest';
+    const company = order.userId?.businessName || 
+                    order.userId?.companyName || 
+                    order.shippingAddress?.companyName || 
+                    order.shippingAddress?.businessName;
+    if (company && typeof company === 'string' && company.trim()) {
+      return company.trim();
+    }
+    return order.userId?.name || order.shippingAddress?.name || 'Guest';
+  };
+
+  const getSellerCompanyName = (seller) => {
+    if (!seller) return 'Zudo Official';
+    if (typeof seller === 'string') return seller;
+    return seller.businessName || seller.storeName || seller.companyName || seller.name || 'Zudo Official';
+  };
+
   const [loading, setLoading] = useState(true);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [showDriverModal, setShowDriverModal] = useState(false);
@@ -18,14 +77,22 @@ const Orders = () => {
   const [showCashModal, setShowCashModal] = useState(false);
   const [showReturnsModal, setShowReturnsModal] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusActionData, setStatusActionData] = useState({ orderId: null, status: null });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteOrderId, setDeleteOrderId] = useState(null);
+  const [showReturnDriverModal, setShowReturnDriverModal] = useState(false);
+  const [returnDriverActionData, setReturnDriverActionData] = useState({ orderId: null });
+  const [returnDriverIdInput, setReturnDriverIdInput] = useState('');
   const [otp, setOtp] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
   const user = JSON.parse(localStorage.getItem('zudo_admin_user') || '{}');
+  const { refreshFlag } = useSocket();
   const [activeType, setActiveType] = useState(user.targetSegment && user.targetSegment !== 'Both' ? user.targetSegment : 'All');
   const [cashStats, setCashStats] = useState({ b2b: 0, b2c: 0 });
   const [cashCollectors, setCashCollectors] = useState([]);
-  const [daysFilter, setDaysFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('');
 
   // Manual Order Creation & Editing States
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -74,21 +141,80 @@ const Orders = () => {
     setLocationError(null);
     try {
       const { data } = await axios.get(`/drivers/${driverId}/location`);
-      setDriverLocation(data);
+      if (data && data.active === false) {
+        // Fall back to driver's stored currentLocation from allDrivers or drivers list
+        const matched = allDrivers.find(d => d._id === driverId) || drivers.find(d => d._id === driverId);
+        if (matched?.currentLocation && matched.currentLocation.lat != null) {
+          setDriverLocation({
+            lat: matched.currentLocation.lat,
+            lng: matched.currentLocation.lng,
+            updatedAt: matched.currentLocation.updatedAt || new Date().toISOString(),
+            isLastKnown: true
+          });
+          setLocationError(null);
+        } else {
+          setLocationError(data.message || 'Driver live location is not available right now.');
+          setDriverLocation(null);
+        }
+      } else if (data && data.lat != null) {
+        setDriverLocation(data);
+      } else {
+        const matched = allDrivers.find(d => d._id === driverId) || drivers.find(d => d._id === driverId);
+        if (matched?.currentLocation && matched.currentLocation.lat != null) {
+          setDriverLocation({
+            lat: matched.currentLocation.lat,
+            lng: matched.currentLocation.lng,
+            updatedAt: matched.currentLocation.updatedAt || new Date().toISOString(),
+            isLastKnown: true
+          });
+          setLocationError(null);
+        } else {
+          setLocationError('Driver live location is not available right now.');
+          setDriverLocation(null);
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch driver live location', err);
-      setLocationError(err.response?.data?.message || 'Driver live location is not available right now.');
-      setDriverLocation(null);
+      const matched = allDrivers.find(d => d._id === driverId) || drivers.find(d => d._id === driverId);
+      if (matched?.currentLocation && matched.currentLocation.lat != null) {
+        setDriverLocation({
+          lat: matched.currentLocation.lat,
+          lng: matched.currentLocation.lng,
+          updatedAt: matched.currentLocation.updatedAt || new Date().toISOString(),
+          isLastKnown: true
+        });
+        setLocationError(null);
+      } else {
+        setLocationError(err.response?.data?.message || 'Driver live location is not available right now.');
+        setDriverLocation(null);
+      }
     } finally {
       setLoadingLocation(false);
     }
   };
 
-  const handleTrackDriver = (driver) => {
-    setTrackingDriver(driver);
+  const handleTrackDriver = (driverRef) => {
+    const driverId = typeof driverRef === 'object' ? driverRef._id : driverRef;
+    const fullDriver = allDrivers.find(d => d._id === driverId) || drivers.find(d => d._id === driverId) || driverRef;
+    setTrackingDriver(fullDriver);
     setShowTrackingModal(true);
-    fetchDriverLocation(driver._id);
+    fetchDriverLocation(driverId);
   };
+
+  useEffect(() => {
+    let interval;
+    if (showTrackingModal && trackingDriver) {
+      interval = setInterval(() => {
+        const driverId = trackingDriver._id || trackingDriver;
+        if (driverId) {
+          fetchDriverLocation(driverId);
+        }
+      }, 10000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showTrackingModal, trackingDriver]);
 
   useEffect(() => {
     fetchOrders();
@@ -98,13 +224,14 @@ const Orders = () => {
     fetchUsers();
     fetchProducts();
     fetchCategories();
-  }, []);
+  }, [refreshFlag]);
 
   useEffect(() => {
     if (editingOrder) {
       setEoItems(editingOrder.items.map(item => ({
         productId: item.productId?._id || item.productId || item.product,
         name: item.name,
+        sellerName: item.seller?.businessName || item.seller?.storeName || item.seller?.companyName || item.seller?.name || item.sellerName,
         quantity: item.quantity,
         price: item.price
       })));
@@ -145,10 +272,11 @@ const Orders = () => {
     }
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (skipCache = false) => {
     try {
-      const { data } = await axios.get('/orders/admin/all');
-      setOrders(data);
+      const config = skipCache ? { skipCache: true, headers: { 'Cache-Control': 'no-cache' } } : {};
+      const { data } = await axios.get('/orders/admin/all', config);
+      setOrders(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -156,10 +284,32 @@ const Orders = () => {
     }
   };
 
-  const fetchDrivers = async () => {
+  const handleRefresh = async () => {
+    const loadingToast = toast.loading('Refreshing data...');
     try {
-      const { data } = await axios.get('/drivers');
-      setDrivers(data.filter(d => d.status === 'active'));
+      clearApiCache();
+      await Promise.all([
+        fetchOrders(true),
+        fetchDrivers(true),
+        fetchCashStats(true),
+        fetchCashCollectors(true),
+        fetchUsers(true),
+        fetchProducts(true),
+        fetchCategories(true)
+      ]);
+      toast.success('Data refreshed successfully!', { id: loadingToast });
+    } catch (error) {
+      toast.error('Failed to refresh data', { id: loadingToast });
+    }
+  };
+
+  const fetchDrivers = async (skipCache = false) => {
+    try {
+      const config = skipCache ? { skipCache: true, headers: { 'Cache-Control': 'no-cache' } } : {};
+      const { data } = await axios.get('/drivers', config);
+      const list = Array.isArray(data) ? data : [];
+      setAllDrivers(list);
+      setDrivers(list.filter(d => d.status === 'active'));
     } catch (error) {
       console.error('Error fetching drivers:', error);
     }
@@ -211,13 +361,49 @@ const Orders = () => {
     }
   };
 
-  const handleUpdateStatus = async (orderId, status) => {
-    if (!window.confirm(`Are you sure you want to change order status to ${status}?`)) return;
+  const handleUpdateStatus = (orderId, status) => {
+    setStatusActionData({ orderId, status });
+    setShowStatusModal(true);
+  };
+
+  const confirmUpdateStatus = async () => {
+    const { orderId, status } = statusActionData;
+    if (!orderId || !status) return;
+    
     try {
       await axios.put(`/orders/${orderId}/status`, { status });
       fetchOrders();
     } catch (error) {
-      alert('Failed to update status');
+      toast.error('Failed to update status');
+    } finally {
+      setShowStatusModal(false);
+      setStatusActionData({ orderId: null, status: null });
+    }
+  };
+
+  const handleDeleteOrder = (orderId) => {
+    setDeleteOrderId(orderId);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteOrder = async () => {
+    const idToDelete = deleteOrderId;
+    if (!idToDelete) return;
+    setShowDeleteModal(false);
+    setDeleteOrderId(null);
+    try {
+      await axios.delete(`/orders/admin/${idToDelete}`);
+      fetchOrders();
+    } catch (error) {
+      if (error.response && error.response.status === 404) {
+        fetchOrders();
+      } else {
+        console.error('Failed to delete order:', error);
+        toast.error('Failed to delete order');
+      }
+    } finally {
+      setShowDeleteModal(false);
+      setDeleteOrderId(null);
     }
   };
 
@@ -227,7 +413,7 @@ const Orders = () => {
       await axios.put(`/orders/${orderId}/${endpoint}`);
       fetchOrders();
     } catch (error) {
-      alert(`Failed to ${action} return`);
+      toast.error(`Failed to ${action} return`);
     }
   };
 
@@ -241,30 +427,34 @@ const Orders = () => {
       if (res.ok) {
         fetchOrders();
       } else {
-        alert('Failed to update return status');
+        toast.error('Failed to update return status');
       }
     } catch (e) {
-      alert('Error updating return status');
+      toast.error('Error updating return status');
     }
   };
 
-  const handleAssignReturnDriver = async (orderId) => {
-    const driverId = prompt('Enter Driver ID for return pickup:');
-    if (!driverId) return;
+  const handleAssignReturnDriver = (orderId) => {
+    setReturnDriverActionData({ orderId });
+    setReturnDriverIdInput('');
+    setShowReturnDriverModal(true);
+  };
+
+  const confirmAssignReturnDriver = async () => {
+    const { orderId } = returnDriverActionData;
+    const driverId = returnDriverIdInput.trim();
+    if (!orderId || !driverId) return;
+
     try {
-      const res = await fetch(`${API_URL}/api/orders/${orderId}/assign-return-driver`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ driverId })
-      });
-      if (res.ok) {
-        fetchOrders();
-      } else {
-        const data = await res.json();
-        alert('Failed: ' + data.message);
-      }
+      await axios.put(`/orders/${orderId}/assign-return-driver`, { driverId });
+      fetchOrders();
+      toast.success('Driver assigned successfully');
     } catch (e) {
-      alert('Error assigning return driver');
+      const msg = e.response?.data?.message || 'Error assigning return driver';
+      toast.error('Failed: ' + msg);
+    } finally {
+      setShowReturnDriverModal(false);
+      setReturnDriverActionData({ orderId: null });
     }
   };
 
@@ -273,28 +463,48 @@ const Orders = () => {
     if (otp === '1234') { // Dummy OTP for demo
       try {
         await axios.put(`/orders/${orderId}/verify-payment`);
-        alert('Payment Verified & Collected!');
+        toast.success('Payment Verified & Collected!');
         setShowOtpModal(false);
         setOtp('');
         fetchOrders();
       } catch (err) {
-        alert('Verification failed on server');
+        toast.error('Verification failed on server');
       }
     } else {
-      alert('Invalid OTP');
+      toast.error('Invalid OTP');
     }
   };
 
   const exportOrders = () => {
-    const exportData = filteredOrders.map(o => ({
-      ID: o._id,
-      Customer: o.userId?.name || 'Guest',
-      Type: o.userId?.role || 'B2C',
-      Amount: o.totalAmount,
-      Status: o.orderStatus,
-      Payment: o.paymentMethod,
-      Date: new Date(o.createdAt).toLocaleDateString()
-    }));
+    const exportData = filteredOrders.map(o => {
+      const itemsList = o.items ? o.items.map(item => `${item.name} (Qty: ${item.quantity} | ₹${item.price})`).join('; ') : 'No items';
+      
+      return {
+        'Order ID': o._id,
+        'Date & Time': new Date(o.createdAt).toLocaleString(),
+        'Company Name': getOrderCompanyName(o),
+        'Customer Email': o.userId?.email || 'N/A',
+        'Customer Phone': o.userId?.phone || o.shippingAddress?.phone || 'N/A',
+        'Segment': (o.userId?.role || 'B2C').toUpperCase(),
+        'Order Status': o.orderStatus,
+        'Total Amount (INR)': o.totalAmount,
+        'Payment Method': o.paymentMethod,
+        'Payment Status': o.paymentStatus || 'Pending',
+        'Shipping Company / Name': getOrderCompanyName(o),
+        'Shipping Phone': o.shippingAddress?.phone || 'N/A',
+        'Shipping Address': o.shippingAddress ? `${o.shippingAddress.address || ''}, ${o.shippingAddress.city || ''}, ${o.shippingAddress.state || ''} - ${o.shippingAddress.pincode || ''}`.replace(/,\s*,/g, ',').replace(/^[,\s]+|[,\s]+$/g, '') : 'N/A',
+        'Delivery Slot': o.deliverySlot && o.deliverySlot.startTime ? `${o.deliverySlot.startTime} ${o.deliverySlot.endTime && o.deliverySlot.endTime !== '*' ? `- ${o.deliverySlot.endTime}` : ''}`.trim() : 'N/A',
+        'Items Ordered': itemsList,
+        'Drivers': getDriverDetails(o.driverId)?.name || o.driverId?.name || 'Unassigned',
+        'Vehicle Number': getDriverDetails(o.driverId)?.vehicle || 'N/A',
+        'Driver Phone': getDriverDetails(o.driverId)?.phone || o.driverId?.phone || 'N/A',
+        'Route 1': orderRoutes[o._id]?.route1 || (o.shippingAddress?.city ? `${o.shippingAddress.city} Central Hub` : 'Route 1 - Hub'),
+        'Route 2': orderRoutes[o._id]?.route2 || (o.deliverySlot?.startTime ? `Slot ${o.deliverySlot.startTime}` : 'Route 2 - Transit'),
+        'Route 3': orderRoutes[o._id]?.route3 || (o.shippingAddress?.pincode ? `Pincode ${o.shippingAddress.pincode}` : 'Route 3 - Final Drop'),
+        'Assigned Cash Collector': o.cashPersonId?.name || 'Unassigned',
+        'Cash Collector Phone': o.cashPersonId?.phone || 'N/A'
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Orders");
@@ -330,7 +540,7 @@ const Orders = () => {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Manifest #${order._id.slice(-8).toUpperCase()}</title>
+        <title>Manifest #${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
           @page {
@@ -498,6 +708,10 @@ const Orders = () => {
                   <td class="info-value"><span style="color: ${(order.userId?.role || 'b2c') === 'b2b' ? '#6366f1' : '#ec4899'}; font-weight: 700;">${(order.userId?.role || 'b2c').toUpperCase()} Segment</span></td>
                 </tr>
                 <tr>
+                  <td style="color: #64748b;">Delivery Slot:</td>
+                  <td class="info-value">${order.deliverySlot && order.deliverySlot.startTime ? `${order.deliverySlot.startTime} ${order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? '- ' + order.deliverySlot.endTime : ''}` : 'N/A'}</td>
+                </tr>
+                <tr>
                   <td style="color: #64748b;">Payment Mode:</td>
                   <td class="info-value">${order.paymentMethod} (${order.paymentStatus === 'Completed' ? 'PAID' : 'COD/PENDING'})</td>
                 </tr>
@@ -505,8 +719,8 @@ const Orders = () => {
             </div>
             
             <div class="info-box">
-              <div class="info-title">Delivery Consignee</div>
-              <div class="info-value">${order.shippingAddress.name}</div>
+              <div class="info-title">Company / Delivery Consignee</div>
+              <div class="info-value">${getOrderCompanyName(order)}</div>
               <div class="info-subvalue">📞 ${order.shippingAddress.phone}</div>
               <div class="info-subvalue" style="margin-top: 3px; font-size: 8px; line-height: 1.2;">📍 ${order.shippingAddress.address}, ${order.shippingAddress.city}</div>
             </div>
@@ -545,10 +759,28 @@ const Orders = () => {
             </tbody>
           </table>
           
-          <div class="signatures">
-            <div class="signature-box" style="margin-top: 10px;">Security Verification</div>
-            <div class="signature-box" style="margin-top: 10px;">Logistics Handover</div>
-            <div class="signature-box" style="margin-top: 10px;">Consignee Stamp/Sign</div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 10px;">
+            ${(() => {
+              const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
+              const qrCodeDoc = orderSeller?.qrCodeDoc;
+              const qrOption = orderSeller?.qrOption;
+              return qrCodeDoc ? `
+                <div style="display: flex; gap: 8px; align-items: center; border: 1px solid #e2e8f0; padding: 4px; border-radius: 6px;">
+                  <img src="${getImageUrl(qrCodeDoc)}" alt="QR" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: #fff;" />
+                  <div style="display: flex; flex-direction: column;">
+                    <span style="font-size: 8px; font-weight: 700; color: #64748b; text-transform: uppercase;">Scan to Pay</span>
+                    <span style="font-size: 10px; font-weight: 700; color: #0f172a;">${qrOption || 'N/A'}</span>
+                  </div>
+                </div>
+              ` : `
+                <div style="font-size: 9px; color: #64748b; font-weight: 600; padding-bottom: 4px;">QR Code Not Available</div>
+              `;
+            })()}
+            <div class="signatures" style="margin-top: 0; width: auto; flex: 1; display: flex; justify-content: flex-end; gap: 10px;">
+              <div class="signature-box" style="margin-top: 0; min-width: 80px;">Security Verification</div>
+              <div class="signature-box" style="margin-top: 0; min-width: 80px;">Logistics Handover</div>
+              <div class="signature-box" style="margin-top: 0; min-width: 80px;">Consignee Stamp/Sign</div>
+            </div>
           </div>
         </div>
       </body>
@@ -584,7 +816,7 @@ const Orders = () => {
     }
 
     if (todayOrders.length === 0) {
-      alert("No orders found for today to generate manifest.");
+      toast.error("No orders found for today to generate manifest.");
       return;
     }
 
@@ -645,6 +877,10 @@ const Orders = () => {
                   <td class="info-value"><span style="color: ${(order.userId?.role || 'b2c') === 'b2b' ? '#6366f1' : '#ec4899'}; font-weight: 700;">${(order.userId?.role || 'b2c').toUpperCase()} Segment</span></td>
                 </tr>
                 <tr>
+                  <td style="color: #64748b;">Delivery Slot:</td>
+                  <td class="info-value">${order.deliverySlot && order.deliverySlot.startTime ? `${order.deliverySlot.startTime} ${order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? '- ' + order.deliverySlot.endTime : ''}` : 'N/A'}</td>
+                </tr>
+                <tr>
                   <td style="color: #64748b;">Payment Mode:</td>
                   <td class="info-value">${order.paymentMethod} (${order.paymentStatus === 'Completed' ? 'PAID' : 'COD/PENDING'})</td>
                 </tr>
@@ -652,8 +888,8 @@ const Orders = () => {
             </div>
             
             <div class="info-box">
-              <div class="info-title">Delivery Consignee</div>
-              <div class="info-value">${order.shippingAddress.name}</div>
+              <div class="info-title">Company / Delivery Consignee</div>
+              <div class="info-value">${getOrderCompanyName(order)}</div>
               <div class="info-subvalue">📞 ${order.shippingAddress.phone}</div>
               <div class="info-subvalue" style="margin-top: 3px; font-size: 8px; line-height: 1.2;">📍 ${order.shippingAddress.address}, ${order.shippingAddress.city}</div>
             </div>
@@ -888,15 +1124,14 @@ const Orders = () => {
     
     const typeMatch = activeType === 'All' || (order.userId?.role || 'b2c').toUpperCase() === activeType;
 
-    let daysMatch = true;
-    if (daysFilter !== 'All') {
-      const orderDate = new Date(order.createdAt);
-      const now = new Date();
-      const diffDays = (now - orderDate) / (1000 * 60 * 60 * 24);
-      daysMatch = diffDays <= Number(daysFilter);
+    let dateMatch = true;
+    if (dateFilter) {
+      // Compare local date strings by ignoring time
+      const orderDate = new Date(order.createdAt).toLocaleDateString('en-CA'); // YYYY-MM-DD
+      dateMatch = orderDate === dateFilter;
     }
 
-    return statusMatch && typeMatch && daysMatch;
+    return statusMatch && typeMatch && dateMatch;
   });
 
   if (loading) return (
@@ -918,7 +1153,7 @@ const Orders = () => {
           <button onClick={exportOrders} className="btn-primary" style={{ background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Download size={18} /> Export
           </button>
-          <button onClick={fetchOrders} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={handleRefresh} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <RefreshCcw size={18} /> Refresh
           </button>
           <button 
@@ -928,6 +1163,51 @@ const Orders = () => {
           >
             <Plus size={18} /> Create Order
           </button>
+
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--glass-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: viewMode === 'table' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'table' ? '#fff' : 'var(--text-dim)',
+                transition: 'all 0.2s'
+              }}
+              title="Table View (with Drivers & Route Columns)"
+            >
+              <Table size={14} /> Table View
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: viewMode === 'cards' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'cards' ? '#fff' : 'var(--text-dim)',
+                transition: 'all 0.2s'
+              }}
+              title="Card View"
+            >
+              <LayoutGrid size={14} /> Cards View
+            </button>
+          </div>
         </div>
       </div>
 
@@ -972,21 +1252,29 @@ const Orders = () => {
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Timeframe:</span>
-            <select
-              value={daysFilter}
-              onChange={(e) => setDaysFilter(e.target.value)}
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date:</span>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
               style={{
                 padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                 background: 'var(--glass-bg)', color: 'var(--text-main)',
                 border: '1px solid var(--glass-border)', outline: 'none'
               }}
-            >
-              <option value="All" style={{ background: 'var(--card-bg)' }}>All Time</option>
-              <option value="1" style={{ background: 'var(--card-bg)' }}>Last 1 Day</option>
-              <option value="7" style={{ background: 'var(--card-bg)' }}>Last 7 Days</option>
-              <option value="30" style={{ background: 'var(--card-bg)' }}>Last 30 Days</option>
-            </select>
+            />
+            {dateFilter && (
+              <button 
+                onClick={() => setDateFilter('')}
+                style={{ 
+                  background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+                title="Clear Date"
+              >
+                <XCircle size={16} />
+              </button>
+            )}
             <button
               onClick={printTodayManifest}
               style={{
@@ -1033,13 +1321,393 @@ const Orders = () => {
       </div>
 
       {/* Orders List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {filteredOrders.length === 0 ? (
-          <div className="glass-card" style={{ padding: '80px', textAlign: 'center', borderRadius: '32px' }}>
-            <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.2 }} />
-            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)' }}>No orders match the selected criteria</h3>
-          </div>
-        ) : filteredOrders.map(order => (
+      {viewMode === 'table' ? (
+        <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
+          {filteredOrders.length === 0 ? (
+            <div style={{ padding: '80px', textAlign: 'center' }}>
+              <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.2 }} />
+              <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)' }}>No orders match the selected criteria</h3>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1100px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'var(--card-bg)' }}>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Order Ref</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Company & Destination</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Drivers</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 1</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 2</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 3</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Total & Status</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOrders.map(order => {
+                    const isReturn = (order.returnStatus === 'Approved') || (order.items && order.items.some(i => ['Return Approved', 'Picked Up from Customer', 'Returned to Seller'].includes(i.returnStatus)));
+                    const dInfo = getDriverDetails(isReturn ? order.returnDriverId : order.driverId);
+                    const r1Val = orderRoutes[order._id]?.route1 ?? (order.route1 || (order.shippingAddress?.city ? `${order.shippingAddress.city} Central Hub` : 'Route 1 - Hub'));
+                    const r2Val = orderRoutes[order._id]?.route2 ?? (order.route2 || (order.deliverySlot?.startTime ? `Slot ${order.deliverySlot.startTime}` : 'Route 2 - Transit'));
+                    const r3Val = orderRoutes[order._id]?.route3 ?? (order.route3 || (order.shippingAddress?.pincode ? `Pin ${order.shippingAddress.pincode}` : 'Route 3 - Final Drop'));
+
+                    return (
+                      <tr 
+                        key={order._id}
+                        style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s' }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        {/* Order Ref */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-main)', fontFamily: 'monospace' }}>
+                                #{order._id.slice(-8).toUpperCase()}
+                              </span>
+                              <span style={{
+                                fontSize: '9px', fontWeight: 800,
+                                color: (order.userId?.role || 'b2c') === 'b2b' ? 'var(--primary)' : '#ec4899',
+                                background: (order.userId?.role || 'b2c') === 'b2b' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
+                                padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase'
+                              }}>
+                                {(order.userId?.role || 'b2c').toUpperCase()}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                              {new Date(order.createdAt).toLocaleDateString()}
+                            </span>
+                            {order.deliverySlot?.startTime && (
+                              <span style={{ fontSize: '10px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Clock size={10} /> {order.deliverySlot.startTime}{order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? ` - ${order.deliverySlot.endTime}` : ''}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Customer & Destination */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '220px' }}>
+                            <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-main)' }}>
+                              {getOrderCompanyName(order)}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Phone size={11} /> {order.shippingAddress?.phone}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: '1.3', whiteSpace: 'normal' }}>
+                              {order.shippingAddress?.address ? `${order.shippingAddress.address}, ${order.shippingAddress.city}` : 'No address'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Drivers Column */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
+                            {dInfo ? (
+                              <div style={{ background: 'var(--card-bg)', padding: '8px 12px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                  <span style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-main)' }}>
+                                    {dInfo.name}
+                                  </span>
+                                  {isReturn && (
+                                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: '4px' }}>
+                                      Return
+                                    </span>
+                                  )}
+                                </div>
+                                {dInfo.vehicle && (
+                                  <div style={{ marginTop: '3px' }}>
+                                    <span style={{
+                                      fontSize: '11px', fontWeight: 800, color: 'var(--primary)',
+                                      background: 'rgba(99, 102, 241, 0.12)', padding: '2px 6px',
+                                      borderRadius: '6px', fontFamily: 'monospace', letterSpacing: '0.5px'
+                                    }}>
+                                      🚗 {dInfo.vehicle}
+                                    </span>
+                                  </div>
+                                )}
+                                <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedOrderId(order._id);
+                                      setDriverModalType(isReturn ? 'return' : 'delivery');
+                                      setShowDriverModal(true);
+                                    }}
+                                    style={{
+                                      background: 'none', border: 'none', color: 'var(--primary)',
+                                      fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0
+                                    }}
+                                  >
+                                    Change
+                                  </button>
+                                  <span style={{ color: 'var(--glass-border)' }}>•</span>
+                                  <button
+                                    onClick={() => handleTrackDriver(isReturn ? order.returnDriverId : order.driverId)}
+                                    style={{
+                                      background: 'none', border: 'none', color: '#22c55e',
+                                      fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0,
+                                      display: 'inline-flex', alignItems: 'center', gap: '3px'
+                                    }}
+                                  >
+                                    <MapPin size={10} /> Track GPS
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setSelectedOrderId(order._id);
+                                  setDriverModalType(isReturn ? 'return' : 'delivery');
+                                  setShowDriverModal(true);
+                                }}
+                                style={{
+                                  background: 'rgba(99, 102, 241, 0.1)',
+                                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                                  color: 'var(--primary)',
+                                  padding: '8px 12px',
+                                  borderRadius: '10px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  transition: '0.2s'
+                                }}
+                              >
+                                <Truck size={13} /> {isReturn ? 'Assign Return Driver' : 'Assign Driver'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Route 1 */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ minWidth: '130px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                type="text"
+                                value={r1Val}
+                                onChange={(e) => updateOrderRoute(order._id, 'route1', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  fontSize: '11px',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  border: '1px solid var(--glass-border)',
+                                  background: 'var(--input-bg)',
+                                  color: 'var(--text-main)',
+                                  fontWeight: 600,
+                                  transition: '0.2s border-color'
+                                }}
+                                title="Edit Route 1"
+                                placeholder="Route 1..."
+                              />
+                            </div>
+                            <span style={{ fontSize: '9px', color: 'var(--text-dim)', display: 'block', marginTop: '2px' }}>
+                              Primary Hub
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Route 2 */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ minWidth: '130px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                type="text"
+                                value={r2Val}
+                                onChange={(e) => updateOrderRoute(order._id, 'route2', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  fontSize: '11px',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  border: '1px solid var(--glass-border)',
+                                  background: 'var(--input-bg)',
+                                  color: 'var(--text-main)',
+                                  fontWeight: 600,
+                                  transition: '0.2s border-color'
+                                }}
+                                title="Edit Route 2"
+                                placeholder="Route 2..."
+                              />
+                            </div>
+                            <span style={{ fontSize: '9px', color: 'var(--text-dim)', display: 'block', marginTop: '2px' }}>
+                              Transit Slot
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Route 3 */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ minWidth: '130px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                type="text"
+                                value={r3Val}
+                                onChange={(e) => updateOrderRoute(order._id, 'route3', e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  fontSize: '11px',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  border: '1px solid var(--glass-border)',
+                                  background: 'var(--input-bg)',
+                                  color: 'var(--text-main)',
+                                  fontWeight: 600,
+                                  transition: '0.2s border-color'
+                                }}
+                                title="Edit Route 3"
+                                placeholder="Route 3..."
+                              />
+                            </div>
+                            <span style={{ fontSize: '9px', color: 'var(--text-dim)', display: 'block', marginTop: '2px' }}>
+                              Final Drop
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Total & Status */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '140px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--primary)' }}>
+                                ₹{order.totalAmount.toLocaleString()}
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600 }}>
+                                {order.paymentMethod || 'COD'}
+                              </span>
+                            </div>
+
+                            <select
+                              value={order.orderStatus}
+                              onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '8px',
+                                background: 'var(--glass-bg)',
+                                border: '1px solid var(--glass-border)',
+                                color: 'var(--text-main)',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+
+                            <div>
+                              {getStatusBadge(order.orderStatus, order.returnStatus)}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td style={{ padding: '16px 20px', verticalAlign: 'top', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                            {(order.driverId || order.returnDriverId) && (
+                              <button
+                                onClick={() => handleTrackDriver(order.driverId || order.returnDriverId)}
+                                style={{
+                                  background: 'rgba(34, 197, 94, 0.1)',
+                                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                                  color: '#22c55e',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 700
+                                }}
+                                title="Track Driver Live GPS"
+                              >
+                                <MapPin size={12} />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => printManifest(order)}
+                              style={{
+                                background: 'rgba(99, 102, 241, 0.1)',
+                                border: '1px solid rgba(99, 102, 241, 0.3)',
+                                color: 'var(--primary)',
+                                padding: '6px 8px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700
+                              }}
+                              title="Download / Print Manifest"
+                            >
+                              <Download size={12} />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setEditingOrder(order);
+                                setShowEditItemsModal(true);
+                              }}
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid var(--glass-border)',
+                                color: 'var(--text-main)',
+                                padding: '6px 8px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700
+                              }}
+                              title="Edit Items"
+                            >
+                              <Edit size={12} />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteOrder(order._id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: '6px',
+                                borderRadius: '8px'
+                              }}
+                              title="Delete Order"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Cards View */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {filteredOrders.length === 0 ? (
+            <div className="glass-card" style={{ padding: '80px', textAlign: 'center', borderRadius: '32px' }}>
+              <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.2 }} />
+              <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)' }}>No orders match the selected criteria</h3>
+            </div>
+          ) : filteredOrders.map(order => (
           <div key={order._id} className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
             {/* Order Header */}
             <div style={{ padding: '20px 24px', background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1057,6 +1725,17 @@ const Orders = () => {
                     padding: '2px 8px', borderRadius: '6px'
                   }}>{(order.userId?.role || 'b2c').toUpperCase()}</span>
                 </div>
+                {order.deliverySlot && order.deliverySlot.startTime && (
+                  <>
+                    <div style={{ width: '1px', height: '20px', background: 'var(--glass-border)' }}></div>
+                    <div>
+                      <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Delivery Slot</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>
+                        {order.deliverySlot.startTime}{order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? ` - ${order.deliverySlot.endTime}` : ''}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                 <div style={{ textAlign: 'right' }}>
@@ -1072,12 +1751,48 @@ const Orders = () => {
               {/* Customer Intel */}
               <div>
                 <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <User size={12} /> Customer Intel
+                  <Building2 size={12} /> Company Intel
                 </p>
                 <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
-                  <p style={{ fontWeight: 700, marginBottom: '4px' }}>{order.userId?.name || 'Guest'}</p>
+                  <p style={{ fontWeight: 700, marginBottom: '4px' }}>{getOrderCompanyName(order)}</p>
                   <p style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={12} /> {order.shippingAddress.phone}</p>
                   <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '12px', lineHeight: '1.4' }}>{order.shippingAddress.address}, {order.shippingAddress.city}</p>
+                </div>
+              </div>
+
+              {/* Delivery Routes */}
+              <div>
+                <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Navigation size={12} /> Delivery Routes
+                </p>
+                <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 1 (Hub)</span>
+                    <input
+                      type="text"
+                      value={orderRoutes[order._id]?.route1 ?? (order.shippingAddress?.city ? `${order.shippingAddress.city} Central Hub` : 'Route 1 - Hub')}
+                      onChange={(e) => updateOrderRoute(order._id, 'route1', e.target.value)}
+                      style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 2 (Transit)</span>
+                    <input
+                      type="text"
+                      value={orderRoutes[order._id]?.route2 ?? (order.deliverySlot?.startTime ? `Slot ${order.deliverySlot.startTime}` : 'Route 2 - Transit')}
+                      onChange={(e) => updateOrderRoute(order._id, 'route2', e.target.value)}
+                      style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 3 (Final Drop)</span>
+                    <input
+                      type="text"
+                      value={orderRoutes[order._id]?.route3 ?? (order.shippingAddress?.pincode ? `Pin ${order.shippingAddress.pincode}` : 'Route 3 - Final Drop')}
+                      onChange={(e) => updateOrderRoute(order._id, 'route3', e.target.value)}
+                      style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1141,11 +1856,34 @@ const Orders = () => {
                       <img src={item.image} style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }} alt="" />
                       <div style={{ flex: 1 }}>
                         <p style={{ fontSize: '12px', fontWeight: 600 }}>{item.name}</p>
+                        <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: '2px 0' }}>By: <strong style={{ color: 'var(--primary)' }}>{getSellerCompanyName(item.seller)}</strong></p>
                         <p style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{item.quantity} units</p>
                       </div>
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+                <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <QrCode size={12} /> Payment QR
+                </p>
+                {(() => {
+                  const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
+                  const qrCodeDoc = orderSeller?.qrCodeDoc;
+                  const qrOption = orderSeller?.qrOption;
+                  return qrCodeDoc ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(34, 197, 94, 0.05)', borderRadius: '12px', border: '1px solid rgba(34, 197, 94, 0.1)' }}>
+                      <img src={getImageUrl(qrCodeDoc)} alt="QR" style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'contain', background: '#fff' }} />
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#666', fontWeight: 600 }}>Seller QR Option</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: 700 }}>{qrOption || 'N/A'}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>QR Code Not Available</div>
+                  );
+                })()}
               </div>
 
               {/* Logistics & Controls */}
@@ -1220,7 +1958,14 @@ const Orders = () => {
                       className="btn-primary" 
                       style={{ width: '100%', padding: '10px', background: order.returnDriverId ? 'rgba(99, 102, 241, 0.1)' : '#10b981', color: order.returnDriverId ? 'var(--primary)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                     >
-                      <Truck size={14} /> {order.returnDriverId ? `Return Driver: ${order.returnDriverId.name || 'Assigned'}` : 'Assign Return Driver'}
+                      <Truck size={14} /> {(() => {
+                        const retDInfo = getDriverDetails(order.returnDriverId);
+                        return retDInfo ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            Return Driver: <strong>{retDInfo.name}</strong> {retDInfo.vehicle ? `🚗 ${retDInfo.vehicle}` : ''}
+                          </span>
+                        ) : 'Assign Return Driver';
+                      })()}
                     </button>
                   </div>
                 ) : (
@@ -1253,7 +1998,14 @@ const Orders = () => {
                             className="btn-primary" 
                             style={{ flex: 1, padding: '10px', background: order.driverId ? 'rgba(99, 102, 241, 0.1)' : 'var(--primary)', color: order.driverId ? 'var(--primary)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                           >
-                            <Truck size={14} /> {order.driverId ? `Driver: ${order.driverId.name}` : 'Assign Driver'}
+                            <Truck size={14} /> {(() => {
+                              const dInfo = getDriverDetails(order.driverId);
+                              return dInfo ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                  Driver: <strong>{dInfo.name}</strong> {dInfo.vehicle ? `🚗 ${dInfo.vehicle}` : ''}
+                                </span>
+                              ) : 'Assign Driver';
+                            })()}
                           </button>
                           
                           {order.driverId && (
@@ -1306,15 +2058,17 @@ const Orders = () => {
                       </button>
                     )}
                     {['Pending', 'Packed'].includes(order.orderStatus) && (
-                      <button onClick={() => handleUpdateStatus(order._id, 'Cancelled')} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Cancel Order</button>
+                      <button onClick={() => handleUpdateStatus(order._id, 'Cancelled')} style={{ background: 'transparent', border: 'none', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Cancel Order</button>
                     )}
+                    <button onClick={() => handleDeleteOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Delete Order</button>
                   </div>
                 )}
               </div>
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
 
       {/* OTP Modal */}
       {showOtpModal && (
@@ -1414,7 +2168,7 @@ const Orders = () => {
                       setShowDriverModal(false);
                       fetchOrders();
                     } catch (error) {
-                      alert('Failed to assign driver');
+                      toast.error('Failed to assign driver');
                     }
                   }}
                   style={{ 
@@ -1424,8 +2178,27 @@ const Orders = () => {
                 >
                   <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{driver.name[0]}</div>
                   <div style={{ flex: 1, textAlign: 'left' }}>
-                    <p style={{ fontWeight: 700, fontSize: '15px' }}>{driver.name}</p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{driver.vehicleDetails}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <p style={{ fontWeight: 700, fontSize: '15px', margin: 0 }}>{driver.name}</p>
+                      {(driver.vehicleNo || driver.vehicleDetails) && (
+                        <span style={{ 
+                          fontSize: '11px', 
+                          fontWeight: 700, 
+                          color: 'var(--primary)', 
+                          background: 'rgba(99, 102, 241, 0.15)', 
+                          border: '1px solid rgba(99, 102, 241, 0.3)', 
+                          padding: '2px 8px', 
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          letterSpacing: '0.5px'
+                        }}>
+                          🚗 {driver.vehicleNo || driver.vehicleDetails}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0' }}>
+                      📞 {driver.phone} {driver.vehicleDetails && driver.vehicleNo && driver.vehicleDetails !== driver.vehicleNo ? `• ${driver.vehicleDetails}` : ''}
+                    </p>
                   </div>
                 </button>
               ))}
@@ -1440,7 +2213,14 @@ const Orders = () => {
             <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                 <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Driver Tracking</h3>
-                <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{trackingDriver.name} • {trackingDriver.phone}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{trackingDriver.name} • {trackingDriver.phone}</span>
+                  {getDriverDetails(trackingDriver)?.vehicle && (
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', background: 'rgba(99, 102, 241, 0.15)', padding: '1px 6px', borderRadius: '4px' }}>
+                      🚗 {getDriverDetails(trackingDriver).vehicle}
+                    </span>
+                  )}
+                </span>
               </div>
               <button onClick={() => setShowTrackingModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}><XCircle size={24} /></button>
             </div>
@@ -1873,6 +2653,7 @@ const Orders = () => {
                             (u.role || '').toLowerCase() === coSegment.toLowerCase() && (
                               !userSearchTerm ||
                               u.name?.toLowerCase().includes(userSearchTerm.toLowerCase()) || 
+                              u.businessName?.toLowerCase().includes(userSearchTerm.toLowerCase()) || 
                               u.email?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
                               u.phone?.includes(userSearchTerm)
                             )
@@ -1888,7 +2669,7 @@ const Orders = () => {
                                   : null;
 
                                 setCoAddress({
-                                  name: u.name || '',
+                                  name: u.businessName || u.name || '',
                                   phone: defaultAddr ? (defaultAddr.phone || u.phone || '') : (u.phone || ''),
                                   address: defaultAddr ? (defaultAddr.address || u.address || '') : (u.address || ''),
                                   city: defaultAddr ? (defaultAddr.city || u.city || '') : (u.city || ''),
@@ -1901,7 +2682,7 @@ const Orders = () => {
                               onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
                             >
                               <div>
-                                <p style={{ fontWeight: 700, fontSize: '13px', margin: 0 }}>{u.name}</p>
+                                <p style={{ fontWeight: 700, fontSize: '13px', margin: 0 }}>{u.businessName || u.name}</p>
                                 <p style={{ fontSize: '11px', color: 'var(--text-dim)', margin: 0 }}>{u.email} • {u.phone || 'No phone'}</p>
                               </div>
                               <span style={{ fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', background: u.role === 'b2b' ? 'rgba(99,102,241,0.1)' : 'rgba(236,72,153,0.1)', color: u.role === 'b2b' ? 'var(--primary)' : '#ec4899' }}>
@@ -1917,7 +2698,7 @@ const Orders = () => {
                           <div style={{ flex: 1 }}>
                             <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Selected Customer ({coSegment.toUpperCase()})</span>
                             <p style={{ fontWeight: 700, margin: '2px 0 0', fontSize: '14px' }}>
-                              {users.find(u => u._id === coUserId)?.name}
+                              {users.find(u => u._id === coUserId)?.businessName || users.find(u => u._id === coUserId)?.name}
                             </p>
                           </div>
                           <button 
@@ -2131,7 +2912,7 @@ const Orders = () => {
                                   <div style={{ flex: 1 }}>
                                     <p style={{ fontWeight: 700, fontSize: '12px', margin: 0 }}>{p.name}</p>
                                     <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: 0 }}>
-                                      ₹{coSegment === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
+                                      By: <strong style={{ color: 'var(--primary)' }}>{p.sellerName || 'Zudo Official'}</strong> • ₹{coSegment === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
                                     </p>
                                   </div>
                                 </button>
@@ -2154,17 +2935,18 @@ const Orders = () => {
                           onClick={() => {
                             const prod = products.find(p => p._id === coSelectedProductId);
                             if (!prod) {
-                              alert('Please select a valid product first');
+                              toast.error('Please select a valid product first');
                               return;
                             }
                             // Check if already in list
                             if (coItems.some(item => item.productId === prod._id)) {
-                              alert('Product already added');
+                              toast.error('Product already added');
                               return;
                             }
                             setCoItems([...coItems, {
                               productId: prod._id,
                               name: prod.name,
+                              sellerName: prod.sellerName,
                               quantity: coSelectedQty,
                               price: coSegment === 'b2b' ? (prod.b2bPrice || prod.price) : prod.price
                             }]);
@@ -2194,7 +2976,10 @@ const Orders = () => {
                             <tbody>
                               {coItems.map((item, index) => (
                                 <tr key={index} style={{ borderBottom: index < coItems.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
-                                  <td style={{ padding: '12px 16px', fontWeight: 600 }}>{item.name}</td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <div style={{ fontWeight: 600 }}>{item.name}</div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
+                                  </td>
                                   <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>{item.quantity}</td>
                                   <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--primary)' }}>₹{(item.price * item.quantity).toLocaleString()}</td>
                                   <td style={{ padding: '12px 16px', textAlign: 'center' }}>
@@ -2257,11 +3042,11 @@ const Orders = () => {
                   <button 
                     onClick={async () => {
                       if (!coUserId) {
-                        alert('Please select a customer first');
+                        toast.error('Please select a customer first');
                         return;
                       }
                       if (coItems.length === 0) {
-                        alert('Please add at least one product');
+                        toast.error('Please add at least one product');
                         return;
                       }
                       
@@ -2270,7 +3055,7 @@ const Orders = () => {
 
                       if (Object.keys(errors).length > 0) {
                         setCoErrors(errors);
-                        alert("Please fill out the recipient name.");
+                        toast.error("Please fill out the recipient name.");
                         document.getElementById('co-recipient-name')?.focus();
                         return;
                       }
@@ -2282,7 +3067,7 @@ const Orders = () => {
                           shippingAddress: coAddress,
                           paymentMethod: coPaymentMethod
                         });
-                        alert('Manual order successfully created!');
+                        toast.success('Manual order successfully created!');
                         setShowCreateModal(false);
                         setCoSegment('');
                         setCoUserId('');
@@ -2293,7 +3078,7 @@ const Orders = () => {
                         setCoErrors({});
                         fetchOrders();
                       } catch (err) {
-                        alert('Failed to manually create order: ' + (err.response?.data?.message || err.message));
+                        toast.error('Failed to manually create order: ' + (err.response?.data?.message || err.message));
                       }
                     }}
                     className="btn-primary"
@@ -2409,7 +3194,7 @@ const Orders = () => {
                               <div style={{ flex: 1 }}>
                                 <p style={{ fontWeight: 700, fontSize: '12px', margin: 0 }}>{p.name}</p>
                                 <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: 0 }}>
-                                  ₹{editingOrder.userId?.role === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
+                                  By: <strong style={{ color: 'var(--primary)' }}>{p.sellerName || 'Zudo Official'}</strong> • ₹{editingOrder.userId?.role === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
                                 </p>
                               </div>
                             </button>
@@ -2432,17 +3217,18 @@ const Orders = () => {
                       onClick={() => {
                         const prod = products.find(p => p._id === eoSelectedProductId);
                         if (!prod) {
-                          alert('Please select a valid product first');
+                          toast.error('Please select a valid product first');
                           return;
                         }
                         if (eoItems.some(item => item.productId === prod._id)) {
-                          alert('Product already in list');
+                          toast.error('Product already in list');
                           return;
                         }
                         const userRole = editingOrder.userId?.role || 'b2c';
                         setEoItems([...eoItems, {
                           productId: prod._id,
                           name: prod.name,
+                          sellerName: prod.sellerName,
                           quantity: eoSelectedQty,
                           price: userRole === 'b2b' ? (prod.b2bPrice || prod.price) : prod.price
                         }]);
@@ -2479,7 +3265,10 @@ const Orders = () => {
                         </tr>
                       ) : eoItems.map((item, index) => (
                         <tr key={index} style={{ borderBottom: index < eoItems.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
-                          <td style={{ padding: '12px 16px', fontWeight: 600 }}>{item.name}</td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: 600 }}>{item.name}</div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
+                          </td>
                           <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                               <button 
@@ -2549,7 +3338,7 @@ const Orders = () => {
               <button 
                 onClick={async () => {
                   if (eoItems.length === 0) {
-                    alert('Order must have at least one product');
+                    toast.error('Order must have at least one product');
                     return;
                   }
 
@@ -2557,17 +3346,189 @@ const Orders = () => {
                     await axios.put(`/orders/admin/${editingOrder._id}/items`, {
                       items: eoItems
                     });
-                    alert('Order products successfully updated!');
+                    toast.success('Order products successfully updated!');
                     setShowEditItemsModal(false);
                     setEditingOrder(null);
                     fetchOrders();
                   } catch (err) {
-                    alert('Failed to update order products: ' + (err.response?.data?.message || err.message));
+                    toast.error('Failed to update order products: ' + (err.response?.data?.message || err.message));
                   }
                 }}
                 className="btn-primary"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Confirmation Modal */}
+      {showStatusModal && (
+        <div style={{ 
+          position: 'fixed', inset: 0, 
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+        }}>
+          <div style={{ 
+            background: 'var(--card-bg)', padding: '24px', borderRadius: '24px',
+            border: '1px solid var(--glass-border)', width: '400px', maxWidth: '90%',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
+          }}>
+            <div style={{ 
+              width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(99, 102, 241, 0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+              color: '#6366f1'
+            }}>
+              <RefreshCw size={24} />
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
+              Confirm Status Change
+            </h3>
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to change order status to <strong style={{ color: 'var(--text-main)' }}>{statusActionData.status}</strong>?
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => {
+                  setShowStatusModal(false);
+                  setStatusActionData({ orderId: null, status: null });
+                }}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+                  background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmUpdateStatus}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
+                  background: '#6366f1', color: '#fff', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div style={{ 
+          position: 'fixed', inset: 0, 
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+        }}>
+          <div style={{ 
+            background: 'var(--card-bg)', padding: '24px', borderRadius: '24px',
+            border: '1px solid var(--glass-border)', width: '400px', maxWidth: '90%',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
+          }}>
+            <div style={{ 
+              width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(239, 68, 68, 0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+              color: '#ef4444'
+            }}>
+              <Trash2 size={24} />
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
+              Confirm Deletion
+            </h3>
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to permanently delete this order? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteOrderId(null);
+                }}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+                  background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmDeleteOrder}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
+                  background: '#ef4444', color: '#fff', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return Driver Modal */}
+      {showReturnDriverModal && (
+        <div style={{ 
+          position: 'fixed', inset: 0, 
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+        }}>
+          <div style={{ 
+            background: 'var(--card-bg)', padding: '24px', borderRadius: '24px',
+            border: '1px solid var(--glass-border)', width: '400px', maxWidth: '90%',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
+          }}>
+            <div style={{ 
+              width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(99, 102, 241, 0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+              color: '#6366f1'
+            }}>
+              <Truck size={24} />
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
+              Assign Return Driver
+            </h3>
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '20px', lineHeight: '1.5' }}>
+              Please enter the Driver ID for the return pickup.
+            </p>
+            
+            <input 
+              type="text" 
+              placeholder="Enter Driver ID"
+              value={returnDriverIdInput}
+              onChange={(e) => setReturnDriverIdInput(e.target.value)}
+              style={{
+                width: '100%', padding: '12px 16px', borderRadius: '12px',
+                border: '1px solid var(--glass-border)', background: 'var(--bg-color)',
+                color: 'var(--text-main)', fontSize: '14px', marginBottom: '24px', boxSizing: 'border-box'
+              }}
+              autoFocus
+            />
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => {
+                  setShowReturnDriverModal(false);
+                  setReturnDriverActionData({ orderId: null });
+                }}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+                  background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmAssignReturnDriver}
+                disabled={!returnDriverIdInput.trim()}
+                style={{ 
+                  flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
+                  background: returnDriverIdInput.trim() ? '#6366f1' : '#94a3b8', 
+                  color: '#fff', fontWeight: 600, cursor: returnDriverIdInput.trim() ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Assign
               </button>
             </div>
           </div>

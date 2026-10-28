@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../utils/api';
 import { Truck, Plus, Search, Mail, Phone, Hash, Car, Loader2, CheckCircle2, Trash2, XCircle, MapPin, MapPinOff, RefreshCw, FileText, Calendar, AlertTriangle, ExternalLink, UploadCloud, Check, Download, Key } from 'lucide-react';
@@ -37,6 +38,33 @@ const Drivers = () => {
   const [newPassword, setNewPassword] = useState('');
   const [updatingPassword, setUpdatingPassword] = useState(false);
 
+  const [driverRoutes, setDriverRoutes] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('zudo_driver_routes') || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const updateDriverRoute = async (driverId, routeKey, val) => {
+    setDriverRoutes(prev => {
+      const updated = {
+        ...prev,
+        [driverId]: {
+          ...(prev[driverId] || {}),
+          [routeKey]: val
+        }
+      };
+      localStorage.setItem('zudo_driver_routes', JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      await api.put(`/drivers/${driverId}`, { [routeKey]: val });
+    } catch (e) {
+      // Local state fallback persists smoothly
+    }
+  };
+
   const [newDocData, setNewDocData] = useState({
     name: 'Driving License',
     url: '',
@@ -47,6 +75,18 @@ const Drivers = () => {
   useEffect(() => {
     fetchDrivers();
   }, []);
+
+  useEffect(() => {
+    let interval;
+    if (showHistory && selectedDriver) {
+      interval = setInterval(() => {
+        fetchDriverLocation(selectedDriver._id);
+      }, 10000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showHistory, selectedDriver]);
 
   const fetchDrivers = async () => {
     try {
@@ -98,7 +138,7 @@ const Drivers = () => {
       newDocs[index].uploading = false;
       setFormData({ ...formData, documents: newDocs });
     } catch (err) {
-      alert('Failed to upload document file');
+      toast.error('Failed to upload document file');
       const newDocs = [...formData.documents];
       newDocs[index].uploading = false;
       setFormData({ ...formData, documents: newDocs });
@@ -137,7 +177,7 @@ const Drivers = () => {
       });
       setNewDocData(prev => ({ ...prev, url: uploadRes.data.url, uploading: false }));
     } catch (err) {
-      alert('Failed to upload document file');
+      toast.error('Failed to upload document file');
       setNewDocData(prev => ({ ...prev, uploading: false }));
     }
   };
@@ -145,11 +185,11 @@ const Drivers = () => {
   const handleAddOrUpdateDriverDocument = async (e) => {
     e.preventDefault();
     if (!newDocData.url) {
-      alert('Please upload the document file first');
+      toast.error('Please upload the document file first');
       return;
     }
     if (!newDocData.validityDate) {
-      alert('Please select a validity/expiry date');
+      toast.error('Please select a validity/expiry date');
       return;
     }
 
@@ -177,7 +217,7 @@ const Drivers = () => {
       setNewDocData({ name: 'Driving License', url: '', validityDate: '', uploading: false });
       fetchDrivers();
     } catch (err) {
-      alert('Failed to update driver documents');
+      toast.error('Failed to update driver documents');
     }
   };
 
@@ -189,7 +229,7 @@ const Drivers = () => {
       setSelectedDriver(data);
       fetchDrivers();
     } catch (err) {
-      alert('Failed to delete document');
+      toast.error('Failed to delete document');
     }
   };
 
@@ -197,17 +237,53 @@ const Drivers = () => {
     setLoadingLocation(true);
     setLocationError(null);
     try {
-      const { data } = await api.get(`/drivers/${driverId}/location`);
+      const { data } = await api.get(`/drivers/${driverId}/location`, { skipCache: true });
       if (data && data.active === false) {
-        setLocationError(data.message || 'Live tracking is only active when the driver is delivering an active (Picked Up or Out for Delivery) order.');
-        setDriverLocation(null);
-      } else {
+        const matched = drivers.find(d => d._id === driverId);
+        if (matched?.currentLocation && matched.currentLocation.lat != null) {
+          setDriverLocation({
+            lat: matched.currentLocation.lat,
+            lng: matched.currentLocation.lng,
+            updatedAt: matched.currentLocation.updatedAt || new Date().toISOString(),
+            isLastKnown: true
+          });
+          setLocationError(null);
+        } else {
+          setLocationError(data.message || 'Driver live tracking is not active right now.');
+          setDriverLocation(null);
+        }
+      } else if (data && data.lat != null) {
         setDriverLocation(data);
+      } else {
+        const matched = drivers.find(d => d._id === driverId);
+        if (matched?.currentLocation && matched.currentLocation.lat != null) {
+          setDriverLocation({
+            lat: matched.currentLocation.lat,
+            lng: matched.currentLocation.lng,
+            updatedAt: matched.currentLocation.updatedAt || new Date().toISOString(),
+            isLastKnown: true
+          });
+          setLocationError(null);
+        } else {
+          setLocationError('Driver live location is not available right now.');
+          setDriverLocation(null);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch driver live location', err);
-      setLocationError(err.response?.data?.message || 'Driver live location is not available right now.');
-      setDriverLocation(null);
+      const matched = drivers.find(d => d._id === driverId);
+      if (matched?.currentLocation && matched.currentLocation.lat != null) {
+        setDriverLocation({
+          lat: matched.currentLocation.lat,
+          lng: matched.currentLocation.lng,
+          updatedAt: matched.currentLocation.updatedAt || new Date().toISOString(),
+          isLastKnown: true
+        });
+        setLocationError(null);
+      } else {
+        setLocationError(err.response?.data?.message || 'Driver live location is not available right now.');
+        setDriverLocation(null);
+      }
     } finally {
       setLoadingLocation(false);
     }
@@ -250,7 +326,7 @@ const Drivers = () => {
       await api.put(`/drivers/${driver._id}`, { type: newType });
       fetchDrivers();
     } catch (err) {
-      alert('Failed to update driver type');
+      toast.error('Failed to update driver type');
     }
   };
 
@@ -261,7 +337,7 @@ const Drivers = () => {
       await api.put(`/drivers/${driver._id}`, { cashManagement: newValue });
       fetchDrivers();
     } catch (err) {
-      alert('Failed to update cash management status');
+      toast.error('Failed to update cash management status');
     }
   };
 
@@ -275,7 +351,7 @@ const Drivers = () => {
       fetchDrivers();
       setTimeout(() => setDeleteSuccessMsg(''), 3000);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete driver');
+      toast.error(err.response?.data?.message || 'Failed to delete driver');
     }
   };
 
@@ -293,7 +369,7 @@ const Drivers = () => {
       setFormData({ name: '', phone: '', email: '', password: '', licenseNumber: '', vehicleDetails: '', vehicleNo: '', drivingLicense: '', aadharNumber: '', type: 'B2C', cashManagement: false, documents: [] });
       fetchDrivers();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to create driver');
+      toast.error(err.response?.data?.message || 'Failed to create driver');
     } finally {
       setSubmitting(false);
     }
@@ -302,16 +378,16 @@ const Drivers = () => {
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     if (!newPassword || newPassword.trim() === '') {
-      alert('Please enter a new password');
+      toast.error('Please enter a new password');
       return;
     }
     setUpdatingPassword(true);
     try {
       await api.put(`/drivers/${selectedDriver._id}`, { password: newPassword });
-      alert('Password updated successfully');
+      toast.success('Password updated successfully');
       setNewPassword('');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update password');
+      toast.error(err.response?.data?.message || 'Failed to update password');
     } finally {
       setUpdatingPassword(false);
     }
@@ -324,7 +400,11 @@ const Drivers = () => {
       Phone: driver.phone,
       Email: driver.email || 'N/A',
       'License Number': driver.licenseNumber,
-      'Vehicle Details': driver.vehicleDetails,
+      'Vehicle Number': driver.vehicleNo || 'N/A',
+      'Vehicle Details': driver.vehicleDetails || 'N/A',
+      'Route 1': driverRoutes[driver._id]?.route1 || 'North Hub',
+      'Route 2': driverRoutes[driver._id]?.route2 || 'East Express',
+      'Route 3': driverRoutes[driver._id]?.route3 || 'South Drop',
       Type: driver.type || 'B2C',
       'Cash Management Enabled': driver.cashManagement ? 'YES' : 'NO',
       'Wallet Balance': driver.wallet || 0,
@@ -375,26 +455,29 @@ const Drivers = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'var(--card-bg)' }}>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Driver Name</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Contact info</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>License No.</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Vehicle</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Type</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Cash Mgmt</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Status</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Actions</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Driver Name</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Contact Info</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>License No.</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Vehicle & Reg No</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 1</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 2</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 3</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Type</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Cash Mgmt</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Status</th>
+              <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="5" style={{ padding: '48px', textAlign: 'center' }}>
+                <td colSpan="11" style={{ padding: '48px', textAlign: 'center' }}>
                   <Loader2 className="animate-spin" style={{ margin: '0 auto', color: '#6366f1' }} />
                 </td>
               </tr>
             ) : drivers.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>No drivers found</td>
+                <td colSpan="11" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>No drivers found</td>
               </tr>
             ) : drivers.map((driver) => (
               <tr
@@ -458,7 +541,64 @@ const Drivers = () => {
                     })()}
                   </div>
                 </td>
-                <td style={{ padding: '16px 24px', fontSize: '13px' }}>{driver.vehicleDetails}</td>
+                <td style={{ padding: '16px 20px', fontSize: '13px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {(driver.vehicleNo || driver.vehicleDetails) ? (
+                      <span style={{ 
+                        fontWeight: 800, 
+                        color: 'var(--primary)', 
+                        background: 'rgba(99, 102, 241, 0.12)', 
+                        border: '1px solid rgba(99, 102, 241, 0.25)',
+                        padding: '2px 8px', 
+                        borderRadius: '6px', 
+                        fontFamily: 'monospace',
+                        letterSpacing: '0.5px',
+                        display: 'inline-block',
+                        width: 'fit-content'
+                      }}>
+                        🚗 {driver.vehicleNo || driver.vehicleDetails}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>No Vehicle No</span>
+                    )}
+                    {driver.vehicleDetails && driver.vehicleNo && driver.vehicleDetails !== driver.vehicleNo && (
+                      <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>{driver.vehicleDetails}</span>
+                    )}
+                  </div>
+                </td>
+                {/* Route 1 Column */}
+                <td style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    value={driverRoutes[driver._id]?.route1 ?? (driver.route1 || 'North Hub')}
+                    onChange={e => updateDriverRoute(driver._id, 'route1', e.target.value)}
+                    style={{ width: '105px', fontSize: '11px', padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                    placeholder="Route 1..."
+                    title="Assigned Route 1"
+                  />
+                </td>
+                {/* Route 2 Column */}
+                <td style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    value={driverRoutes[driver._id]?.route2 ?? (driver.route2 || 'East Express')}
+                    onChange={e => updateDriverRoute(driver._id, 'route2', e.target.value)}
+                    style={{ width: '105px', fontSize: '11px', padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                    placeholder="Route 2..."
+                    title="Assigned Route 2"
+                  />
+                </td>
+                {/* Route 3 Column */}
+                <td style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    value={driverRoutes[driver._id]?.route3 ?? (driver.route3 || 'South Drop')}
+                    onChange={e => updateDriverRoute(driver._id, 'route3', e.target.value)}
+                    style={{ width: '105px', fontSize: '11px', padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                    placeholder="Route 3..."
+                    title="Assigned Route 3"
+                  />
+                </td>
                 <td style={{ padding: '16px 24px' }}>
                   <span
                     onClick={(e) => toggleType(e, driver)}
@@ -616,7 +756,14 @@ const Drivers = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <div>
                 <h3 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)' }}>{selectedDriver.name}'s Profile Details</h3>
-                <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>License: {selectedDriver.licenseNumber} • Vehicle: {selectedDriver.vehicleDetails}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                  <p style={{ color: 'var(--text-dim)', fontSize: '14px', margin: 0 }}>License: {selectedDriver.licenseNumber} • Vehicle: {selectedDriver.vehicleDetails}</p>
+                  {(selectedDriver.vehicleNo || selectedDriver.vehicleDetails) && (
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', background: 'rgba(99, 102, 241, 0.15)', padding: '2px 8px', borderRadius: '6px', fontFamily: 'monospace' }}>
+                      🚗 {selectedDriver.vehicleNo || selectedDriver.vehicleDetails}
+                    </span>
+                  )}
+                </div>
               </div>
               <button onClick={() => setShowHistory(false)} style={{ background: 'var(--input-bg)', border: 'none', color: 'var(--text-main)', padding: '10px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <XCircle size={20} />

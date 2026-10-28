@@ -1,8 +1,10 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect, useRef } from 'react';
-import api from '../utils/api';
+import api, { getImageUrl } from '../utils/api';
 import { 
-  Receipt, Printer, Search, Filter, Calendar, CheckCircle2, FileText, X, ChevronDown, Edit2, Download
+  Receipt, Printer, Search, Filter, Calendar, CheckCircle2, FileText, X, ChevronDown, Edit2, Download, Table
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const Invoices = () => {
   const [loading, setLoading] = useState(false);
@@ -17,11 +19,14 @@ const Invoices = () => {
   const [dateFilter, setDateFilter] = useState('All Time');
   const [customDate, setCustomDate] = useState({ start: '', end: '' });
   const [collation, setCollation] = useState('All'); // 'Collated', 'Uncollated', 'All'
+  const [cityFilter, setCityFilter] = useState('All');
+  const [printStatusFilter, setPrintStatusFilter] = useState('All');
 
   // Print Preview
   const [showPreview, setShowPreview] = useState(false);
   const [previewOrders, setPreviewOrders] = useState([]);
   const [pageSize, setPageSize] = useState('A5');
+  const [printCopyType, setPrintCopyType] = useState('ORIGINAL FOR RECIPIENT');
   const iframeRef = useRef(null);
 
   const numberToWords = (num) => {
@@ -89,7 +94,11 @@ const Invoices = () => {
   // Edit Pricing State
   // Map of orderId -> itemIndex -> newPrice
   const [customPrices, setCustomPrices] = useState({});
+  const [customItemNames, setCustomItemNames] = useState({});
+  const [customItemQuantities, setCustomItemQuantities] = useState({});
+  
   const [customInvoiceNumbers, setCustomInvoiceNumbers] = useState({});
+  const [customOrderNumbers, setCustomOrderNumbers] = useState({});
 
   const [sellerInvoices, setSellerInvoices] = useState([]);
 
@@ -119,7 +128,7 @@ const Invoices = () => {
       await api.put(`/seller-invoices/admin/${id}/clear`);
       setSellerInvoices(sellerInvoices.map(inv => inv._id === id ? { ...inv, status: 'Cleared' } : inv));
     } catch (err) {
-      alert('Failed to clear invoice');
+      toast.error('Failed to clear invoice');
     }
   };
 
@@ -134,7 +143,7 @@ const Invoices = () => {
       link.click();
       link.remove();
     } catch (err) {
-      alert('Failed to download invoice');
+      toast.error('Failed to download invoice');
     }
   };
 
@@ -163,10 +172,27 @@ const Invoices = () => {
 
   useEffect(() => {
     applyFilters();
-  }, [invoiceType, segmentType, searchTerm, dateFilter, customDate, collation, orders]);
+  }, [invoiceType, segmentType, searchTerm, dateFilter, customDate, collation, cityFilter, orders]);
 
   const applyFilters = () => {
     let result = [...orders];
+
+    // Invoice Type Filter
+    if (invoiceType === 'purchase') {
+      result = result.filter(o => o.sellerId);
+    }
+
+    // Print Status Filter
+    if (printStatusFilter === 'Printed') {
+      result = result.filter(o => o.isPrinted);
+    } else if (printStatusFilter === 'Unprinted') {
+      result = result.filter(o => !o.isPrinted);
+    }
+
+    // City Filter
+    if (cityFilter !== 'All') {
+      result = result.filter(o => o.locationId?.city === cityFilter);
+    }
 
     // Segment Filter
     if (segmentType !== 'All') {
@@ -223,9 +249,63 @@ const Invoices = () => {
     }));
   };
 
+  const handleOrderNumberChange = (orderId, newOrdNo) => {
+    setCustomOrderNumbers(prev => ({
+      ...prev,
+      [orderId]: newOrdNo
+    }));
+  };
+
+  const handleItemNameChange = (orderId, itemIndex, newName) => {
+    setCustomItemNames(prev => ({
+      ...prev,
+      [`${orderId}_${itemIndex}`]: newName
+    }));
+  };
+
+  const handleItemQuantityChange = (orderId, itemIndex, newQty) => {
+    setCustomItemQuantities(prev => ({
+      ...prev,
+      [`${orderId}_${itemIndex}`]: Number(newQty)
+    }));
+  };
+
   const calculateItemPrice = (orderId, itemIndex, originalPrice) => {
     const key = `${orderId}_${itemIndex}`;
     return customPrices[key] !== undefined ? customPrices[key] : originalPrice;
+  };
+
+  const calculateItemName = (orderId, itemIndex, originalName) => {
+    const key = `${orderId}_${itemIndex}`;
+    return customItemNames[key] !== undefined ? customItemNames[key] : originalName;
+  };
+
+  const calculateItemQuantity = (orderId, itemIndex, originalQty) => {
+    const key = `${orderId}_${itemIndex}`;
+    return customItemQuantities[key] !== undefined ? customItemQuantities[key] : originalQty;
+  };
+
+  const handleDirectBulkPrint = async (selectedOrders = filteredOrders) => {
+    if (selectedOrders.length === 0) return;
+    if (iframeRef.current) {
+      const html = generatePrintHTML(selectedOrders);
+      const doc = iframeRef.current.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+      iframeRef.current.contentWindow.focus();
+      setTimeout(() => {
+        iframeRef.current.contentWindow.print();
+        const orderIds = selectedOrders.map(o => o._id);
+        api.post('/orders/bulk-print-status', { orderIds }).then(() => {
+          toast.success('Orders marked as printed successfully');
+          setOrders(prev => prev.map(o => orderIds.includes(o._id) ? { ...o, isPrinted: true } : o));
+        }).catch(err => {
+          console.error(err);
+          toast.error('Failed to update print status on server');
+        });
+      }, 500);
+    }
   };
 
   const handlePreview = (selectedOrders = filteredOrders) => {
@@ -233,18 +313,39 @@ const Invoices = () => {
     setShowPreview(true);
   };
 
-  const generatePrintHTML = () => {
+  const handleBulkExcelDownload = () => {
+    if (filteredOrders.length === 0) return;
+    const excelData = filteredOrders.map(order => ({
+      'Invoice No': customInvoiceNumbers[order._id] || order.invoiceNumber || `SNB-701/${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`,
+      'Order No': customOrderNumbers[order._id] || order.orderNumber || `snb-${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`,
+      'Date': new Date(order.createdAt).toLocaleDateString(),
+      'Buyer Name': order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer',
+      'Buyer Phone': order.shippingAddress?.phone || order.userId?.phone || '',
+      'Buyer City': order.locationId?.city || '',
+      'Seller Name': order.sellerId?.companyName || order.sellerId?.name || 'Zudo Admin',
+      'Total Amount': order.totalAmount,
+      'Payment Method': order.paymentMethod || 'Prepaid',
+      'Status': order.status
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Invoices");
+    XLSX.writeFile(wb, `Invoices_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const generatePrintHTML = (ordersList = previewOrders) => {
     let pagesHtml = '';
 
     const ordersToRender = collation === 'Collated' ? [{
       _id: 'COLLATED-' + new Date().getTime().toString().slice(-6),
       createdAt: new Date(),
-      shippingAddress: previewOrders[0]?.shippingAddress,
-      userId: previewOrders[0]?.userId,
-      sellerId: previewOrders[0]?.sellerId,
+      shippingAddress: ordersList[0]?.shippingAddress,
+      userId: ordersList[0]?.userId,
+      sellerId: ordersList[0]?.sellerId,
       paymentMethod: 'Multiple',
-      items: previewOrders.flatMap(o => o.items.map((it, idx) => ({ ...it, parentOrderId: o._id, itemIndex: idx })))
-    }] : previewOrders;
+      items: ordersList.flatMap(o => o.items.map((it, idx) => ({ ...it, parentOrderId: o._id, itemIndex: idx })))
+    }] : ordersList;
 
     pagesHtml = ordersToRender.map((order, orderIndex) => {
       const pageBreakClass = orderIndex > 0 ? 'page-break' : '';
@@ -255,9 +356,18 @@ const Invoices = () => {
       let grandTotal = 0;
 
       const itemsHtml = order.items.map((item, i) => {
+        const itemIdentifier = item.itemIndex !== undefined ? item.itemIndex : i;
+        const orderIdentifier = item.parentOrderId || order._id;
+
         const rawPrice = item.price || 0;
-        const currentPrice = calculateItemPrice(item.parentOrderId || order._id, item.itemIndex !== undefined ? item.itemIndex : i, rawPrice);
-        const itemTotal = currentPrice * item.quantity;
+        const rawName = item.name || 'Unknown Item';
+        const rawQty = item.quantity || 1;
+
+        const currentPrice = calculateItemPrice(orderIdentifier, itemIdentifier, rawPrice);
+        const currentName = calculateItemName(orderIdentifier, itemIdentifier, rawName);
+        const currentQty = calculateItemQuantity(orderIdentifier, itemIdentifier, rawQty);
+
+        const itemTotal = currentPrice * currentQty;
         
         const gstPercent = item.gstPercent || item.productId?.gstPercent || item.product?.gstPercent || productGstMap[item.productId?._id || item.productId] || 0;
         const halfGstPercent = gstPercent / 2;
@@ -266,7 +376,7 @@ const Invoices = () => {
         const cgst = taxableValue * (halfGstPercent / 100);
         const sgst = taxableValue * (halfGstPercent / 100);
         
-        totalQty += item.quantity;
+        totalQty += currentQty;
         totalTaxableValue += taxableValue;
         totalCgst += cgst;
         totalSgst += sgst;
@@ -279,10 +389,10 @@ const Invoices = () => {
           <tr class="item-row">
             <td style="text-align: center; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${i + 1}</td>
             <td style="text-align: left; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">
-              <div style="font-weight: 700; color: #000; font-size: 9px; line-height: 1.1;">${item.name}</div>
+              <div style="font-weight: 700; color: #000; font-size: 9px; line-height: 1.1;">${currentName}</div>
               <div style="font-size: 7.5px; color: #555; margin-top: 1px;">HSN:${hsnCode}</div>
             </td>
-            <td style="text-align: right; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${item.quantity}</td>
+            <td style="text-align: right; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${currentQty}</td>
             <td style="text-align: left; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${unitLabel}</td>
             <td style="text-align: right; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${currentPrice.toFixed(2)}</td>
             <td style="text-align: right; border-bottom: 1px solid #e2e8f0; padding: 4px 6px;">${taxableValue.toFixed(2)}</td>
@@ -299,19 +409,25 @@ const Invoices = () => {
         `;
       }).join('');
 
-      const defaultInvNo = order.invoiceNumber || `snb-686/${order._id.slice(-8).toUpperCase()}`;
+      const defaultInvNo = order.invoiceNumber || `SNB-701/${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`;
       const invNo = customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : defaultInvNo;
       const invDate = new Date(order.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const orderNo = order.orderNumber || order._id.slice(-8).toUpperCase();
-      const barcodeValue = `${order._id.slice(-8)}-${order.userId?._id?.slice(-8) || '00000000'}-${orderNo}`;
+      const defaultOrderNo = order.orderNumber || `snb-${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`;
+      const orderNo = customOrderNumbers[order._id] !== undefined ? customOrderNumbers[order._id] : defaultOrderNo;
+      const barcodeValue = `${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}-${order.userId?._id?.slice(-8) || '00000000'}-${orderNo}`;
 
-      const sellerName = order.sellerId?.companyName || order.sellerId?.name || 'SNB TRADING.CO';
-      const sellerGst = order.sellerId?.gstNumber || '29BQHPG3242G1ZYNO';
-      const sellerAddress = order.sellerId?.address || '307 ashrya layout vishweshwaria 7th block kodigehalli post opp cii institute magadi main road bangalore 560091';
+      const isPurchase = invoiceType === 'purchase';
+      const adminName = 'SNB TRADING.CO';
+      const adminGst = '29BQHPG3242G1ZYNO';
+      const adminAddress = '307 ashrya layout vishweshwaria 7th block kodigehalli post opp cii institute magadi main road bangalore 560091';
 
-      const buyerName = order.shippingAddress?.name || order.userId?.name || 'Customer';
-      const buyerAddress = order.shippingAddress?.address || order.userId?.address || 'No, 123 Main Street, Bengaluru, Karnataka';
-      const buyerPhone = order.shippingAddress?.phone || order.userId?.phone || '';
+      const sellerName = order.sellerId?.companyName || order.sellerId?.name || adminName;
+      const sellerGst = order.sellerId?.gstNumber || adminGst;
+      const sellerAddress = order.sellerId?.address || adminAddress;
+
+      const buyerName = isPurchase ? adminName : (order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer');
+      const buyerAddress = isPurchase ? adminAddress : (order.shippingAddress?.address || order.userId?.address || 'No, 123 Main Street, Bengaluru, Karnataka');
+      const buyerPhone = isPurchase ? '' : (order.shippingAddress?.phone || order.userId?.phone || '');
 
       const netPayableInWords = numberToWords(Math.round(grandTotal));
 
@@ -321,7 +437,7 @@ const Invoices = () => {
             <!-- Header Grid -->
             <div class="header-section">
               <div class="header-left">
-                <div class="tax-invoice-title">Tax Invoice</div>
+                <div class="tax-invoice-title">${isPurchase ? 'Purchase Invoice' : 'Tax Invoice'}</div>
                 <div class="seller-info">
                   <strong>${sellerName}</strong><br/>
                   <strong>GSTIN:${sellerGst}</strong><br/>
@@ -343,7 +459,7 @@ const Invoices = () => {
                     <td class="meta-val">${invDate}</td>
                   </tr>
                   <tr>
-                    <td colspan="2" class="meta-doc-type">ORIGINAL FOR RECIPIENT</td>
+                    <td colspan="2" class="meta-doc-type">${printCopyType}</td>
                   </tr>
                 </table>
                 <div class="barcode-container">
@@ -395,14 +511,30 @@ const Invoices = () => {
             </table>
 
             <!-- Bottom Summary Section -->
-            <div class="bottom-section">
-              <div class="net-payable-row">
-                <span class="net-payable-label">Net Payable</span>
-                <span class="net-payable-value">Rs. ${grandTotal.toFixed(2)}</span>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; width: 100%;">
+              <div style="flex: 1; display: flex; align-items: flex-end; gap: 12px; padding-top: 5px;">
+                ${(() => {
+                  const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
+                  const qrCodeDoc = orderSeller?.qrCodeDoc || order.qrCodeDoc;
+                  const qrOption = orderSeller?.qrOption || order.qrOption;
+                  return qrCodeDoc ? `
+                  <img src="${getImageUrl(qrCodeDoc)}" alt="QR" style="width: ${pageSize === 'A5' ? '60px' : '80px'}; height: ${pageSize === 'A5' ? '60px' : '80px'}; border: 1px solid #ccc; padding: 2px; border-radius: 6px; object-fit: contain; background: #fff;" />
+                  <div style="font-size: ${pageSize === 'A5' ? '9px' : '11px'}; color: #111; font-weight: 700; display: flex; flex-direction: column; gap: 4px;">
+                    <span style="color: #666; font-size: ${pageSize === 'A5' ? '7px' : '9px'}; text-transform: uppercase;">Scan to Pay</span>
+                    ${qrOption ? `<span>${qrOption}</span>` : ''}
+                  </div>
+                ` : `<div style="font-size: ${pageSize === 'A5' ? '9px' : '11px'}; color: #666; font-weight: 600;">QR Code Not Available</div>`;
+                })()}
               </div>
-              <div class="divider-line-short"></div>
-              <div class="words-row">
-                Rupees ${netPayableInWords}
+              <div class="bottom-section" style="margin-top: 0; width: 50%;">
+                <div class="net-payable-row" style="width: 100%;">
+                  <span class="net-payable-label">Net Payable</span>
+                  <span class="net-payable-value">Rs. ${grandTotal.toFixed(2)}</span>
+                </div>
+                <div class="divider-line-short" style="width: 100%;"></div>
+                <div class="words-row" style="width: 100%;">
+                  Rupees ${netPayableInWords}
+                </div>
               </div>
             </div>
           </div>
@@ -521,6 +653,8 @@ const Invoices = () => {
     }
   };
 
+  const availableCities = ['All', ...new Set(orders.map(o => o.locationId?.city).filter(Boolean))];
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-between items-center">
@@ -537,7 +671,6 @@ const Invoices = () => {
             <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">Invoice Type</label>
             <select className="input-field" value={invoiceType} onChange={e => setInvoiceType(e.target.value)}>
               <option value="order">Order Invoice</option>
-              <option value="purchase">Purchase (Seller) Invoice</option>
               <option value="seller_generated">Seller Generated Invoices</option>
             </select>
           </div>
@@ -558,7 +691,8 @@ const Invoices = () => {
               <input 
                 type="text" 
                 placeholder="Buyer or Seller Name" 
-                className="input-field pl-9" 
+                className="input-field" 
+                style={{ paddingLeft: '36px' }}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
@@ -576,14 +710,9 @@ const Invoices = () => {
             </select>
           </div>
 
-          <div>
-            <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">Collation</label>
-            <select className="input-field" value={collation} onChange={e => setCollation(e.target.value)}>
-              <option value="All">All</option>
-              <option value="Collated">Collated</option>
-              <option value="Uncollated">Uncollated</option>
-            </select>
-          </div>
+          
+
+          
         </div>
 
         {dateFilter === 'Custom' && (
@@ -603,15 +732,35 @@ const Invoices = () => {
           <div className="text-sm font-semibold text-[var(--text-main)]">
             Found {filteredOrders.length} matching records
           </div>
-          <button 
-            className="btn-primary flex items-center gap-2"
-            onClick={() => handlePreview(filteredOrders)}
-            disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
-            style={{ opacity: invoiceType === 'seller_generated' ? 0.5 : 1 }}
-          >
-            <FileText size={18} />
-            <span>Preview & Generate All ({filteredOrders.length})</span>
-          </button>
+          <div className="flex gap-4">
+            <button 
+              className="btn-primary flex items-center gap-2"
+              onClick={handleBulkExcelDownload}
+              disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
+              style={{ background: 'linear-gradient(135deg, #10b981, #059669)', opacity: (filteredOrders.length === 0 || invoiceType === 'seller_generated') ? 0.5 : 1 }}
+            >
+              <Table size={18} />
+              <span>Bulk Excel Export</span>
+            </button>
+            <button 
+              className="btn-primary flex items-center gap-2"
+              onClick={() => handlePreview(filteredOrders)}
+              disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
+              style={{ opacity: invoiceType === 'seller_generated' ? 0.5 : 1 }}
+            >
+              <FileText size={18} />
+              <span>Preview & Generate All ({filteredOrders.length})</span>
+            </button>
+            <button 
+              className="btn-primary flex items-center gap-2"
+              onClick={() => handleDirectBulkPrint(filteredOrders)}
+              disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
+              style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', opacity: invoiceType === 'seller_generated' ? 0.5 : 1 }}
+            >
+              <Printer size={18} />
+              <span>Bulk Print Page ({filteredOrders.length})</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -718,11 +867,14 @@ const Invoices = () => {
                 {filteredOrders.slice(0, 50).map(order => (
                   <tr key={order._id} className="border-b border-[var(--glass-border)] hover:bg-white/5">
                     <td style={{ padding: '16px 24px', fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>
-                      snb-686/{order._id.slice(-8).toUpperCase()}
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>{order.userId?.role?.toUpperCase() || 'B2C'}</div>
+                      SNB-701/{order._id.slice(-8).toUpperCase()}
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {order.userId?.role?.toUpperCase() || 'B2C'}
+                        {order.isPrinted && <span style={{ padding: '2px 6px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold' }}>Printed</span>}
+                      </div>
                     </td>
                     <td style={{ padding: '16px 24px' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{order.shippingAddress?.name || order.userId?.name || 'Customer'}</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer'}</div>
                       <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>Seller: {order.sellerId?.name || 'Zudo Admin'}</div>
                     </td>
                     <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-dim)' }}>
@@ -765,6 +917,19 @@ const Invoices = () => {
                 Invoice Print Preview
               </h2>
               <div className="flex gap-4 ml-8">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold uppercase" style={{ color: 'var(--text-dim)' }}>Copy Type:</label>
+                  <select 
+                    className="input-field" 
+                    style={{ padding: '6px 12px', minHeight: 'auto', fontSize: '13px', background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)' }}
+                    value={printCopyType}
+                    onChange={e => setPrintCopyType(e.target.value)}
+                  >
+                    <option value="ORIGINAL FOR RECIPIENT">Original for Recipient</option>
+                    <option value="DUPLICATE FOR TRANSPORTER">Duplicate for Transporter</option>
+                    <option value="TRIPLICATE FOR SUPPLIER">Triplicate for Supplier</option>
+                  </select>
+                </div>
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-bold uppercase" style={{ color: 'var(--text-dim)' }}>Page Size:</label>
                   <select 
@@ -811,26 +976,57 @@ const Invoices = () => {
                         type="text" 
                         className="input-field w-full"
                         style={{ padding: '6px', fontSize: '13px', minHeight: 'auto' }}
-                        value={customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : (order.invoiceNumber || `snb-686/${order._id.slice(-8).toUpperCase()}`)}
+                        value={customInvoiceNumbers[order._id] !== undefined ? customInvoiceNumbers[order._id] : (order.invoiceNumber || `SNB-701/${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`)}
                         onChange={e => handleInvoiceNumberChange(order._id, e.target.value)}
                       />
                     </div>
-                    <div className="text-xs font-bold mb-3" style={{ color: 'var(--primary)' }}>Order snb-686/{order._id.slice(-8).toUpperCase()} Items</div>
+                    <div className="flex flex-col gap-2 mb-4">
+                      <div className="text-xs font-bold" style={{ color: 'var(--primary)' }}>Order Number</div>
+                      <input 
+                        type="text" 
+                        className="input-field w-full"
+                        style={{ padding: '6px', fontSize: '13px', minHeight: 'auto' }}
+                        value={customOrderNumbers[order._id] !== undefined ? customOrderNumbers[order._id] : (order.orderNumber || `snb-${String(orders.length - (orders.findIndex(o => o._id === order._id) === -1 ? 0 : orders.findIndex(o => o._id === order._id))).padStart(2, '0')}`)}
+                        onChange={e => handleOrderNumberChange(order._id, e.target.value)}
+                      />
+                    </div>
+                    <div className="text-xs font-bold mb-3" style={{ color: 'var(--primary)' }}>Order Items</div>
                     <div className="flex flex-col gap-3">
                       {order.items.map((item, index) => {
                         const rawPrice = item.price || 0;
                         const currentPrice = calculateItemPrice(order._id, index, rawPrice);
+                        const rawName = item.name || '';
+                        const currentName = calculateItemName(order._id, index, rawName);
+                        const rawQty = item.quantity || 1;
+                        const currentQty = calculateItemQuantity(order._id, index, rawQty);
+
                         return (
-                          <div key={index} className="flex flex-col gap-1">
-                            <span className="text-xs truncate" style={{ color: 'var(--text-main)' }}>{item.name}</span>
+                          <div key={index} className="flex flex-col gap-2 p-3 rounded-lg" style={{ background: 'var(--bg-color)', border: '1px solid var(--glass-border)' }}>
+                            <input 
+                              type="text" 
+                              className="input-field w-full text-xs"
+                              style={{ padding: '6px 8px', minHeight: 'auto', background: 'var(--card-bg)' }}
+                              value={currentName}
+                              onChange={e => handleItemNameChange(order._id, index, e.target.value)}
+                              placeholder="Item Name"
+                            />
                             <div className="flex items-center gap-2">
-                              <span className="text-xs line-through" style={{ color: 'var(--text-dim)' }}>₹{rawPrice.toFixed(2)}</span>
+                              <div className="text-xs line-through w-12" style={{ color: 'var(--text-dim)' }}>₹{rawPrice.toFixed(2)}</div>
                               <input 
                                 type="number" 
                                 className="input-field flex-1"
-                                style={{ padding: '6px', fontSize: '13px', minHeight: 'auto' }}
+                                style={{ padding: '6px 8px', fontSize: '12px', minHeight: 'auto', background: 'var(--card-bg)' }}
                                 value={currentPrice}
                                 onChange={e => handlePriceChange(order._id, index, e.target.value)}
+                                placeholder="Price"
+                              />
+                              <input 
+                                type="number" 
+                                className="input-field w-16"
+                                style={{ padding: '6px 8px', fontSize: '12px', minHeight: 'auto', background: 'var(--card-bg)' }}
+                                value={currentQty}
+                                onChange={e => handleItemQuantityChange(order._id, index, e.target.value)}
+                                placeholder="Qty"
                               />
                             </div>
                           </div>

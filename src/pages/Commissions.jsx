@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -75,38 +76,48 @@ const Commissions = () => {
   const [customUnit, setCustomUnit] = useState('');
   const [showCustomUnitInput, setShowCustomUnitInput] = useState(false);
 
-  const fetchCategories = () => {
+  const fetchCategories = async () => {
     setLoading(true);
-    Promise.all([
-      api.get('/categories'),
-      api.get('/commissions'),
-      api.get('/commissions/minimum-billing')
-    ]).then(([catRes, commRes, billRes]) => {
-      const cats = catRes.data;
-      const comms = commRes.data;
+    try {
+      const [catRes, commRes, billRes] = await Promise.allSettled([
+        api.get('/categories'),
+        api.get('/commissions'),
+        api.get('/commissions/minimum-billing')
+      ]);
+
+      const rawCats = catRes.status === 'fulfilled' ? catRes.value.data : [];
+      const cats = Array.isArray(rawCats) ? rawCats : (rawCats?.categories || rawCats?.data || []);
+
+      const rawComms = commRes.status === 'fulfilled' ? commRes.value.data : [];
+      const comms = Array.isArray(rawComms) ? rawComms : (rawComms?.commissions || rawComms?.data || []);
 
       // Dynamically map independent commissions data to their categories
       const mappedCats = cats.map(cat => ({
         ...cat,
-        commissions: comms.filter(c => c.categoryId === cat._id)
+        commissions: comms.filter(c => {
+          const cCatId = c.categoryId?._id || c.categoryId;
+          return cCatId === cat._id;
+        })
       }));
 
       setCategories(mappedCats);
 
-      if (billRes.data.isGlobal) {
-        setIsGlobalMinBill(true);
-        setMinBillData(billRes.data.data);
-      } else {
-        setIsGlobalMinBill(false);
-        setMinBillAmountB2B(billRes.data.minimumBillAmountB2B);
-        setMinBillAmountB2C(billRes.data.minimumBillAmountB2C);
+      if (billRes.status === 'fulfilled' && billRes.value?.data) {
+        const billData = billRes.value.data;
+        if (billData.isGlobal) {
+          setIsGlobalMinBill(true);
+          setMinBillData(Array.isArray(billData.data) ? billData.data : []);
+        } else {
+          setIsGlobalMinBill(false);
+          setMinBillAmountB2B(billData.minimumBillAmountB2B ?? '');
+          setMinBillAmountB2C(billData.minimumBillAmountB2C ?? '');
+        }
       }
-
+    } catch (err) {
+      console.error('Error loading commissions data:', err);
+    } finally {
       setLoading(false);
-    }).catch(err => {
-      console.error(err);
-      setLoading(false);
-    });
+    }
   };
 
   const handleSaveMinBill = async (targetLocId = null, b2bVal = null, b2cVal = null) => {
@@ -117,11 +128,11 @@ const Commissions = () => {
         minimumBillAmountB2C: b2cVal !== null ? b2cVal : minBillAmountB2C,
         targetLocationId: targetLocId
       });
-      alert('Minimum billing settings saved successfully!');
+      toast.success('Minimum billing settings saved successfully!');
       fetchCategories();
     } catch (err) {
       console.error(err);
-      alert('Failed to save minimum billing settings');
+      toast.error('Failed to save minimum billing settings');
     } finally {
       setUpdatingMinBill(false);
     }
@@ -147,19 +158,19 @@ const Commissions = () => {
   const handleAddRule = () => {
     const unitName = newRule.unit === 'custom' ? customUnit.trim() : newRule.unit;
     if (!unitName) {
-      alert('Please enter a valid unit name');
+      toast.error('Please enter a valid unit name');
       return;
     }
     const val = parseFloat(newRule.commissionValue);
     if (isNaN(val) || val < 0) {
-      alert('Please enter a valid commission value');
+      toast.error('Please enter a valid commission value');
       return;
     }
 
     const pincodeValue = newRule.pincode.trim() || 'All';
     // Check if unit rule already exists
     if (commissionsList.some(r => r.unit.toLowerCase() === unitName.toLowerCase() && (r.pincode || 'All') === pincodeValue)) {
-      alert(`A commission rule for unit "${unitName}" and pincode "${pincodeValue}" already exists.`);
+      toast.error(`A commission rule for unit "${unitName}" and pincode "${pincodeValue}" already exists.`);
       return;
     }
 
@@ -199,7 +210,7 @@ const Commissions = () => {
       fetchCategories();
     } catch (err) {
       console.error(err);
-      alert('Failed to save commissions settings');
+      toast.error('Failed to save commissions settings');
     } finally {
       setSubmitting(false);
     }
@@ -527,33 +538,33 @@ const Commissions = () => {
       {/* Manage Commissions Modal */}
       {selectedCategory && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '560px', borderRadius: '28px', overflow: 'hidden', border: '1px solid var(--glass-border)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', borderRadius: '20px', overflow: 'hidden', border: '1px solid var(--glass-border)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 48px)' }}>
             
             {/* Modal Header */}
-            <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)', flexShrink: 0 }}>
               <div>
-                <h3 style={{ fontSize: '20px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <BadgePercent size={22} className="text-primary" /> {selectedCategory.name}
+                <h3 style={{ fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <BadgePercent size={18} className="text-primary" /> {selectedCategory.name}
                 </h3>
-                <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Configure commission rules per packaging unit</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Configure commission rules per packaging unit</span>
               </div>
               <button onClick={() => setSelectedCategory(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', padding: 0 }}>
                 <XCircle size={24} />
               </button>
             </div>
 
-            <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
               
               {/* Form to Add New Commission Rule */}
-              <div style={{ background: 'rgba(99, 102, 241, 0.04)', border: '1px solid rgba(99, 102, 241, 0.15)', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div style={{ background: 'rgba(99, 102, 241, 0.04)', border: '1px solid rgba(99, 102, 241, 0.15)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Add Commission Rule
                 </p>
 
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
                   {/* Unit Select */}
-                  <div style={{ flex: '1 1 150px' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Unit</label>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Unit</label>
                     <select 
                       className="input-field" 
                       value={newRule.unit} 
@@ -561,7 +572,7 @@ const Commissions = () => {
                         setNewRule({ ...newRule, unit: e.target.value });
                         setShowCustomUnitInput(e.target.value === 'custom');
                       }}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', width: '100%' }}
                     >
                       {COMMON_UNITS.map(unit => (
                         <option key={unit} value={unit}>{unit}</option>
@@ -572,8 +583,8 @@ const Commissions = () => {
 
                   {/* Custom Unit text input */}
                   {showCustomUnitInput && (
-                    <div style={{ flex: '1 1 150px' }}>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Enter Custom Unit</label>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Enter Custom Unit</label>
                       <input 
                         type="text" 
                         className="input-field" 
@@ -585,8 +596,8 @@ const Commissions = () => {
                   )}
 
                   {/* Pincode */}
-                  <div style={{ flex: '1 1 120px' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Pincode</label>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Pincode</label>
                     <input 
                       type="text" 
                       className="input-field" 
@@ -597,13 +608,13 @@ const Commissions = () => {
                   </div>
 
                   {/* Comm Type */}
-                  <div style={{ flex: '1 1 120px' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Type</label>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Type</label>
                     <select 
                       className="input-field" 
                       value={newRule.commissionType} 
                       onChange={(e) => setNewRule({ ...newRule, commissionType: e.target.value })}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', width: '100%' }}
                     >
                       <option value="percentage">Percentage (%)</option>
                       <option value="flat">Flat (₹)</option>
@@ -611,8 +622,8 @@ const Commissions = () => {
                   </div>
 
                   {/* Comm Value */}
-                  <div style={{ flex: '1 1 100px' }}>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>Value</label>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Value</label>
                     <input 
                       type="number" 
                       className="input-field" 
@@ -620,23 +631,26 @@ const Commissions = () => {
                       value={newRule.commissionValue} 
                       onChange={(e) => setNewRule({ ...newRule, commissionValue: e.target.value })}
                       min="0"
+                      style={{ width: '100%' }}
                     />
                   </div>
                 </div>
 
-                <button 
-                  type="button" 
-                  className="btn-primary" 
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 16px', borderRadius: '12px' }}
-                  onClick={handleAddRule}
-                >
-                  <Plus size={16} /> <span>Add Rule</span>
-                </button>
+                <div style={{ marginTop: '4px' }}>
+                  <button 
+                    type="button" 
+                    className="btn-primary" 
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px 12px', borderRadius: '10px', width: '100%', fontSize: '13px' }}
+                    onClick={handleAddRule}
+                  >
+                    <Plus size={14} /> <span>Add Rule</span>
+                  </button>
+                </div>
               </div>
 
               {/* Existing Rules Table/List */}
               <div>
-                <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Configured Commission Rules
                 </p>
 
@@ -649,26 +663,26 @@ const Commissions = () => {
                           display: 'flex', 
                           justifyContent: 'space-between', 
                           alignItems: 'center', 
-                          padding: '12px 16px', 
+                          padding: '8px 12px', 
                           background: 'var(--input-bg)',
                           border: '1px solid var(--glass-border)',
-                          borderRadius: '14px' 
+                          borderRadius: '10px' 
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontWeight: 700, fontSize: '14px' }}>
-                            {comm.unit} {comm.pincode && comm.pincode !== 'All' ? <span style={{ color: 'var(--primary)', fontSize: '12px', background: 'rgba(99, 102, 241, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>{comm.pincode}</span> : <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>(All)</span>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '12px' }}>
+                            {comm.unit} {comm.pincode && comm.pincode !== 'All' ? <span style={{ color: 'var(--primary)', fontSize: '11px', background: 'rgba(99, 102, 241, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>{comm.pincode}</span> : <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(All)</span>}
                           </span>
-                          <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>—</span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>—</span>
                           <span style={{ 
-                            fontSize: '13px', 
+                            fontSize: '12px', 
                             fontWeight: 600, 
                             color: comm.commissionType === 'percentage' ? 'var(--primary)' : '#10b981',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '4px'
                           }}>
-                            {comm.commissionType === 'percentage' ? <BadgePercent size={14} /> : <Coins size={14} />}
+                            {comm.commissionType === 'percentage' ? <BadgePercent size={12} /> : <Coins size={12} />}
                             {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue}`}
                           </span>
                         </div>
@@ -707,27 +721,26 @@ const Commissions = () => {
                   </div>
                 )}
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px' }}>
-                <button 
-                  className="btn-secondary" 
-                  onClick={() => setSelectedCategory(null)}
-                  style={{ borderRadius: '12px', padding: '10px 20px' }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  className="btn-primary" 
-                  disabled={submitting} 
-                  onClick={handleSaveCommissions}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', padding: '10px 20px' }}
-                >
-                  {submitting ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                  <span>Save Commission Settings</span>
-                </button>
-              </div>
-
+            {/* Action Buttons (Sticky Footer) */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--glass-border)', padding: '16px 20px', background: 'var(--card-bg)', flexShrink: 0 }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => setSelectedCategory(null)}
+                style={{ borderRadius: '12px', padding: '10px 20px' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                disabled={submitting} 
+                onClick={handleSaveCommissions}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', padding: '10px 20px' }}
+              >
+                {submitting ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                <span>Save Commission Settings</span>
+              </button>
             </div>
 
           </div>

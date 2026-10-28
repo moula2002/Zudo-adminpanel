@@ -1,18 +1,23 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
 import { Package, Search, Tag, Loader2, Plus, Filter, Download, Edit3, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
+import { useSocket } from '../context/SocketContext';
 
 const Products = () => {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { refreshFlag } = useSocket();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedSeller, setSelectedSeller] = useState('');
+  const [deleteModalData, setDeleteModalData] = useState({ show: false, productId: null, productName: '' });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -30,23 +35,29 @@ const Products = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [refreshFlag]);
+
+  const uniqueSellers = Array.from(new Set(products.map(p => p.sellerName || 'Zudo Official')));
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory ? product.categoryId?._id === selectedCategory || product.categoryId === selectedCategory : true;
-    return matchesSearch && matchesCategory;
+    const matchesSeller = selectedSeller ? (product.sellerName || 'Zudo Official') === selectedSeller : true;
+    return matchesSearch && matchesCategory && matchesSeller;
   });
 
-  const handleDeleteProduct = async (id) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      try {
-        await api.delete(`/products/${id}`);
-        setProducts(products.filter(p => p._id !== id));
-      } catch (error) {
-        console.error("Error deleting product", error);
-        alert("Failed to delete product");
-      }
+  const openDeleteModal = (id, name) => {
+    setDeleteModalData({ show: true, productId: id, productName: name });
+  };
+
+  const confirmDeleteProduct = async () => {
+    try {
+      await api.delete(`/products/${deleteModalData.productId}`);
+      setProducts(products.filter(p => p._id !== deleteModalData.productId));
+      setDeleteModalData({ show: false, productId: null, productName: '' });
+    } catch (error) {
+      console.error("Error deleting product", error);
+      toast.error("Failed to delete product");
     }
   };
 
@@ -77,8 +88,12 @@ const Products = () => {
     const exportData = filteredProducts.map(product => ({
       ID: product._id,
       'Product Name': product.name,
+      'Seller': product.sellerName || 'Zudo Official',
       Category: product.categoryId?.name || product.categoryId,
       Subcategory: product.subCategoryId?.name || 'No Subcategory',
+      'Seller Price (₹)': product.sellerPrice ?? product.price,
+      'Commission': product.commissionValue != null ? `${product.commissionValue}${product.commissionType === 'percentage' ? '%' : ' flat'}` : '0 flat',
+      'Customer Price (₹)': product.price,
       'B2C Price (₹)': product.price,
       'B2B Price (₹)': product.b2bPrice,
       'GST %': product.gstPercent || 0,
@@ -98,9 +113,9 @@ const Products = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', width: '300px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '12px', overflowX: 'auto', paddingBottom: '8px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'nowrap', minWidth: 'max-content' }}>
+          <div style={{ position: 'relative', width: '240px' }}>
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-dim)' }} />
             <input
               type="text"
@@ -111,7 +126,7 @@ const Products = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <div style={{ position: 'relative', width: '200px' }}>
+          <div style={{ position: 'relative', width: '160px' }}>
             <Filter size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-dim)' }} />
             <select
               className="input-field"
@@ -125,8 +140,22 @@ const Products = () => {
               ))}
             </select>
           </div>
+          <div style={{ position: 'relative', width: '160px' }}>
+            <Filter size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-dim)' }} />
+            <select
+              className="input-field"
+              style={{ paddingLeft: '40px', appearance: 'none' }}
+              value={selectedSeller}
+              onChange={(e) => setSelectedSeller(e.target.value)}
+            >
+              <option value="">All Sellers</option>
+              {uniqueSellers.map((seller, idx) => (
+                <option key={idx} value={seller}>{seller}</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', minWidth: 'max-content' }}>
           <button
             onClick={exportProducts}
             className="btn-primary"
@@ -156,7 +185,9 @@ const Products = () => {
           <thead>
             <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'var(--card-bg)' }}>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Product</th>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Seller</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Category</th>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Pricing (Seller / Comm / Customer)</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2C Size Value</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2B Size Value</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>GST %</th>
@@ -166,9 +197,9 @@ const Products = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" style={{ padding: '48px', textAlign: 'center' }}><Loader2 className="animate-spin" style={{ margin: '0 auto' }} /></td></tr>
+              <tr><td colSpan="9" style={{ padding: '48px', textAlign: 'center' }}><Loader2 className="animate-spin" style={{ margin: '0 auto' }} /></td></tr>
             ) : filteredProducts.length === 0 ? (
-              <tr><td colSpan="7" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>No products found matching your search or filter.</td></tr>
+              <tr><td colSpan="9" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>No products found matching your search or filter.</td></tr>
             ) : filteredProducts.map(product => (
               <tr key={product._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                 <td style={{ padding: '16px 24px' }}>
@@ -177,10 +208,20 @@ const Products = () => {
                     <span>{product.name}</span>
                   </div>
                 </td>
+                <td style={{ padding: '16px 24px', fontWeight: 600, color: 'var(--primary)' }}>
+                  {product.sellerName || 'Zudo Official'}
+                </td>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontSize: '14px' }}>{product.categoryId?.name}</span>
                     <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{product.subCategoryId?.name || 'No Subcategory'}</span>
+                  </div>
+                </td>
+                <td style={{ padding: '16px 24px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--text-dim)' }}>Seller: <strong style={{ color: 'var(--text-main)' }}>₹{product.sellerPrice ?? product.price ?? 0}</strong></span>
+                    <span style={{ fontSize: '11px', color: '#6366f1' }}>Comm: {product.commissionValue != null ? `${product.commissionValue}${product.commissionType === 'percentage' ? '%' : ' flat'}` : '₹0'}</span>
+                    <span style={{ fontWeight: 600, color: '#10b981' }}>Cust: ₹{product.price ?? 0}</span>
                   </div>
                 </td>
                 <td style={{ padding: '16px 24px' }}>{getVariantSizes(product.b2c)}</td>
@@ -220,7 +261,7 @@ const Products = () => {
                       <Edit3 size={16} />
                     </button>
                     <button
-                      onClick={() => handleDeleteProduct(product._id)}
+                      onClick={() => openDeleteModal(product._id, product.name)}
                       style={{
                         background: 'rgba(239, 68, 68, 0.1)',
                         color: '#ef4444',
@@ -243,6 +284,38 @@ const Products = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Custom Delete Modal */}
+      {deleteModalData.show && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div className="glass-card" style={{ padding: '32px', borderRadius: '24px', width: '360px', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#ef4444' }}>
+              <Trash2 size={32} />
+            </div>
+            <h3 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '8px', color: 'var(--text-main)' }}>Delete Product</h3>
+            <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to delete <strong style={{ color: 'var(--text-main)' }}>{deleteModalData.productName}</strong>? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setDeleteModalData({ show: false, productId: null, productName: '' })}
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteProduct}
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', background: '#ef4444', border: 'none', color: '#fff', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

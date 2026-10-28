@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api, { getImageUrl } from '../utils/api';
 import * as XLSX from 'xlsx';
@@ -90,7 +91,7 @@ const B2BVerification = () => {
       fetchPendingUsers();
       setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
-      alert(`Failed to ${type} user`);
+      toast.error(`Failed to ${type} user`);
     } finally {
       setActionLoading(null);
     }
@@ -113,7 +114,7 @@ const B2BVerification = () => {
 
   const handleExport = () => {
     if (!pendingUsers || pendingUsers.length === 0) {
-      alert(`No B2B ${activeTab.toLowerCase()} applications to export!`);
+      toast.error(`No B2B ${activeTab.toLowerCase()} applications to export!`);
       return;
     }
 

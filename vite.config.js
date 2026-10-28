@@ -20,6 +20,12 @@ export default defineConfig({
         target: 'https://snbtradingco.in',
         changeOrigin: true,
         secure: false,
+      },
+      '/socket.io': {
+        target: 'https://snbtradingco.in',
+        changeOrigin: true,
+        secure: false,
+        ws: true
       }
     }
   }

@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -24,6 +25,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useSocket } from '../context/SocketContext';
 
 const Sellers = () => {
   const [sellers, setSellers] = useState([]);
@@ -32,8 +34,9 @@ const Sellers = () => {
   const [fetchLoading, setFetchLoading] = useState(true);
   const [status, setStatus] = useState({ type: '', message: '' });
   const [searchQuery, setSearchQuery] = useState('');
+  const { refreshFlag } = useSocket();
 
-  const [createData, setCreateData] = useState({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '' });
+  const [createData, setCreateData] = useState({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '', b2b: false, b2c: false });
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -56,7 +59,7 @@ const Sellers = () => {
 
   useEffect(() => {
     fetchSellers();
-  }, []);
+  }, [refreshFlag]);
 
   const handleUpdateStatus = async (id, status, isVerified) => {
     setUpdating(true);
@@ -70,7 +73,7 @@ const Sellers = () => {
       setShowDetails(false);
       setStatus({ type: 'success', message: `Seller account updated successfully!` });
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update seller status');
+      toast.error(err.response?.data?.message || 'Failed to update seller status');
     } finally {
       setUpdating(false);
     }
@@ -92,7 +95,7 @@ const Sellers = () => {
       await api.post('/sellers', payload);
       setStatus({ type: 'success', message: 'New seller account created successfully!' });
       setShowCreate(false);
-      setCreateData({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '' });
+      setCreateData({ name: '', email: '', password: '', creditDays: 0, status: 'pending', businessName: '', b2b: false, b2c: false });
       fetchSellers();
     } catch (err) {
       setStatus({ type: 'error', message: err.response?.data?.message || 'Failed to create seller.' });
@@ -153,10 +156,20 @@ const Sellers = () => {
       Name: seller.name,
       Email: seller.email,
       'Business/Store Name': seller.businessName || seller.storeName || 'Undisclosed',
+      'Business Address': seller.businessAddress || 'Not listed',
       Phone: seller.phone || 'No phone',
-      'Credit Days': seller.creditDays || 0,
+      'GST Registration': seller.gstNumber || 'N/A',
+      'PAN Card No.': seller.panNumber || 'N/A',
+      'Allowed Credit Terms (Days)': seller.creditDays || 0,
+      'Store Logo URL': seller.storePic ? getFullUrl(seller.storePic) : 'N/A',
+      'GST Document URL': seller.gstDoc ? getFullUrl(seller.gstDoc) : 'N/A',
+      'PAN Document URL': seller.panDoc ? getFullUrl(seller.panDoc) : 'N/A',
+      'Trade Licence URL': seller.tradeLicenseDoc ? getFullUrl(seller.tradeLicenseDoc) : 'N/A',
+      'RMC/AMPC URL': seller.rmcAmpcDoc ? getFullUrl(seller.rmcAmpcDoc) : 'N/A',
+      'Food Licence URL': seller.foodLicenseDoc ? getFullUrl(seller.foodLicenseDoc) : 'N/A',
       'Verification Status': seller.status || 'pending',
-      'Verified Access': seller.isVerified ? 'Verified' : 'Limited Access'
+      'Verified Access': seller.isVerified ? 'Verified' : 'Limited Access',
+      'Approval Status': seller.isApproved ? 'Approved' : 'Pending'
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -267,7 +280,7 @@ const Sellers = () => {
                 </div>
               </div>
             </div>
-            <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+            <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '24px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Company Name</label>
                 <input type="text" placeholder="e.g. Acme Corp" className="input-field" value={createData.businessName} onChange={e => setCreateData({...createData, businessName: e.target.value})} />
@@ -275,6 +288,17 @@ const Sellers = () => {
               <div>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Allowed Credit Days</label>
                 <input type="number" placeholder="e.g. 7" className="input-field" value={createData.creditDays} onChange={e => setCreateData({...createData, creditDays: Number(e.target.value) || 0})} min="0" />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Business Type (Optional)</label>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '48px', background: 'var(--input-bg)', padding: '0 16px', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-main)', fontWeight: 600 }}>
+                    <input type="checkbox" checked={createData.b2b} onChange={e => setCreateData({...createData, b2b: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: '#6366f1' }} /> B2B
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-main)', fontWeight: 600 }}>
+                    <input type="checkbox" checked={createData.b2c} onChange={e => setCreateData({...createData, b2c: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: '#6366f1' }} /> B2C
+                  </label>
+                </div>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -356,10 +380,18 @@ const Sellers = () => {
                           <Building2 size={14} style={{ color: 'var(--text-dim)' }} />
                           {seller.businessName || seller.storeName || <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>Undisclosed</span>}
                         </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <span>{seller.phone || 'No phone'}</span>
                           <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--glass-border)' }} />
                           <span style={{ color: '#6366f1', fontWeight: 700, background: 'rgba(99, 102, 241, 0.08)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', border: '1px solid rgba(99, 102, 241, 0.15)' }}>{seller.creditDays || 0} Credit Days</span>
+                          {(seller.b2b || seller.b2c) && (
+                            <>
+                              <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--glass-border)' }} />
+                              <span style={{ color: '#10b981', fontWeight: 700, background: 'rgba(16, 185, 129, 0.08)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+                                {seller.b2b && seller.b2c ? 'B2B & B2C' : seller.b2b ? 'B2B' : 'B2C'}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </td>
                       <td style={{ padding: '20px 24px' }}>
@@ -432,7 +464,7 @@ const Sellers = () => {
       {/* Seller Audit & Verification Modal */}
       {showDetails && selectedSeller && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: 'var(--card-bg)', boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '700px', borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--glass-border)', background: 'var(--card-bg)', boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)' }}>
             <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)' }}>Account Audit</h3>
@@ -443,7 +475,7 @@ const Sellers = () => {
               </button>
             </div>
             
-            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '75vh', overflowY: 'auto' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ gridColumn: '1/-1', padding: '12px 16px', background: 'var(--input-bg)', borderRadius: '14px', border: '1px solid var(--glass-border)' }}>
                    <label style={{ display: 'block', fontSize: '9px', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.5px' }}>Business Identity</label>
@@ -458,6 +490,10 @@ const Sellers = () => {
                 <div style={{ padding: '10px 14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
                    <label style={{ display: 'block', fontSize: '9px', fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '2px' }}>PAN Card No.</label>
                    <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-main)' }}>{selectedSeller.panNumber || 'N/A'}</div>
+                </div>
+                <div style={{ padding: '10px 14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                   <label style={{ display: 'block', fontSize: '9px', fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '2px' }}>QR Option / UPI ID</label>
+                   <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-main)' }}>{selectedSeller.qrOption || 'N/A'}</div>
                 </div>
 
                 <div style={{ gridColumn: '1/-1', padding: '12px 16px', background: 'var(--input-bg)', borderRadius: '14px', border: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
@@ -487,7 +523,8 @@ const Sellers = () => {
                   { label: 'PAN Document', url: selectedSeller.panDoc, color: '#ec4899' },
                   { label: 'Trade Licence', url: selectedSeller.tradeLicenseDoc, color: '#eab308' },
                   { label: 'RMC/AMPC', url: selectedSeller.rmcAmpcDoc, color: '#10b981' },
-                  { label: 'Food Licence', url: selectedSeller.foodLicenseDoc, color: '#f97316' }
+                  { label: 'Food Licence', url: selectedSeller.foodLicenseDoc, color: '#f97316' },
+                  { label: 'QR Code', url: selectedSeller.qrCodeDoc, color: '#8b5cf6' }
                 ].filter(doc => doc.url).map((doc, idx) => (
                   <a 
                     key={idx}
@@ -605,7 +642,7 @@ const Sellers = () => {
                   />
                 </div>
 
-                <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Allowed Credit Days</label>
                     <input type="number" placeholder="Credit days limit" className="input-field" value={editData.creditDays || 0} onChange={e => setEditData({...editData, creditDays: Number(e.target.value) || 0})} min="0" />
@@ -617,6 +654,17 @@ const Sellers = () => {
                       <option value="approved">Approved & Verified (Full Access)</option>
                       <option value="rejected">Rejected / Blocked</option>
                     </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>Business Type</label>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '48px', background: 'var(--input-bg)', padding: '0 16px', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-main)', fontWeight: 600 }}>
+                        <input type="checkbox" checked={editData.b2b || false} onChange={e => setEditData({...editData, b2b: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: '#6366f1' }} /> B2B
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-main)', fontWeight: 600 }}>
+                        <input type="checkbox" checked={editData.b2c || false} onChange={e => setEditData({...editData, b2c: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: '#6366f1' }} /> B2C
+                      </label>
+                    </div>
                   </div>
                 </div>
 

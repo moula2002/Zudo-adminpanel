@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api, { uploadApi, IMAGE_BASE_URL, getImageUrl } from '../utils/api';
@@ -36,6 +37,7 @@ const EditProduct = () => {
     sku: '',
     gstPercent: '0',
     sellerId: '',
+    sellerName: '',
     imageUrl: '',
     pdfUrl: ''
   });
@@ -72,6 +74,7 @@ const EditProduct = () => {
           sku: p.sku || '',
           gstPercent: p.gstPercent !== undefined ? String(p.gstPercent) : '0',
           sellerId: p.sellerId || '',
+          sellerName: p.sellerName || 'Zudo Official',
           imageUrl: p.imageUrl || '',
           pdfUrl: p.pdfUrl || ''
         });
@@ -111,7 +114,7 @@ const EditProduct = () => {
         }
       } catch (err) {
         console.error('Failed to fetch data:', err);
-        alert('Failed to load product details');
+        toast.error('Failed to load product details');
       } finally {
         setFetching(false);
       }
@@ -191,7 +194,7 @@ const EditProduct = () => {
       navigate('/products');
     } catch (err) {
       console.error('Update error:', err);
-      alert(err.response?.data?.message || 'Failed to update product');
+      toast.error(err.response?.data?.message || 'Failed to update product');
     } finally {
       setLoading(false);
     }
@@ -264,6 +267,16 @@ const EditProduct = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Seller</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={formData.sellerName}
+                    disabled
+                    style={{ fontSize: '16px', padding: '15px 20px', background: 'rgba(255,255,255,0.02)', color: 'var(--text-main)', cursor: 'not-allowed' }}
+                  />
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Product Name</label>
                   <input

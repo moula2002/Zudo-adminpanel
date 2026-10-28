@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
@@ -86,7 +87,7 @@ const PopupAds = () => {
       resetForm();
       fetchAds();
     } catch (err) {
-      alert('Failed to save popup ad');
+      toast.error('Failed to save popup ad');
     } finally {
       setSubmitting(false);
     }
@@ -123,7 +124,7 @@ const PopupAds = () => {
       await api.delete(`/popup-ads/${id}`);
       setAds(ads.filter(ad => ad._id !== id));
     } catch (err) {
-      alert('Failed to delete ad');
+      toast.error('Failed to delete ad');
     }
   };
 
@@ -132,7 +133,7 @@ const PopupAds = () => {
       const { data } = await api.put(`/popup-ads/${ad._id}`, { isActive: !ad.isActive });
       setAds(ads.map(a => a._id === ad._id ? data : a));
     } catch (err) {
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     }
   };
 

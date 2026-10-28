@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import axios from 'axios';
 
 const isLocal = window.location.hostname === 'localhost' ||
@@ -43,9 +44,22 @@ const emitLoadState = () => {
 
 export const getActiveRequests = () => activeRequests;
 
+export const clearApiCache = (urlPattern) => {
+  if (urlPattern) {
+    for (const key of apiCache.keys()) {
+      if (key.includes(urlPattern)) {
+        apiCache.delete(key);
+      }
+    }
+  } else {
+    apiCache.clear();
+  }
+};
+
 export const cancelAllPendingRequests = () => {
   globalAbortController.abort(); // Abort all inflight requests
   globalAbortController = new AbortController(); // Create a fresh controller for new requests
+  apiCache.clear();
   // Reset the delay queue, but enforce a wait to prevent instant 429s from the just-aborted requests hitting the server
   globalApiQueue = new Promise(resolve => setTimeout(resolve, GLOBAL_REQUEST_DELAY)); 
 };
@@ -58,8 +72,16 @@ const setupInterceptors = (instance) => {
     // Determine the expected location header for the cache key
     const currentDbName = localStorage.getItem('zudo_admin_db_name') || localStorage.getItem('zudo_admin_location') || 'global';
 
-    // Check Cache before queuing to save network requests instantly
-    if (config.method === 'get') {
+    // Check if explicit refresh/skipCache requested
+    const shouldSkipCache = config.skipCache || 
+      config.headers?.['Cache-Control'] === 'no-cache' || 
+      config.headers?.['pragma'] === 'no-cache';
+
+    if (shouldSkipCache) {
+      const cacheKey = `${config.url}-${currentDbName}`;
+      apiCache.delete(cacheKey);
+    }
+    if (config.method === 'get' && !shouldSkipCache) {
       const cacheKey = `${config.url}-${currentDbName}`;
       const cached = apiCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < 120000) { // 2 minute cache
@@ -136,9 +158,9 @@ const setupInterceptors = (instance) => {
 
       if (error.response && error.response.status === 401) {
         if (error.response.data && error.response.data.code === 'SESSION_INVALIDATED') {
-          alert('Session expired. You have logged in from another device.');
+          toast.error('Session expired. You have logged in from another device.');
         } else {
-          alert('Session expired. Please log in again.');
+          toast.error('Session expired. Please log in again.');
         }
         localStorage.removeItem('zudo_admin_token');
         localStorage.removeItem('zudo_admin_user');
@@ -180,7 +202,7 @@ export const getImageUrl = (url) => {
       finalUrl = finalUrl.replace(/(https?:\/\/)?zudo\.co\.in/g, IMAGE_BASE_URL);
     }
     if (finalUrl.includes('lightgreen-trout-176417.hostingersite.com')) {
-      finalUrl = finalUrl.replace(/(https?:\/\/)?lightgreen-trout-176417\.hostingersite\.com/g, IMAGE_BASE_URL);
+      finalUrl = finalUrl.replace(/(https?:)?(\/\/)?lightgreen-trout-176417\.hostingersite\.com/g, IMAGE_BASE_URL);
     }
     // Fix corrupted URLs where the domain was prepended twice
     if (finalUrl.includes('snbtradingco.inhttps')) {
