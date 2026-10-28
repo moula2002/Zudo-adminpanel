@@ -33,6 +33,7 @@ const EditProduct = () => {
     categoryId: '',
     subCategoryId: '',
     stock: '',
+    stockStatus: 'Available',
     sku: '',
     hsn: '',
     stockStatus: 'Available',
