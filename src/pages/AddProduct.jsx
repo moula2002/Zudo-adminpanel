@@ -236,9 +236,11 @@ const AddProduct = () => {
               <select name="unit" className="input-field" value={formData.unit} onChange={handleInputChange} required>
                 <option value="pcs">pcs</option>
                 <option value="g">g</option>
-                <option value="kg">kg</option>
-                <option value="ltr">ltr</option>
-                <option value="ml">ml</option>
+                          <option value="kg">kg</option>
+                          <option value="ltr">ltr</option>
+                          <option value="ml">ml</option>
+                          <option value="pcs">pcs</option>
+                          <option value="bag">bag</option>
                 <option value="bag">bag</option>
               </select>
             </div>
@@ -295,9 +297,11 @@ const AddProduct = () => {
                       <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px' }}>Unit *</label>
                       <select className="input-field" style={{ height: '36px', padding: '0 8px', fontSize: '13px', cursor: 'pointer' }} value={variant.packetSizeUnit} onChange={(e) => handleB2cChange(index, 'packetSizeUnit', e.target.value)} required>
                         <option value="g">g</option>
-                        <option value="kg">kg</option>
-                        <option value="ltr">ltr</option>
-                        <option value="ml">ml</option>
+                          <option value="kg">kg</option>
+                          <option value="ltr">ltr</option>
+                          <option value="ml">ml</option>
+                          <option value="pcs">pcs</option>
+                          <option value="bag">bag</option>
                       </select>
                     </div>
                     <div style={{ flex: 1.5 }}>
@@ -340,9 +344,11 @@ const AddProduct = () => {
                       <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px' }}>Unit *</label>
                       <select className="input-field" style={{ height: '36px', padding: '0 8px', fontSize: '13px', cursor: 'pointer' }} value={variant.packetSizeUnit} onChange={(e) => handleB2bChange(index, 'packetSizeUnit', e.target.value)} required>
                         <option value="g">g</option>
-                        <option value="kg">kg</option>
-                        <option value="ltr">ltr</option>
-                        <option value="ml">ml</option>
+                          <option value="kg">kg</option>
+                          <option value="ltr">ltr</option>
+                          <option value="ml">ml</option>
+                          <option value="pcs">pcs</option>
+                          <option value="bag">bag</option>
                       </select>
                     </div>
                     <div style={{ flex: 1.5 }}>
