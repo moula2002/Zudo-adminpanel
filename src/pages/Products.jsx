@@ -448,189 +448,457 @@ const Products = () => {
         </table>
       </div>
 
-      {/* Quantity-Based Commission Breakdown Simulator Modal */}
+            {/* Quantity-Based Commission Breakdown Simulator Modal */}
       {simulatorProduct && (() => {
         const info = getProductPricingInfo(simulatorProduct);
+        const currentQty = Math.max(1, parseInt(simQty, 10) || 1);
         const presetQuantities = [1, 2, 3, 5, info.availableStock > 0 ? info.availableStock : 50];
+        if (currentQty && !presetQuantities.includes(currentQty)) {
+          presetQuantities.push(currentQty);
+        }
         const uniquePresets = Array.from(new Set(presetQuantities)).sort((a, b) => a - b);
 
-        const currentQty = Math.max(1, parseInt(simQty, 10) || 1);
-        const calcTotalSeller = Math.round(info.sellerUnitPrice * currentQty * 100) / 100;
-        const calcTotalComm = Math.round(info.unitCommission * currentQty * 100) / 100;
-        const calcTotalBeforeGst = Math.round((calcTotalSeller + calcTotalComm) * 100) / 100;
+        const simComm = Math.round(info.unitCommission * currentQty * 100) / 100;
+        const simSubtotal = Math.round((info.sellerUnitPrice + simComm) * 100) / 100;
+        const simTotal = info.isGstInclusive ? simSubtotal : Math.round((simSubtotal + info.sellerGstAmount) * 100) / 100;
 
         return (
-          <div style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-          }}>
-            <div className="glass-card" style={{ padding: '32px', borderRadius: '24px', width: '680px', maxWidth: '95vw', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
-                    <Calculator size={22} />
+          <div className="simulator-modal-overlay" onClick={() => setSimulatorProduct(null)}>
+            <div
+              className="simulator-modal-dialog"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{
+                padding: '24px 32px 18px',
+                borderBottom: '1px solid var(--glass-border)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: 'rgba(255, 255, 255, 0.02)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '14px',
+                    background: 'rgba(99, 102, 241, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#6366f1',
+                    boxShadow: '0 0 20px rgba(99, 102, 241, 0.25)',
+                    border: '1px solid rgba(99, 102, 241, 0.25)'
+                  }}>
+                    <Calculator size={24} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Stock Quantity Commission Simulator</h3>
-                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: 0 }}>{simulatorProduct.name}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: '19px', fontWeight: 800, color: 'var(--text-main)', margin: 0, letterSpacing: '-0.02em' }}>
+                        Stock Quantity Commission Simulator
+                      </h3>
+                      <span style={{
+                        padding: '3px 10px',
+                        borderRadius: '9999px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        background: 'rgba(99, 102, 241, 0.12)',
+                        color: '#6366f1',
+                        border: '1px solid rgba(99, 102, 241, 0.25)'
+                      }}>
+                        {info.isFlat ? 'Flat Commission' : `${info.commissionRate}% Dynamic`}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{simulatorProduct.name}</span>
+                      <span>•</span>
+                      <span>Available Stock: <strong style={{ color: info.availableStock <= 10 ? '#ef4444' : '#10b981' }}>{info.availableStock} {simulatorProduct.unit || 'units'}</strong></span>
+                      {simulatorProduct.categoryId?.name && (
+                        <>
+                          <span>•</span>
+                          <span>Category: {simulatorProduct.categoryId.name}</span>
+                        </>
+                      )}
+                    </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setSimulatorProduct(null)}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: '6px' }}
+                  style={{
+                    background: 'var(--input-bg)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--text-dim)',
+                    cursor: 'pointer',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'var(--input-bg)'; e.currentTarget.style.borderColor = 'var(--glass-border)'; }}
+                  title="Close Modal"
                 >
-                  <X size={20} />
+                  <X size={18} />
                 </button>
               </div>
 
-              {/* 7-Step Pricing Breakdown Overview Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', background: 'var(--input-bg)', padding: '16px', borderRadius: '14px', marginBottom: '20px', border: '1px solid var(--glass-border)' }}>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>1. Seller Unit Price</span>
-                  <strong style={{ fontSize: '14px', color: 'var(--text-main)' }}>₹{info.sellerUnitPrice.toFixed(2)}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>2. Seller GST ({info.sellerGstPercent}%)</span>
-                  <strong style={{ fontSize: '14px', color: '#f59e0b' }}>₹{info.sellerGstAmount.toFixed(2)}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>3. Flat Comm / Unit</span>
-                  <strong style={{ fontSize: '14px', color: '#6366f1' }}>{info.isFlat ? `₹${info.commissionRate.toFixed(2)}` : `${info.commissionRate}%`}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>4. Available Stock</span>
-                  <strong style={{ fontSize: '14px', color: 'var(--text-main)' }}>{info.availableStock} {simulatorProduct.unit || 'units'}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>5. Total Stock Comm</span>
-                  <strong style={{ fontSize: '14px', color: '#6366f1' }}>₹{info.stockTotalCommission.toFixed(2)}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>6. Subtotal</span>
-                  <strong style={{ fontSize: '14px', color: 'var(--text-main)' }}>₹{info.subtotal.toFixed(2)}</strong>
-                </div>
-                <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>7. Total Amount</span>
-                  <strong style={{ fontSize: '15px', color: '#10b981' }}>₹{info.totalAmount.toFixed(2)}</strong>
-                </div>
-              </div>
+              {/* Modal Body */}
+              <div className="simulator-modal-body custom-scrollbar">
+                {/* 7-Step Pricing Breakdown Overview Cards */}
+                <div className="simulator-stats-grid">
+                  <div className="simulator-stat-card">
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '6px' }}>
+                      1. Seller Unit Price
+                    </span>
+                    <strong style={{ fontSize: '15px', color: 'var(--text-main)', fontWeight: 700 }}>
+                      ₹{info.sellerUnitPrice.toFixed(2)}
+                    </strong>
+                  </div>
 
-              {/* Interactive Quantity Selector */}
-              <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Simulate Quantity:</span>
-                <input
-                  type="number"
-                  min="1"
-                  className="input-field"
-                  style={{ width: '100px', height: '36px', padding: '0 10px', fontSize: '14px' }}
-                  value={simQty}
-                  onChange={(e) => setSimQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                />
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  {uniquePresets.map(preset => (
-                    <button
-                      key={preset}
-                      onClick={() => setSimQty(preset)}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        border: currentQty === preset ? '1px solid #6366f1' : '1px solid var(--glass-border)',
-                        background: currentQty === preset ? 'rgba(99, 102, 241, 0.15)' : 'var(--input-bg)',
-                        color: currentQty === preset ? '#6366f1' : 'var(--text-main)',
-                        fontWeight: 600,
-                        fontSize: '12px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {preset} {simulatorProduct.unit || 'units'}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                  <div className="simulator-stat-card">
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '6px' }}>
+                      2. Seller GST ({info.sellerGstPercent}%)
+                    </span>
+                    <strong style={{ fontSize: '15px', color: '#f59e0b', fontWeight: 700 }}>
+                      ₹{info.sellerGstAmount.toFixed(2)}
+                    </strong>
+                  </div>
 
-              {/* Simulation Breakdown Table */}
-              <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--glass-border)', marginBottom: '20px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Stock / Order Qty</th>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Seller Price</th>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Seller GST ({info.sellerGstPercent}%)</th>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Flat Comm/Unit</th>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Total Comm</th>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Subtotal</th>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Total Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {uniquePresets.map(q => {
-                      const rowSeller = Math.round(info.sellerUnitPrice * 100) / 100;
-                      const rowSellerGst = Math.round(info.sellerGstAmount * 100) / 100;
-                      const rowComm = Math.round(info.unitCommission * q * 100) / 100;
-                      const rowSubtotal = Math.round((rowSeller + rowComm) * 100) / 100;
-                      const rowTotal = info.isGstInclusive ? rowSubtotal : Math.round((rowSubtotal + rowSellerGst) * 100) / 100;
-                      const isSelected = q === currentQty;
+                  <div className="simulator-stat-card">
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '6px' }}>
+                      3. Flat Comm / Unit
+                    </span>
+                    <strong style={{ fontSize: '15px', color: '#6366f1', fontWeight: 700 }}>
+                      {info.isFlat ? `₹${info.commissionRate.toFixed(2)}` : `${info.commissionRate}%`}
+                    </strong>
+                  </div>
+
+                  <div className="simulator-stat-card">
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '6px' }}>
+                      4. Available Stock
+                    </span>
+                    <strong style={{ fontSize: '15px', color: 'var(--text-main)', fontWeight: 700 }}>
+                      {info.availableStock} {simulatorProduct.unit || 'units'}
+                    </strong>
+                  </div>
+
+                  <div className="simulator-stat-card">
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '6px' }}>
+                      5. Total Stock Comm
+                    </span>
+                    <strong style={{ fontSize: '15px', color: '#6366f1', fontWeight: 700 }}>
+                      ₹{info.stockTotalCommission.toFixed(2)}
+                    </strong>
+                  </div>
+
+                  <div className="simulator-stat-card">
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '6px' }}>
+                      6. Subtotal
+                    </span>
+                    <strong style={{ fontSize: '15px', color: 'var(--text-main)', fontWeight: 700 }}>
+                      ₹{info.subtotal.toFixed(2)}
+                    </strong>
+                  </div>
+
+                  <div className="simulator-stat-card highlight">
+                    <span style={{ fontSize: '11px', color: '#10b981', display: 'block', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '6px' }}>
+                      7. Total Amount
+                    </span>
+                    <strong style={{ fontSize: '16px', color: '#10b981', fontWeight: 800 }}>
+                      ₹{info.totalAmount.toFixed(2)}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Interactive Quantity Selector */}
+                <div style={{
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '16px',
+                  flexWrap: 'wrap',
+                  background: 'var(--input-bg)',
+                  padding: '12px 18px',
+                  borderRadius: '14px',
+                  border: '1px solid var(--glass-border)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+                      Simulate Quantity:
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        onClick={() => setSimQty(Math.max(1, currentQty - 1))}
+                        style={{
+                          width: '32px',
+                          height: '34px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--glass-border)',
+                          background: 'var(--card-bg)',
+                          color: 'var(--text-main)',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                        title="Decrease by 1"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        className="input-field"
+                        style={{ width: '85px', height: '34px', padding: '0 8px', fontSize: '14px', textAlign: 'center', fontWeight: 700 }}
+                        value={simQty}
+                        onChange={(e) => setSimQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      />
+                      <button
+                        onClick={() => setSimQty(currentQty + 1)}
+                        style={{
+                          width: '32px',
+                          height: '34px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--glass-border)',
+                          background: 'var(--card-bg)',
+                          color: 'var(--text-main)',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                        title="Increase by 1"
+                      >
+                        +
+                      </button>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-dim)', marginLeft: '2px' }}>
+                        {simulatorProduct.unit || 'units'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500 }}>Presets:</span>
+                    {uniquePresets.map(preset => {
+                      const isSelected = currentQty === preset;
+                      const isFullStock = info.availableStock > 0 && preset === info.availableStock;
                       return (
-                        <tr
-                          key={q}
+                        <button
+                          key={preset}
+                          onClick={() => setSimQty(preset)}
                           style={{
-                            borderBottom: '1px solid var(--glass-border)',
-                            background: isSelected ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
-                            fontWeight: isSelected ? 700 : 400
+                            padding: '6px 14px',
+                            borderRadius: '10px',
+                            border: isSelected ? '1px solid #6366f1' : '1px solid var(--glass-border)',
+                            background: isSelected ? 'rgba(99, 102, 241, 0.18)' : 'var(--card-bg)',
+                            color: isSelected ? '#6366f1' : 'var(--text-main)',
+                            fontWeight: isSelected ? 700 : 500,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            transition: 'all 0.15s ease',
+                            boxShadow: isSelected ? '0 0 10px rgba(99, 102, 241, 0.2)' : 'none'
                           }}
                         >
-                          <td style={{ padding: '10px 14px' }}>{q} {simulatorProduct.unit || 'units'}</td>
-                          <td style={{ padding: '10px 14px' }}>₹{info.sellerUnitPrice.toFixed(2)}</td>
-                          <td style={{ padding: '10px 14px', color: '#f59e0b', fontWeight: 600 }}>₹{rowSellerGst.toFixed(2)}</td>
-                          <td style={{ padding: '10px 14px', color: '#6366f1' }}>₹{info.unitCommission.toFixed(2)}</td>
-                          <td style={{ padding: '10px 14px', color: '#6366f1', fontWeight: 700 }}>₹{rowComm.toFixed(2)}</td>
-                          <td style={{ padding: '10px 14px', color: 'var(--text-main)', fontWeight: 700 }}>₹{rowSubtotal.toFixed(2)}</td>
-                          <td style={{ padding: '10px 14px', color: '#10b981', fontWeight: 700 }}>₹{rowTotal.toFixed(2)}</td>
-                        </tr>
+                          <span>{preset} {simulatorProduct.unit || 'units'}</span>
+                          {isFullStock && (
+                            <span style={{ fontSize: '10px', opacity: 0.85, fontWeight: 700 }}>
+                              (Stock)
+                            </span>
+                          )}
+                        </button>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                </div>
 
-              {/* Selected Quantity Detailed Breakdown */}
-              {(() => {
-                const simComm = Math.round(info.unitCommission * currentQty * 100) / 100;
-                const simSubtotal = Math.round((info.sellerUnitPrice + simComm) * 100) / 100;
-                const simTotal = info.isGstInclusive ? simSubtotal : Math.round((simSubtotal + info.sellerGstAmount) * 100) / 100;
-                return (
-                  <div style={{ padding: '14px 18px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '2px' }}>
-                        Calculation for {currentQty} units:
+                {/* Simulation Breakdown Table */}
+                <div style={{
+                  borderRadius: '14px',
+                  overflow: 'hidden',
+                  border: '1px solid var(--glass-border)',
+                  marginBottom: '20px',
+                  boxShadow: '0 4px 14px rgba(0, 0, 0, 0.08)'
+                }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        borderBottom: '1px solid var(--glass-border)'
+                      }}>
+                        <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px' }}>
+                          Stock / Order Qty
+                        </th>
+                        <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
+                          Seller Price
+                        </th>
+                        <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
+                          Seller GST ({info.sellerGstPercent}%)
+                        </th>
+                        <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
+                          Flat Comm/Unit
+                        </th>
+                        <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
+                          Total Comm
+                        </th>
+                        <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
+                          Subtotal
+                        </th>
+                        <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
+                          Total Amount
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {uniquePresets.map(q => {
+                        const rowSeller = Math.round(info.sellerUnitPrice * 100) / 100;
+                        const rowSellerGst = Math.round(info.sellerGstAmount * 100) / 100;
+                        const rowComm = Math.round(info.unitCommission * q * 100) / 100;
+                        const rowSubtotal = Math.round((rowSeller + rowComm) * 100) / 100;
+                        const rowTotal = info.isGstInclusive ? rowSubtotal : Math.round((rowSubtotal + rowSellerGst) * 100) / 100;
+                        const isSelected = q === currentQty;
+                        return (
+                          <tr
+                            key={q}
+                            onClick={() => setSimQty(q)}
+                            style={{
+                              borderBottom: '1px solid var(--glass-border)',
+                              background: isSelected ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
+                              borderLeft: isSelected ? '4px solid #6366f1' : '4px solid transparent',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <td style={{ padding: '12px 18px', fontWeight: isSelected ? 700 : 500 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span>{q} {simulatorProduct.unit || 'units'}</span>
+                                {isSelected && (
+                                  <span style={{
+                                    fontSize: '10px',
+                                    padding: '2px 7px',
+                                    borderRadius: '6px',
+                                    background: '#6366f1',
+                                    color: '#ffffff',
+                                    fontWeight: 700
+                                  }}>
+                                    Simulating
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 18px', textAlign: 'right', fontWeight: isSelected ? 700 : 400 }}>
+                              ₹{info.sellerUnitPrice.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '12px 18px', color: '#f59e0b', fontWeight: 600, textAlign: 'right' }}>
+                              ₹{rowSellerGst.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '12px 18px', color: '#6366f1', textAlign: 'right', fontWeight: isSelected ? 700 : 400 }}>
+                              ₹{info.unitCommission.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '12px 18px', color: '#6366f1', fontWeight: 700, textAlign: 'right' }}>
+                              ₹{rowComm.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '12px 18px', color: 'var(--text-main)', fontWeight: 700, textAlign: 'right' }}>
+                              ₹{rowSubtotal.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '12px 18px', textAlign: 'right' }}>
+                              <span style={{
+                                color: '#10b981',
+                                fontWeight: 800,
+                                fontSize: '13px',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                background: isSelected ? 'rgba(16, 185, 129, 0.15)' : 'transparent'
+                              }}>
+                                ₹{rowTotal.toFixed(2)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Selected Quantity Detailed Breakdown */}
+                <div style={{
+                  padding: '18px 24px',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(16, 185, 129, 0.05))',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '16px'
+                }}>
+                  <div style={{ minWidth: '320px', flex: 1 }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Live Calculation Formula (for {currentQty} {simulatorProduct.unit || 'units'}):
+                    </span>
+                    <div style={{
+                      fontSize: '13.5px',
+                      color: 'var(--text-main)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      flexWrap: 'wrap',
+                      lineHeight: '1.6'
+                    }}>
+                      <span>₹{info.sellerUnitPrice.toFixed(2)} Seller</span>
+                      <span style={{ color: 'var(--text-dim)' }}>+</span>
+                      <span style={{ background: 'rgba(99, 102, 241, 0.12)', padding: '2px 8px', borderRadius: '6px', color: '#6366f1', fontWeight: 700 }}>
+                        (₹{info.unitCommission.toFixed(2)} × {currentQty} = ₹{simComm.toFixed(2)} Comm)
                       </span>
-                      <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                        ₹{info.sellerUnitPrice.toFixed(2)} Seller + (₹{info.unitCommission.toFixed(2)} × {currentQty} = <strong style={{ color: '#6366f1' }}>₹{simComm.toFixed(2)} Comm</strong>) = <strong>₹{simSubtotal.toFixed(2)} Subtotal</strong> + <strong style={{ color: '#f59e0b' }}>₹{info.sellerGstAmount.toFixed(2)} Seller GST</strong>
+                      <span style={{ color: 'var(--text-dim)' }}>=</span>
+                      <strong style={{ color: 'var(--text-main)' }}>₹{simSubtotal.toFixed(2)} Subtotal</strong>
+                      <span style={{ color: 'var(--text-dim)' }}>+</span>
+                      <span style={{ background: 'rgba(245, 158, 11, 0.12)', padding: '2px 8px', borderRadius: '6px', color: '#f59e0b', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        ₹{info.sellerGstAmount.toFixed(2)} Seller GST
                       </span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>Total Amount</span>
-                      <strong style={{ fontSize: '18px', color: '#10b981' }}>₹{simTotal.toFixed(2)}</strong>
                     </div>
                   </div>
-                );
-              })()}
 
-              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  className="btn-primary"
-                  onClick={() => setSimulatorProduct(null)}
-                  style={{ padding: '10px 24px' }}
-                >
-                  Close
-                </button>
+                  <div style={{
+                    textAlign: 'right',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    padding: '12px 22px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    minWidth: '170px'
+                  }}>
+                    <span style={{ fontSize: '11px', color: '#10b981', display: 'block', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Total Amount
+                    </span>
+                    <strong style={{ fontSize: '22px', color: '#10b981', fontWeight: 800 }}>
+                      ₹{simTotal.toFixed(2)}
+                    </strong>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', marginTop: '2px' }}>
+                      {info.isGstInclusive ? 'GST inclusive' : '+ GST included'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Footer Close Button */}
+                <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    className="btn-primary"
+                    onClick={() => setSimulatorProduct(null)}
+                    style={{ padding: '10px 28px', fontSize: '14px', borderRadius: '12px' }}
+                  >
+                    Close Simulator
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         );
       })()}
 
-      {/* Custom Delete Modal */}
+
+{/* Custom Delete Modal */}
       {deleteModalData.show && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
