@@ -215,7 +215,6 @@ table th, table td {
     justify-content: center !important;
   }
 }
-
 /* Quantity Commission Simulator Modal - Desktop Responsive Styles */
 .simulator-modal-overlay {
   position: fixed;
@@ -289,4 +288,4 @@ table th, table td {
 .simulator-stat-card.highlight {
   background: rgba(16, 185, 129, 0.08);
   border-color: rgba(16, 185, 129, 0.3);
-}
+}

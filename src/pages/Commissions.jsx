@@ -183,7 +183,14 @@ const Commissions = () => {
 
   const openManageModal = (category) => {
     setSelectedCategory(category);
-    setCommissionsList(category.commissions || []);
+    setCommissionsList(
+      (category.commissions || []).map(c => ({
+        unit: c.unit,
+        commissionType: c.commissionType || 'percentage',
+        commissionValue: c.commissionValue ?? 0,
+        pincode: c.pincode || 'All'
+      }))
+    );
     setNewRule({
       unit: 'pcs',
       commissionType: 'percentage',
@@ -207,8 +214,11 @@ const Commissions = () => {
     }
 
     const pincodeValue = newRule.pincode.trim() || 'All';
-    // Check if unit rule already exists
-    if (commissionsList.some(r => r.unit.toLowerCase() === unitName.toLowerCase() && (r.pincode || 'All') === pincodeValue)) {
+    // Check if unit rule already exists (case-insensitive)
+    if (commissionsList.some(r => 
+      String(r.unit || '').trim().toLowerCase() === unitName.toLowerCase() && 
+      String(r.pincode || 'All').trim().toLowerCase() === pincodeValue.toLowerCase()
+    )) {
       toast.error(`A commission rule for unit "${unitName}" and pincode "${pincodeValue}" already exists.`);
       return;
     }
@@ -250,8 +260,9 @@ const Commissions = () => {
       toast.success('Commission settings saved successfully!');
       await fetchCategories(true);
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to save commissions settings');
+      console.error('Save commissions error:', err);
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to save commissions settings';
+      toast.error(errMsg);
     } finally {
       setSubmitting(false);
     }
@@ -531,7 +542,7 @@ const Commissions = () => {
                           <span>
                             {comm.commissionType === 'percentage' 
                               ? `${comm.commissionValue}%` 
-                              : `₹${comm.commissionValue}`
+                              : `₹${comm.commissionValue}/unit`
                             }
                           </span>
                         </div>
@@ -664,11 +675,13 @@ const Commissions = () => {
 
                   {/* Comm Value */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Value</label>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>
+                      Value {newRule.commissionType === 'flat' ? '(₹ per unit)' : '(%)'}
+                    </label>
                     <input 
                       type="number" 
                       className="input-field" 
-                      placeholder="e.g. 5" 
+                      placeholder={newRule.commissionType === 'flat' ? "e.g. 2 (₹/unit)" : "e.g. 5 (%)"} 
                       value={newRule.commissionValue} 
                       onChange={(e) => setNewRule({ ...newRule, commissionValue: e.target.value })}
                       min="0"
@@ -724,7 +737,7 @@ const Commissions = () => {
                             gap: '4px'
                           }}>
                             {comm.commissionType === 'percentage' ? <BadgePercent size={12} /> : <Coins size={12} />}
-                            {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue}`}
+                            {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue}/unit`}
                           </span>
                         </div>
                         <button 
