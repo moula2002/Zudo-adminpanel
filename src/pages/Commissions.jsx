@@ -144,7 +144,14 @@ const Commissions = () => {
 
   const openManageModal = (category) => {
     setSelectedCategory(category);
-    setCommissionsList(category.commissions || []);
+    setCommissionsList(
+      (category.commissions || []).map(c => ({
+        unit: c.unit,
+        commissionType: c.commissionType || 'percentage',
+        commissionValue: c.commissionValue ?? 0,
+        pincode: c.pincode || 'All'
+      }))
+    );
     setNewRule({
       unit: 'pcs',
       commissionType: 'percentage',
@@ -168,8 +175,11 @@ const Commissions = () => {
     }
 
     const pincodeValue = newRule.pincode.trim() || 'All';
-    // Check if unit rule already exists
-    if (commissionsList.some(r => r.unit.toLowerCase() === unitName.toLowerCase() && (r.pincode || 'All') === pincodeValue)) {
+    // Check if unit rule already exists (case-insensitive)
+    if (commissionsList.some(r => 
+      String(r.unit || '').trim().toLowerCase() === unitName.toLowerCase() && 
+      String(r.pincode || 'All').trim().toLowerCase() === pincodeValue.toLowerCase()
+    )) {
       toast.error(`A commission rule for unit "${unitName}" and pincode "${pincodeValue}" already exists.`);
       return;
     }
@@ -206,11 +216,13 @@ const Commissions = () => {
       await api.put(`/commissions/category/${selectedCategory._id}`, {
         commissions: commissionsList
       });
+      toast.success('Commission settings saved successfully!');
       setSelectedCategory(null);
       fetchCategories();
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to save commissions settings');
+      console.error('Save commissions error:', err);
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to save commissions settings';
+      toast.error(errMsg);
     } finally {
       setSubmitting(false);
     }
