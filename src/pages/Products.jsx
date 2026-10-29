@@ -95,26 +95,58 @@ const Products = () => {
 
   const getProductPricingInfo = (product) => {
     const sellerUnitPrice = product.sellerUnitPrice !== undefined && product.sellerUnitPrice !== null
-      ? product.sellerUnitPrice
-      : (product.sellerPrice ?? product.price ?? 0);
+      ? Number(product.sellerUnitPrice)
+      : (product.sellerPrice !== undefined && product.sellerPrice !== null ? Number(product.sellerPrice) : Number(product.price || 0));
 
     const isFlat = (product.commissionType || 'flat') === 'flat';
     const commissionRate = product.commissionRate !== undefined && product.commissionRate !== null
-      ? product.commissionRate
-      : (product.commissionValue ?? 0);
+      ? Number(product.commissionRate)
+      : Number(product.commissionValue ?? 0);
 
     const unitCommission = product.unitCommission !== undefined && product.unitCommission !== null
-      ? product.unitCommission
+      ? Number(product.unitCommission)
       : (isFlat ? commissionRate : Math.round((sellerUnitPrice * commissionRate / 100) * 100) / 100);
 
     const stock = getLowestStock(product);
     const stockTotalCommission = product.stockTotalCommission !== undefined && product.stockTotalCommission !== null
-      ? product.stockTotalCommission
+      ? Number(product.stockTotalCommission)
       : Math.round(unitCommission * Math.max(0, stock) * 100) / 100;
 
+    // Step 2: Subtotal = Seller Unit Price + Total Stock Commission
+    const subtotal = product.subtotal !== undefined && product.subtotal !== null
+      ? Number(product.subtotal)
+      : Math.round((sellerUnitPrice + stockTotalCommission) * 100) / 100;
+
+    const gstPercent = product.gstPercent !== undefined && product.gstPercent !== null
+      ? Number(product.gstPercent)
+      : 0;
+
+    const isGstInclusive = Boolean(product.isGstInclusive);
+
+    // Step 3 & 4: Calculate GST Amount and Total Amount
+    let gstAmount = 0;
+    let totalAmount = subtotal;
+
+    if (product.gstAmount !== undefined && product.gstAmount !== null && product.totalAmount !== undefined && product.totalAmount !== null) {
+      gstAmount = Number(product.gstAmount);
+      totalAmount = Number(product.totalAmount);
+    } else if (gstPercent > 0) {
+      if (isGstInclusive) {
+        const baseBeforeTax = subtotal / (1 + gstPercent / 100);
+        gstAmount = Math.round((subtotal - baseBeforeTax) * 100) / 100;
+        totalAmount = subtotal;
+      } else {
+        gstAmount = Math.round((subtotal * (gstPercent / 100)) * 100) / 100;
+        totalAmount = Math.round((subtotal + gstAmount) * 100) / 100;
+      }
+    } else {
+      gstAmount = 0;
+      totalAmount = subtotal;
+    }
+
     const unitCustomerPrice = product.unitCustomerPrice !== undefined && product.unitCustomerPrice !== null
-      ? product.unitCustomerPrice
-      : (product.price ?? Math.round((sellerUnitPrice + unitCommission) * 100) / 100);
+      ? Number(product.unitCustomerPrice)
+      : (product.price !== undefined ? Number(product.price) : Math.round((sellerUnitPrice + unitCommission) * 100) / 100);
 
     return {
       sellerUnitPrice,
@@ -123,6 +155,14 @@ const Products = () => {
       unitCommission,
       availableStock: stock,
       stockTotalCommission,
+      subtotal,
+      stockSubtotal: subtotal,
+      gstPercent,
+      gstAmount,
+      stockGstAmount: gstAmount,
+      totalAmount,
+      stockTotalAmount: totalAmount,
+      isGstInclusive,
       unitCustomerPrice,
       isFlat
     };
@@ -137,16 +177,18 @@ const Products = () => {
         'Seller': product.sellerName || 'Zudo Official',
         Category: product.categoryId?.name || product.categoryId,
         Subcategory: product.subCategoryId?.name || 'No Subcategory',
-        'Seller Price per Unit (₹)': info.sellerUnitPrice,
-        'Commission Type': info.isFlat ? 'Flat (₹)' : 'Percentage (%)',
-        'Commission Rate': info.commissionRate,
-        'Commission per Unit (₹)': info.unitCommission,
-        'Available Stock Quantity': info.availableStock,
-        'Total Commission for Stock Quantity (₹)': info.stockTotalCommission,
+        '1. Seller Price per Unit (₹)': info.sellerUnitPrice,
+        '2. Commission Type': info.isFlat ? 'Flat (₹)' : 'Percentage (%)',
+        '2. Flat Commission per Unit (₹)': info.unitCommission,
+        '3. Available Stock Quantity': info.availableStock,
+        '4. Total Stock Commission (₹)': info.stockTotalCommission,
+        '5. Subtotal (₹)': info.subtotal,
+        '6. GST %': info.gstPercent,
+        '6. GST Amount (₹)': info.gstAmount,
+        '7. Total Amount (₹)': info.totalAmount,
         'Customer Price per Unit (₹)': info.unitCustomerPrice,
         'B2C Price (₹)': product.price,
         'B2B Price (₹)': product.b2bPrice,
-        'GST %': product.gstPercent || 0,
         Stock: info.availableStock,
         Unit: product.unit || 'pcs'
       };
@@ -238,7 +280,7 @@ const Products = () => {
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Product</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Seller</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Category</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Pricing Breakdown (Per Unit)</th>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Pricing Breakdown</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2C Size Value</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2B Size Value</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>GST %</th>
@@ -270,17 +312,49 @@ const Products = () => {
                       <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{product.subCategoryId?.name || 'No Subcategory'}</span>
                     </div>
                   </td>
-                  <td style={{ padding: '16px 24px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' }}>
-                      <span style={{ color: 'var(--text-dim)' }}>
-                        Seller Unit: <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerUnitPrice}</strong>
-                      </span>
-                      <span style={{ fontSize: '11px', color: '#6366f1', fontWeight: 600 }}>
-                        Flat Comm: {info.isFlat ? `₹${info.commissionRate} / unit` : `${info.commissionRate}% (₹${info.unitCommission.toFixed(2)}/unit)`}
-                      </span>
-                      <span style={{ fontWeight: 600, color: '#10b981' }}>
-                        Customer Unit: ₹{info.unitCustomerPrice}
-                      </span>
+                  <td style={{ padding: '16px 24px', minWidth: '240px' }}>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      fontSize: '12px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      padding: '10px 12px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--glass-border)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ color: 'var(--text-dim)' }}>1. Seller Unit Price:</span>
+                        <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerUnitPrice.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ color: 'var(--text-dim)' }}>2. Flat Comm / Unit:</span>
+                        <span style={{ color: '#6366f1', fontWeight: 600 }}>
+                          {info.isFlat ? `₹${info.commissionRate.toFixed(2)}` : `${info.commissionRate}% (₹${info.unitCommission.toFixed(2)})`}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ color: 'var(--text-dim)' }}>3. Available Stock:</span>
+                        <span style={{ fontWeight: 600, color: info.availableStock <= 10 ? '#ef4444' : '#22c55e' }}>
+                          {info.availableStock} {product.unit || 'units'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ color: 'var(--text-dim)' }}>4. Total Stock Comm:</span>
+                        <strong style={{ color: '#6366f1' }}>₹{info.stockTotalCommission.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px dashed var(--glass-border)', paddingTop: '4px' }}>
+                        <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>5. Subtotal:</span>
+                        <strong style={{ color: 'var(--text-main)' }}>₹{info.subtotal.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ color: 'var(--text-dim)' }}>6. GST ({info.gstPercent}%{info.isGstInclusive ? ' incl' : ''}):</span>
+                        <strong style={{ color: '#f59e0b' }}>₹{info.gstAmount.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '4px', marginTop: '2px' }}>
+                        <span style={{ fontWeight: 700, color: '#10b981' }}>7. Total Amount:</span>
+                        <strong style={{ color: '#10b981', fontSize: '13px' }}>₹{info.totalAmount.toFixed(2)}</strong>
+                      </div>
                     </div>
                   </td>
                   <td style={{ padding: '16px 24px' }}>{getVariantSizes(product.b2c)}</td>
@@ -407,23 +481,35 @@ const Products = () => {
                 </button>
               </div>
 
-              {/* Per-Unit Configuration Card */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', background: 'var(--input-bg)', padding: '16px', borderRadius: '14px', marginBottom: '20px', border: '1px solid var(--glass-border)' }}>
+              {/* 7-Step Pricing Breakdown Overview Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', background: 'var(--input-bg)', padding: '16px', borderRadius: '14px', marginBottom: '20px', border: '1px solid var(--glass-border)' }}>
                 <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>Seller Unit Price</span>
-                  <strong style={{ fontSize: '15px', color: 'var(--text-main)' }}>₹{info.sellerUnitPrice}</strong>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>1. Seller Unit Price</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-main)' }}>₹{info.sellerUnitPrice.toFixed(2)}</strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>Commission Rate</span>
-                  <strong style={{ fontSize: '15px', color: '#6366f1' }}>{info.isFlat ? `₹${info.commissionRate}/unit` : `${info.commissionRate}%`}</strong>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>2. Flat Comm / Unit</span>
+                  <strong style={{ fontSize: '14px', color: '#6366f1' }}>{info.isFlat ? `₹${info.commissionRate.toFixed(2)}` : `${info.commissionRate}%`}</strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>Customer Unit Price</span>
-                  <strong style={{ fontSize: '15px', color: '#10b981' }}>₹{info.unitCustomerPrice}</strong>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>3. Available Stock</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-main)' }}>{info.availableStock} {simulatorProduct.unit || 'units'}</strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>Available Stock</span>
-                  <strong style={{ fontSize: '15px', color: 'var(--text-main)' }}>{info.availableStock} {simulatorProduct.unit || 'units'}</strong>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>4. Total Stock Comm</span>
+                  <strong style={{ fontSize: '14px', color: '#6366f1' }}>₹{info.stockTotalCommission.toFixed(2)}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>5. Subtotal</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-main)' }}>₹{info.subtotal.toFixed(2)}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>6. GST ({info.gstPercent}%)</span>
+                  <strong style={{ fontSize: '14px', color: '#f59e0b' }}>₹{info.gstAmount.toFixed(2)}</strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>7. Total Amount</span>
+                  <strong style={{ fontSize: '15px', color: '#10b981' }}>₹{info.totalAmount.toFixed(2)}</strong>
                 </div>
               </div>
 
@@ -466,17 +552,31 @@ const Products = () => {
                   <thead>
                     <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
                       <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Stock / Order Qty</th>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Seller Price/Unit</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Seller Price</th>
                       <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Flat Comm/Unit</th>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Total Commission</th>
-                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Total Cust Price</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Total Comm</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Subtotal</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>GST ({info.gstPercent}%)</th>
+                      <th style={{ padding: '10px 14px', color: 'var(--text-dim)' }}>Total Amount</th>
                     </tr>
                   </thead>
                   <tbody>
                     {uniquePresets.map(q => {
-                      const rowSeller = Math.round(info.sellerUnitPrice * q * 100) / 100;
+                      const rowSeller = Math.round(info.sellerUnitPrice * 100) / 100;
                       const rowComm = Math.round(info.unitCommission * q * 100) / 100;
-                      const rowTotal = Math.round((rowSeller + rowComm) * 100) / 100;
+                      const rowSubtotal = Math.round((rowSeller + rowComm) * 100) / 100;
+                      let rowGst = 0;
+                      let rowTotal = rowSubtotal;
+                      if (info.gstPercent > 0) {
+                        if (info.isGstInclusive) {
+                          const baseBeforeTax = rowSubtotal / (1 + info.gstPercent / 100);
+                          rowGst = Math.round((rowSubtotal - baseBeforeTax) * 100) / 100;
+                          rowTotal = rowSubtotal;
+                        } else {
+                          rowGst = Math.round((rowSubtotal * (info.gstPercent / 100)) * 100) / 100;
+                          rowTotal = Math.round((rowSubtotal + rowGst) * 100) / 100;
+                        }
+                      }
                       const isSelected = q === currentQty;
                       return (
                         <tr
@@ -491,6 +591,8 @@ const Products = () => {
                           <td style={{ padding: '10px 14px' }}>₹{info.sellerUnitPrice.toFixed(2)}</td>
                           <td style={{ padding: '10px 14px', color: '#6366f1' }}>₹{info.unitCommission.toFixed(2)}</td>
                           <td style={{ padding: '10px 14px', color: '#6366f1', fontWeight: 700 }}>₹{rowComm.toFixed(2)}</td>
+                          <td style={{ padding: '10px 14px', color: 'var(--text-main)', fontWeight: 700 }}>₹{rowSubtotal.toFixed(2)}</td>
+                          <td style={{ padding: '10px 14px', color: '#f59e0b', fontWeight: 700 }}>₹{rowGst.toFixed(2)}</td>
                           <td style={{ padding: '10px 14px', color: '#10b981', fontWeight: 700 }}>₹{rowTotal.toFixed(2)}</td>
                         </tr>
                       );
@@ -500,20 +602,38 @@ const Products = () => {
               </div>
 
               {/* Selected Quantity Detailed Breakdown */}
-              <div style={{ padding: '14px 18px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block' }}>
-                    Calculation for {currentQty} units:
-                  </span>
-                  <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                    ₹{info.sellerUnitPrice} × {currentQty} = ₹{calcTotalSeller.toFixed(2)} Seller + ₹{info.unitCommission} × {currentQty} = <strong style={{ color: '#6366f1' }}>₹{calcTotalComm.toFixed(2)} Comm</strong>
-                  </span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>Customer Total</span>
-                  <strong style={{ fontSize: '18px', color: '#10b981' }}>₹{calcTotalBeforeGst.toFixed(2)}</strong>
-                </div>
-              </div>
+              {(() => {
+                const simComm = Math.round(info.unitCommission * currentQty * 100) / 100;
+                const simSubtotal = Math.round((info.sellerUnitPrice + simComm) * 100) / 100;
+                let simGst = 0;
+                let simTotal = simSubtotal;
+                if (info.gstPercent > 0) {
+                  if (info.isGstInclusive) {
+                    const baseBeforeTax = simSubtotal / (1 + info.gstPercent / 100);
+                    simGst = Math.round((simSubtotal - baseBeforeTax) * 100) / 100;
+                    simTotal = simSubtotal;
+                  } else {
+                    simGst = Math.round((simSubtotal * (info.gstPercent / 100)) * 100) / 100;
+                    simTotal = Math.round((simSubtotal + simGst) * 100) / 100;
+                  }
+                }
+                return (
+                  <div style={{ padding: '14px 18px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '2px' }}>
+                        Calculation for {currentQty} units:
+                      </span>
+                      <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+                        ₹{info.sellerUnitPrice.toFixed(2)} Seller + (₹{info.unitCommission.toFixed(2)} × {currentQty} = <strong style={{ color: '#6366f1' }}>₹{simComm.toFixed(2)} Comm</strong>) = <strong>₹{simSubtotal.toFixed(2)} Subtotal</strong> + <strong style={{ color: '#f59e0b' }}>₹{simGst.toFixed(2)} GST</strong>
+                      </span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>Total Amount</span>
+                      <strong style={{ fontSize: '18px', color: '#10b981' }}>₹{simTotal.toFixed(2)}</strong>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
                 <button
