@@ -490,7 +490,7 @@ const Commissions = () => {
                           <span>
                             {comm.commissionType === 'percentage' 
                               ? `${comm.commissionValue}%` 
-                              : `₹${comm.commissionValue}`
+                              : `₹${comm.commissionValue}/unit`
                             }
                           </span>
                         </div>
@@ -623,11 +623,13 @@ const Commissions = () => {
 
                   {/* Comm Value */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Value</label>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>
+                      Value {newRule.commissionType === 'flat' ? '(₹ per unit)' : '(%)'}
+                    </label>
                     <input 
                       type="number" 
                       className="input-field" 
-                      placeholder="e.g. 5" 
+                      placeholder={newRule.commissionType === 'flat' ? "e.g. 2 (₹/unit)" : "e.g. 5 (%)"} 
                       value={newRule.commissionValue} 
                       onChange={(e) => setNewRule({ ...newRule, commissionValue: e.target.value })}
                       min="0"
@@ -683,7 +685,7 @@ const Commissions = () => {
                             gap: '4px'
                           }}>
                             {comm.commissionType === 'percentage' ? <BadgePercent size={12} /> : <Coins size={12} />}
-                            {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue}`}
+                            {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue}/unit`}
                           </span>
                         </div>
                         <button 
