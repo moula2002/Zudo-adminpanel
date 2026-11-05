@@ -112,9 +112,22 @@ body {
   background: rgba(255, 255, 255, 0.08);
 }
 
-select.input-field option {
+select option,
+select optgroup {
   background-color: var(--bg-sidebar);
   color: var(--text-main);
+}
+
+[data-theme='dark'] select option,
+[data-theme='dark'] select optgroup {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+[data-theme='light'] select option,
+[data-theme='light'] select optgroup {
+  background-color: #ffffff;
+  color: #0f172a;
 }
 
 .input-with-icon {

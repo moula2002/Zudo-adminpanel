@@ -1597,7 +1597,7 @@ const Orders = () => {
                               }}
                             >
                               {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
-                                <option key={s} value={s}>{s}</option>
+                                <option key={s} value={s} style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>{s}</option>
                               ))}
                             </select>
 
@@ -1981,7 +1981,7 @@ const Orders = () => {
                         }}
                       >
                         {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
-                          <option key={s} value={s}>{s}</option>
+                          <option key={s} value={s} style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>{s}</option>
                         ))}
                       </select>
                     </div>
