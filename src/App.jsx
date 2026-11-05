@@ -10,7 +10,6 @@ const Products = lazy(() => import('./pages/Products'));
 const Categories = lazy(() => import('./pages/Categories'));
 const Drivers = lazy(() => import('./pages/Drivers'));
 const Admins = lazy(() => import('./pages/Admins'));
-const BulkUpload = lazy(() => import('./pages/BulkUpload'));
 const B2BVerification = lazy(() => import('./pages/B2BVerification'));
 const Users = lazy(() => import('./pages/Users'));
 const Orders = lazy(() => import('./pages/Orders'));
@@ -70,7 +69,6 @@ function App() {
                           <Route path="/products" element={<Products />} />
                           <Route path="/categories" element={<Categories />} />
                           <Route path="/subcategories" element={<SubCategories />} />
-                          <Route path="/bulk-upload" element={<BulkUpload />} />
                           <Route path="/commissions" element={<Commissions />} />
                           <Route path="/sales" element={<Sales />} />
                           <Route path="/drivers" element={<Drivers />} />

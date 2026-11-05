@@ -93,7 +93,6 @@ const Admins = () => {
     { value: 'manage_b2b_verification', label: 'B2B Verification' },
     { value: 'manage_deliveries', label: 'Deliveries' },
     { value: 'manage_reviews', label: 'Reviews' },
-    { value: 'manage_bulk_upload', label: 'Bulk Upload' },
     { value: 'manage_admins', label: 'Admins' },
     { value: 'manage_locations', label: 'Locations' },
     { value: 'manage_profile', label: 'Profile' },

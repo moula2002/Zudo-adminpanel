@@ -180,7 +180,6 @@ const DashboardLayout = ({ children }) => {
     { id: 'products', to: '/products', icon: Package, label: 'Products', perm: 'manage_products' },
     { id: 'categories', to: '/categories', icon: Layers, label: 'Categories', perm: 'manage_categories' },
     { id: 'subcategories', to: '/subcategories', icon: Layers, label: 'Subcategories', perm: 'manage_subcategories' },
-    { id: 'bulk-upload', to: '/bulk-upload', icon: Upload, label: 'Bulk Upload', perm: 'manage_bulk_upload' },
     { id: 'commissions', to: '/commissions', icon: Percent, label: 'Commission Management', perm: 'view_dashboard' },
     { id: 'sales', to: '/sales', icon: Users, label: 'Sales Team', perm: 'manage_admins' },
     { id: 'drivers', to: '/drivers', icon: Truck, label: 'Drivers', perm: 'manage_drivers' },
