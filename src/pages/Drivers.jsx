@@ -362,6 +362,7 @@ const Drivers = () => {
       const currentUser = JSON.parse(localStorage.getItem('zudo_admin_user') || '{}');
       const payload = {
         ...formData,
+        licenseNumber: formData.licenseNumber || formData.drivingLicense || 'N/A',
         locationId: formData.locationId || currentUser.locationId
       };
       await api.post('/drivers', payload);
@@ -1294,14 +1295,7 @@ const Drivers = () => {
                     value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)' }}>License Number</label>
-                  <input
-                    type="text" placeholder="License Number" className="input-field" required
-                    style={{ height: '38px', fontSize: '13px', padding: '0 12px' }}
-                    value={formData.licenseNumber} onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
-                  />
-                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)' }}>Driver Classification</label>
                   <select
