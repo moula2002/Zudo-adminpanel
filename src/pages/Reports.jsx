@@ -15,7 +15,6 @@ import {
   Percent, 
   Coins, 
   FileText,
-  Activity,
   CheckCircle,
   CalendarRange,
   X
@@ -460,98 +459,27 @@ const Reports = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
       
-      {/* Premium Glassmorphic Billboard Banner */}
-      <div className="glass-card" style={{ 
-        position: 'relative', 
-        overflow: 'hidden', 
-        padding: '40px', 
-        borderRadius: '32px',
-        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15), rgba(236, 72, 153, 0.15))',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.07)'
-      }}>
-        <div style={{ position: 'relative', zIndex: 2 }}>
-          <span style={{ 
-            fontSize: '11px', 
-            fontWeight: 800, 
-            background: 'rgba(99, 102, 241, 0.2)', 
-            color: '#8b5cf6', 
-            padding: '6px 14px', 
-            borderRadius: '20px', 
-            textTransform: 'uppercase', 
-            letterSpacing: '1.5px',
-            border: '1px solid rgba(139, 92, 246, 0.3)'
-          }}>
-            SYSTEM REPORTING CORE
-          </span>
-          <h1 style={{ fontSize: '32px', fontWeight: 800, color: 'var(--text-main)', margin: '16px 0 8px' }}>
-            Spreadsheet Reporting Command Center
-          </h1>
-          <p style={{ fontSize: '15px', color: 'var(--text-dim)', maxWidth: '700px', lineHeight: '1.6', margin: 0 }}>
-            Dynamically retrieve direct database streams across all core business sectors and export them into high-fidelity Excel workbooks designed for offline analytics, auditing, and corporate bookkeeping.
-          </p>
-
-          <div style={{ marginTop: '32px', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-            <button 
-              onClick={handleExportMaster}
-              disabled={loading}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '14px 28px',
-                borderRadius: '16px',
-                background: loading ? 'rgba(99, 102, 241, 0.5)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: 'var(--text-main)',
-                border: 'none',
-                fontWeight: 700,
-                fontSize: '15px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                boxShadow: '0 10px 25px rgba(99, 102, 241, 0.4)',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 15px 30px rgba(99, 102, 241, 0.6)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.transform = 'none';
-                  e.currentTarget.style.boxShadow = '0 10px 25px rgba(99, 102, 241, 0.4)';
-                }
-              }}
-            >
-              {loading && activeReport === 'master' ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                <FileSpreadsheet size={20} />
-              )}
-              <span>Download Master Audit Workbook</span>
-            </button>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', fontSize: '13px', color: 'var(--text-dim)' }}>
-              <Activity size={16} style={{ color: '#10b981' }} />
-              <span>Full compliance check: 100% OK</span>
-            </div>
-          </div>
+      {/* Reports Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px' }}>Reports</h1>
+          <p style={{ fontSize: '14px', color: 'var(--text-dim)', margin: 0 }}>Export data as Excel spreadsheets</p>
         </div>
-        
-        {/* Abstract background glow design */}
-        <div style={{
-          position: 'absolute',
-          top: '-100px',
-          right: '-100px',
-          width: '300px',
-          height: '300px',
-          background: 'radial-gradient(circle, rgba(139, 92, 246, 0.25) 0%, rgba(0,0,0,0) 70%)',
-          borderRadius: '50%',
-          filter: 'blur(30px)',
-          pointerEvents: 'none'
-        }}></div>
+        <button
+          onClick={handleExportMaster}
+          disabled={loading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '10px 20px', borderRadius: '10px',
+            background: loading ? 'rgba(99,102,241,0.5)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            color: '#fff', border: 'none', fontWeight: 600, fontSize: '14px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            boxShadow: '0 4px 14px rgba(99,102,241,0.35)'
+          }}
+        >
+          {loading && activeReport === 'master' ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+          Download All Reports
+        </button>
       </div>
 
       {/* Custom Date Range Filter */}
@@ -659,9 +587,9 @@ const Reports = () => {
 
       {/* Reports Catalog Grid */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
-          <FileText size={20} style={{ color: 'var(--primary)' }} />
-          <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>Specialized Single-Sheet Catalog</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+          <FileText size={18} style={{ color: 'var(--primary)' }} />
+          <h2 style={{ fontSize: '17px', fontWeight: 700, margin: 0 }}>Export by Category</h2>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
