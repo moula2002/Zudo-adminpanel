@@ -80,7 +80,11 @@ const Banners = () => {
 
     try {
       const { data } = await api.get('/banners', {
-        headers: { 'Cache-Control': 'no-cache', pragma: 'no-cache' },
+        headers: {
+          'Cache-Control': 'no-cache',
+          pragma: 'no-cache',
+          'x-location': 'global'
+        },
         skipCache: true
       });
       setBanners(Array.isArray(data) ? data : []);
@@ -176,20 +180,32 @@ const Banners = () => {
         throw new Error('Image URL is missing. Please select an image.');
       }
 
+      const validLocationId = (formData.locationId && formData.locationId.length === 24)
+        ? formData.locationId
+        : null;
+
       const payload = {
-        title: formData.title.trim(),
-        link: formData.link.trim(),
-        type: formData.type,
-        isActive: formData.isActive,
+        title: formData.title?.trim() || '',
+        link: formData.link?.trim() || '',
+        type: formData.type || 'Main',
+        isActive: formData.isActive !== false,
         imageUrl: finalImageUrl,
-        locationId: formData.locationId || null
+        locationId: validLocationId
+      };
+
+      // Explicitly pass x-location header to prevent api.js from auto-injecting
+      // non-ObjectId tenant strings like 'zudo-bengaluru' which triggers 400 CastError
+      const requestConfig = {
+        headers: {
+          'x-location': validLocationId || 'global'
+        }
       };
 
       if (editingBanner) {
-        await api.put(`/banners/${editingBanner._id}`, payload);
+        await api.put(`/banners/${editingBanner._id}`, payload, requestConfig);
         toast.success('Banner updated successfully');
       } else {
-        await api.post('/banners', payload);
+        await api.post('/banners', payload, requestConfig);
         toast.success('Banner created successfully');
       }
 
@@ -204,11 +220,17 @@ const Banners = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (banner) => {
     if (!window.confirm('Are you sure you want to delete this promotional banner?')) return;
     try {
-      await api.delete(`/banners/${id}`);
-      setBanners(prev => prev.filter(b => b._id !== id));
+      const bannerLoc = (banner.locationId && String(banner.locationId).length === 24)
+        ? banner.locationId
+        : 'global';
+
+      await api.delete(`/banners/${banner._id}`, {
+        headers: { 'x-location': bannerLoc }
+      });
+      setBanners(prev => prev.filter(b => b._id !== banner._id));
       toast.success('Banner deleted');
     } catch (err) {
       console.error('Delete banner error:', err);
@@ -219,7 +241,15 @@ const Banners = () => {
   const toggleStatus = async (banner) => {
     const updatedStatus = !banner.isActive;
     try {
-      const { data } = await api.put(`/banners/${banner._id}`, { isActive: updatedStatus });
+      const bannerLoc = (banner.locationId && String(banner.locationId).length === 24)
+        ? banner.locationId
+        : 'global';
+
+      const { data } = await api.put(
+        `/banners/${banner._id}`,
+        { isActive: updatedStatus },
+        { headers: { 'x-location': bannerLoc } }
+      );
       setBanners(prev => prev.map(b => (b._id === banner._id ? { ...b, isActive: updatedStatus, ...data } : b)));
       toast.success(updatedStatus ? 'Banner activated' : 'Banner paused');
     } catch (err) {
@@ -591,7 +621,7 @@ const Banners = () => {
                       </button>
 
                       <button
-                        onClick={() => handleDelete(banner._id)}
+                        onClick={() => handleDelete(banner)}
                         style={{
                           padding: '7px 10px',
                           borderRadius: '10px',
