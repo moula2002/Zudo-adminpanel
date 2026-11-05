@@ -2,7 +2,7 @@ import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
-import { Package, Search, Tag, Loader2, Plus, Filter, Download, Edit3, Trash2, Calculator, X, Info } from 'lucide-react';
+import { Package, Search, Tag, Loader2, Plus, Filter, Download, Trash2, Calculator, X, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
@@ -404,23 +404,6 @@ const Products = () => {
                         title="View Quantity Commission Simulator"
                       >
                         <Calculator size={16} />
-                      </button>
-                      <button
-                        onClick={() => navigate(`/edit-product/${product._id}`)}
-                        style={{
-                          background: 'rgba(99, 102, 241, 0.1)',
-                          color: '#6366f1',
-                          border: 'none',
-                          padding: '8px',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title="Edit Product"
-                      >
-                        <Edit3 size={16} />
                       </button>
                       <button
                         onClick={() => openDeleteModal(product._id, product.name)}
