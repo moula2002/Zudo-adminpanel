@@ -17,7 +17,8 @@ import {
   FileText,
   Activity,
   CheckCircle,
-  HelpCircle
+  CalendarRange,
+  X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -25,6 +26,41 @@ const Reports = () => {
   const [loading, setLoading] = useState(false);
   const [activeReport, setActiveReport] = useState(null);
   const [statusMsg, setStatusMsg] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [filterActive, setFilterActive] = useState(false);
+
+  const applyFilter = () => {
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      alert('Start date cannot be after end date.');
+      return;
+    }
+    setFilterActive(!!(startDate || endDate));
+  };
+
+  const clearFilter = () => {
+    setStartDate('');
+    setEndDate('');
+    setFilterActive(false);
+  };
+
+  // Filter rows by date range using a date string field
+  const filterByDate = (rows, dateField) => {
+    if (!filterActive || (!startDate && !endDate)) return rows;
+    return rows.filter(row => {
+      const val = row[dateField];
+      if (!val || val === 'N/A') return false;
+      const d = new Date(val);
+      if (isNaN(d)) return false;
+      if (startDate && d < new Date(startDate)) return false;
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (d > end) return false;
+      }
+      return true;
+    });
+  };
 
   const reportTypes = [
     {
@@ -282,6 +318,10 @@ const Reports = () => {
       } else {
         const { data } = await api.get(endpoint);
         finalData = report.mapFn(data);
+        if (report.id === 'orders') finalData = filterByDate(finalData, 'Date Placed');
+        if (report.id === 'cash') finalData = filterByDate(finalData, 'Timestamp Record');
+        if (report.id === 'reviews') finalData = filterByDate(finalData, 'Date Received');
+        if (report.id === 'users') finalData = filterByDate(finalData, 'Date Registered');
       }
 
       setStatusMsg(`Compiling spreadsheet grid...`);
@@ -359,6 +399,10 @@ const Reports = () => {
         } else {
           const { data } = await api.get(report.endpoint);
           finalData = report.mapFn(data);
+          if (report.id === 'orders') finalData = filterByDate(finalData, 'Date Placed');
+          if (report.id === 'cash') finalData = filterByDate(finalData, 'Timestamp Record');
+          if (report.id === 'reviews') finalData = filterByDate(finalData, 'Date Received');
+          if (report.id === 'users') finalData = filterByDate(finalData, 'Date Registered');
 
           if (report.id === 'orders') {
             totalOrders = data.length;
@@ -508,6 +552,88 @@ const Reports = () => {
           filter: 'blur(30px)',
           pointerEvents: 'none'
         }}></div>
+      </div>
+
+      {/* Custom Date Range Filter */}
+      <div className="glass-card" style={{
+        padding: '24px 28px',
+        borderRadius: '20px',
+        border: filterActive ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid var(--glass-border)',
+        background: filterActive ? 'rgba(99, 102, 241, 0.05)' : 'var(--card-bg)',
+        transition: 'border 0.3s ease'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+          <CalendarRange size={18} style={{ color: 'var(--primary)' }} />
+          <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-main)' }}>Custom Date Filter</span>
+          {filterActive && (
+            <span style={{
+              fontSize: '11px', fontWeight: 700, background: 'rgba(99,102,241,0.15)',
+              color: '#8b5cf6', padding: '3px 10px', borderRadius: '20px',
+              border: '1px solid rgba(139,92,246,0.3)', letterSpacing: '0.5px'
+            }}>ACTIVE</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '14px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>From Date</label>
+            <input
+              type="date"
+              className="input-field"
+              style={{ height: '40px', fontSize: '13px', padding: '0 12px', minWidth: '160px', borderRadius: '10px' }}
+              value={startDate}
+              max={endDate || undefined}
+              onChange={e => setStartDate(e.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>To Date</label>
+            <input
+              type="date"
+              className="input-field"
+              style={{ height: '40px', fontSize: '13px', padding: '0 12px', minWidth: '160px', borderRadius: '10px' }}
+              value={endDate}
+              min={startDate || undefined}
+              onChange={e => setEndDate(e.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '10px', paddingBottom: '1px' }}>
+            <button
+              onClick={applyFilter}
+              style={{
+                height: '40px', padding: '0 20px', borderRadius: '10px',
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                color: '#fff', border: 'none', fontWeight: 700, fontSize: '13px',
+                cursor: 'pointer', boxShadow: '0 4px 14px rgba(99,102,241,0.3)',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+            >
+              Apply Filter
+            </button>
+            {filterActive && (
+              <button
+                onClick={clearFilter}
+                style={{
+                  height: '40px', padding: '0 16px', borderRadius: '10px',
+                  background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+                  border: '1px solid rgba(239,68,68,0.3)', fontWeight: 600,
+                  fontSize: '13px', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', gap: '6px', transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.18)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
+              >
+                <X size={14} /> Clear
+              </button>
+            )}
+          </div>
+        </div>
+        {filterActive && (
+          <p style={{ marginTop: '12px', fontSize: '12px', color: 'var(--text-dim)', margin: '12px 0 0' }}>
+            📅 Filtering reports by date range: <strong style={{ color: 'var(--text-main)' }}>{startDate || '—'}</strong> → <strong style={{ color: 'var(--text-main)' }}>{endDate || '—'}</strong>. Applies to Orders, Cash, Reviews, and Users exports.
+          </p>
+        )}
       </div>
 
       {/* Progress & Feedback Billboard */}
