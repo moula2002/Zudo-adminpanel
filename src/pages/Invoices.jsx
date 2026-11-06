@@ -887,10 +887,12 @@ const Invoices = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.slice(0, 50).map(order => (
+                {filteredOrders.slice(0, 50).map((order, index) => (
                   <tr key={order._id} className="border-b border-[var(--glass-border)] hover:bg-white/5">
-                    <td style={{ padding: '16px 24px', fontSize: '13px', fontWeight: 600, color: 'var(--primary)' }}>
-                      {getInvoiceNumber(order)}
+                    <td style={{ padding: '16px 24px', fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
+                      <span title={`Order ID: ${order._id} (#${order._id.slice(-8).toUpperCase()})`} style={{ fontFamily: 'monospace' }}>
+                        #{index + 1}
+                      </span>
                       <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {order.userId?.role?.toUpperCase() || 'B2C'}
                         {order.isPrinted && <span style={{ padding: '2px 6px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold' }}>Printed</span>}
