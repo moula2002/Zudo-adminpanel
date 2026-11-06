@@ -12,20 +12,20 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'https://snbtradingco.in',
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
       },
       '/uploads': {
-        target: 'https://snbtradingco.in',
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
       },
       '/socket.io': {
-        target: 'https://snbtradingco.in',
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
-        ws: false
+        ws: true
       }
     }
   }
