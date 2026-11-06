@@ -140,7 +140,13 @@ const Sellers = () => {
         payload.password = editPassword;
       }
       
-      const { data: updatedSeller } = await api.put(`/sellers/${editData._id}`, payload);
+      const res = await api.put(`/sellers/${editData._id}`, payload);
+      const updatedSeller = res.data;
+
+      // Verify that backend confirmed the database update for isProductVisible
+      if (updatedSeller && updatedSeller.isProductVisible !== undefined && updatedSeller.isProductVisible !== isVisible) {
+        throw new Error(`Database verification failed: isProductVisible is ${updatedSeller.isProductVisible} in database, expected ${isVisible}.`);
+      }
       
       clearApiCache();
       toast.success(`Seller profile updated! Products are now ${isVisible ? 'SHOW (Visible)' : 'HIDDEN'}.`);
@@ -166,7 +172,7 @@ const Sellers = () => {
       }
     } catch (err) {
       console.error('Failed to update seller profile:', err);
-      const msg = err.response?.data?.message || 'Failed to update seller profile.';
+      const msg = err.response?.data?.message || err.message || 'Failed to update seller profile.';
       toast.error(msg);
       setStatus({ type: 'error', message: msg });
     } finally {
@@ -1493,55 +1499,61 @@ const Sellers = () => {
                 </div>
               </div>
 
-              {/* Modal Footer with Hide/Show Toggle next to Cancel */}
+              {/* Modal Footer with Product Visibility Selector */}
               <div style={{ padding: '24px 40px', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.01)', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600 }}>Product Visibility:</span>
-                  <span style={{ 
-                    fontSize: '11px', 
-                    fontWeight: 800, 
-                    color: editData.isProductVisible === false ? '#ef4444' : '#22c55e', 
-                    background: editData.isProductVisible === false ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
-                    border: `1px solid ${editData.isProductVisible === false ? 'rgba(239, 68, 68, 0.25)' : 'rgba(34, 197, 94, 0.25)'}`,
-                    padding: '3px 10px', 
-                    borderRadius: '8px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}>
-                    {editData.isProductVisible === false ? <EyeOff size={12} /> : <Eye size={12} />}
-                    {editData.isProductVisible === false ? 'HIDDEN' : 'SHOW'}
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-dim)', fontWeight: 700 }}>Product Visibility:</span>
+                  <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.2)', padding: '3px', borderRadius: '12px', border: '1px solid var(--glass-border)', gap: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setEditData({ ...editData, isProductVisible: true })}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '9px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: editData.isProductVisible !== false ? '#22c55e' : 'transparent',
+                        color: editData.isProductVisible !== false ? '#ffffff' : 'var(--text-dim)',
+                        boxShadow: editData.isProductVisible !== false ? '0 2px 10px rgba(34,197,94,0.35)' : 'none',
+                        transition: '0.2s'
+                      }}
+                      title="Make merchant products visible to customers across website and apps"
+                    >
+                      <Eye size={13} />
+                      <span>SHOW</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditData({ ...editData, isProductVisible: false })}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '9px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: editData.isProductVisible === false ? '#ef4444' : 'transparent',
+                        color: editData.isProductVisible === false ? '#ffffff' : 'var(--text-dim)',
+                        boxShadow: editData.isProductVisible === false ? '0 2px 10px rgba(239,68,68,0.35)' : 'none',
+                        transition: '0.2s'
+                      }}
+                      title="Hide merchant products from customer website and mobile applications"
+                    >
+                      <EyeOff size={13} />
+                      <span>HIDDEN</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {/* Hide / Show Toggle button next to Cancel */}
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      const next = editData.isProductVisible === false ? true : false;
-                      setEditData({ ...editData, isProductVisible: next });
-                    }}
-                    style={{ 
-                      background: editData.isProductVisible === false ? 'rgba(239, 68, 68, 0.12)' : 'rgba(34, 197, 94, 0.12)', 
-                      color: editData.isProductVisible === false ? '#ef4444' : '#22c55e', 
-                      border: `1.5px solid ${editData.isProductVisible === false ? 'rgba(239, 68, 68, 0.35)' : 'rgba(34, 197, 94, 0.35)'}`, 
-                      padding: '8px 16px', 
-                      borderRadius: '12px', 
-                      cursor: 'pointer', 
-                      fontSize: '12px', 
-                      fontWeight: 800, 
-                      display: 'inline-flex', 
-                      alignItems: 'center', 
-                      gap: '6px', 
-                      transition: '0.2s'
-                    }}
-                    title="Toggle product visibility on website and mobile apps"
-                  >
-                    {editData.isProductVisible === false ? <EyeOff size={15} /> : <Eye size={15} />}
-                    <span>{editData.isProductVisible === false ? 'Hide' : 'Show'}</span>
-                  </button>
-
                   <button 
                     type="button" 
                     className="btn-primary" 
