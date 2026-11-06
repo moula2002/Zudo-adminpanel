@@ -16,7 +16,7 @@ export const SocketProvider = ({ children }) => {
     // In local dev, BASE_DOMAIN is localhost:5173, and vite proxies /socket.io
     const newSocket = io(BASE_DOMAIN, {
       withCredentials: true,
-      transports: ['websocket', 'polling']
+      transports: ['polling']
     });
 
     newSocket.on('connect', () => {

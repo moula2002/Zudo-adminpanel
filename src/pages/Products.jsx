@@ -2,7 +2,7 @@ import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
-import { Package, Search, Tag, Loader2, Plus, Filter, Download, Trash2, Calculator, X, Info } from 'lucide-react';
+import { Package, EyeOff, Search, Tag, Loader2, Plus, Filter, Download, Trash2, Calculator, X, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
@@ -302,11 +302,40 @@ const Products = () => {
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <img src={getFullUrl(product.imageUrl)} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/40x40?text=No+Image'; }} alt="" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
-                      <span>{product.name}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 600 }}>{product.name}</span>
+                          {product.isProductVisible === false && (
+                            <span style={{ 
+                              background: 'rgba(239, 68, 68, 0.15)', 
+                              color: '#ef4444', 
+                              border: '1px solid rgba(239, 68, 68, 0.35)', 
+                              padding: '2px 7px', 
+                              borderRadius: '6px', 
+                              fontSize: '10px', 
+                              fontWeight: 800, 
+                              letterSpacing: '0.5px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              <EyeOff size={10} /> HIDDEN
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'monospace' }}>#{product._id.slice(-8).toUpperCase()}</span>
+                      </div>
                     </div>
                   </td>
-                  <td style={{ padding: '16px 24px', fontWeight: 600, color: 'var(--primary)' }}>
-                    {product.sellerName || 'Zudo Official'}
+                  <td style={{ padding: '16px 24px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                      {product.sellerName || 'Zudo Official'}
+                    </div>
+                    {product.isProductVisible === false && (
+                      <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: 700, display: 'inline-block', marginTop: '2px' }}>
+                        (Seller Hidden)
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
