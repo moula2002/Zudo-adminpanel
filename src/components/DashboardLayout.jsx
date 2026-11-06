@@ -27,7 +27,7 @@ import {
   CheckCircle2,
   Percent,
   FileSpreadsheet,
-  Receipt,
+  ReceiptIndianRupee,
   Menu,
   X,
   Settings
@@ -175,7 +175,7 @@ const DashboardLayout = ({ children }) => {
   const rawMenuItems = [
     { id: 'dashboard', to: '/', icon: LayoutDashboard, label: 'Dashboard', perm: 'view_dashboard' },
     { id: 'orders', to: '/orders', icon: ShoppingBag, label: 'Orders', perm: 'manage_orders' },
-    { id: 'invoices', to: '/invoices', icon: Receipt, label: 'Invoices', perm: 'manage_invoices' },
+    { id: 'invoices', to: '/invoices', icon: ReceiptIndianRupee, label: 'Invoices', perm: 'manage_invoices' },
     { id: 'reports', to: '/reports', icon: FileSpreadsheet, label: 'Reports', perm: 'view_dashboard' },
     { id: 'products', to: '/products', icon: Package, label: 'Products', perm: 'manage_products' },
     { id: 'categories', to: '/categories', icon: Layers, label: 'Categories', perm: 'manage_categories' },

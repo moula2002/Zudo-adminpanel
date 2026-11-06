@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import {
   Package, Layers, Truck, Users, TrendingUp, ShoppingBag,
-  CheckCircle, DollarSign, Store, FileText, Download,
+  CheckCircle, IndianRupee, Store, FileText, Download,
   ArrowUpRight, ArrowDownRight, Activity, ShieldAlert, MapPin, Clock
 } from 'lucide-react';
 import {
@@ -202,7 +202,7 @@ const Dashboard = () => {
       {/* Main Stats Grid */}
       <div style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', display: 'grid', gap: '24px' }}>
         {hasPerm('manage_orders') && (
-          <StatCard title="Sales Revenue" value={`₹${stats.totalRevenue.toLocaleString()}`} icon={DollarSign} color="#6366f1" trend={12} />
+          <StatCard title="Sales Revenue" value={`₹${stats.totalRevenue.toLocaleString()}`} icon={IndianRupee} color="#6366f1" trend={12} />
         )}
 
         {hasPerm('manage_orders') && (

@@ -11,7 +11,7 @@ const Users = () => {
   const user = JSON.parse(localStorage.getItem('zudo_admin_user') || '{}');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(user.targetSegment && user.targetSegment !== 'Both' ? user.targetSegment.toLowerCase() : 'b2c');
+  const [activeTab, setActiveTab] = useState(user.targetSegment && user.targetSegment !== 'Both' ? user.targetSegment.toLowerCase() : 'b2b');
   const [searchTerm, setSearchTerm] = useState('');
   const { refreshFlag } = useSocket();
   
@@ -94,7 +94,7 @@ const Users = () => {
       return {
         'Customer ID': user._id,
         'Name': user.name || 'N/A',
-        'Mobile Number': user.phone || 'N/A',
+        'Mobile Number': user.phone || user.savedAddresses?.find(a => a?.phone)?.phone || 'N/A',
         'Email Address': user.email || 'N/A',
         'Profile Image': user.profilePicture ? getFullUrl(user.profilePicture) : 'N/A',
         'Gender': user.gender || 'N/A',
@@ -155,16 +155,6 @@ const Users = () => {
           {(!user.targetSegment || user.targetSegment === 'Both') && (
             <div style={{ display: 'flex', background: 'var(--glass-bg)', padding: '4px', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
               <button
-                onClick={() => setActiveTab('b2c')}
-                style={{
-                  padding: '8px 20px', borderRadius: '12px', fontSize: '13px', fontWeight: 700, border: 'none', cursor: 'pointer', transition: '0.3s',
-                  background: activeTab === 'b2c' ? 'var(--primary)' : 'transparent',
-                  color: activeTab === 'b2c' ? 'white' : 'var(--text-dim)'
-                }}
-              >
-                Personal (B2C)
-              </button>
-              <button
                 onClick={() => setActiveTab('b2b')}
                 style={{
                   padding: '8px 20px', borderRadius: '12px', fontSize: '13px', fontWeight: 700, border: 'none', cursor: 'pointer', transition: '0.3s',
@@ -173,6 +163,16 @@ const Users = () => {
                 }}
               >
                 Business (B2B)
+              </button>
+              <button
+                onClick={() => setActiveTab('b2c')}
+                style={{
+                  padding: '8px 20px', borderRadius: '12px', fontSize: '13px', fontWeight: 700, border: 'none', cursor: 'pointer', transition: '0.3s',
+                  background: activeTab === 'b2c' ? 'var(--primary)' : 'transparent',
+                  color: activeTab === 'b2c' ? 'white' : 'var(--text-dim)'
+                }}
+              >
+                Personal (B2C)
               </button>
             </div>
           )}
@@ -222,7 +222,7 @@ const Users = () => {
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-dim)' }}><Mail size={12} /> {user.email}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-dim)' }}>📱 {user.phone || 'N/A'}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-dim)' }}>📱 {user.phone || user.savedAddresses?.find(a => a?.phone)?.phone || 'N/A'}</div>
                   </div>
                 </td>
 

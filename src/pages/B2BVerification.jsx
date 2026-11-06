@@ -18,7 +18,8 @@ import {
   XCircle,
   Ban,
   CheckCircle2,
-  Trash2
+  Trash2,
+  Image
 } from 'lucide-react';
 
 const B2BVerification = () => {
@@ -31,6 +32,35 @@ const B2BVerification = () => {
   const [showImageModal, setShowImageModal] = useState(null);
   const [counts, setCounts] = useState({ pending: 0, verified: 0 });
   const [toastMessage, setToastMessage] = useState('');
+  const [editingPhoneUser, setEditingPhoneUser] = useState(null);
+  const [phoneInput, setPhoneInput] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
+
+  const getDisplayPhone = (user) => {
+    return user?.phone || user?.mobile || user?.phoneNumber || user?.contactNumber || user?.savedAddresses?.find(a => a && a.phone)?.phone || user?.savedAddresses?.[0]?.phone || 'N/A';
+  };
+
+  const openEditPhoneModal = (user) => {
+    setEditingPhoneUser(user);
+    const existing = getDisplayPhone(user);
+    setPhoneInput(existing === 'N/A' ? '' : existing);
+  };
+
+  const handleSavePhone = async (e) => {
+    if (e) e.preventDefault();
+    if (!editingPhoneUser) return;
+    setSavingPhone(true);
+    try {
+      await api.put(`/auth/users/${editingPhoneUser._id}`, { phone: phoneInput.trim() });
+      toast.success('Mobile number updated successfully!');
+      setEditingPhoneUser(null);
+      fetchPendingUsers();
+    } catch (err) {
+      toast.error('Failed to update mobile number');
+    } finally {
+      setSavingPhone(false);
+    }
+  };
 
   useEffect(() => {
     fetchPendingUsers();
@@ -127,7 +157,7 @@ const B2BVerification = () => {
       "PAN Number": user.panNumber || 'N/A',
       "Aadhaar Number": user.aadhaarNumber || 'N/A',
       "Email": user.email,
-      "Phone": user.phone,
+      "Phone": getDisplayPhone(user),
       "Business Address": user.businessAddress || 'N/A',
       "Applied Date": new Date(user.createdAt).toLocaleDateString(),
       "Verification Status": activeTab === 'Pending' ? 'PENDING REVIEW' : 'VERIFIED'
@@ -248,7 +278,28 @@ const B2BVerification = () => {
                           <Mail size={12} /> {user.email}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-dim)' }}>
-                          <Phone size={12} /> {user.phone}
+                          <Phone size={12} style={{ color: (user.phone || user.savedAddresses?.find(a => a?.phone)?.phone) ? '#22c55e' : 'inherit' }} />
+                          <span style={{ fontWeight: (user.phone || user.savedAddresses?.find(a => a?.phone)?.phone) ? 600 : 400, color: (user.phone || user.savedAddresses?.find(a => a?.phone)?.phone) ? 'var(--text-main)' : 'var(--text-dim)' }}>
+                            {getDisplayPhone(user)}
+                          </span>
+                          <button
+                            onClick={() => openEditPhoneModal(user)}
+                            title="Edit Mobile Number"
+                            style={{
+                              background: 'rgba(99, 102, 241, 0.1)',
+                              border: 'none',
+                              color: '#6366f1',
+                              cursor: 'pointer',
+                              padding: '2px 5px',
+                              borderRadius: '4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              marginLeft: '4px',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <Pencil size={10} />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -406,27 +457,56 @@ const B2BVerification = () => {
 
       {/* Image Viewer Modal */}
       {showImageModal && (
-        <div style={{ 
-          position: 'fixed', inset: 0, 
-          background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(10px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
-          padding: '40px'
-        }}>
-          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-            <button 
-              onClick={() => setShowImageModal(null)}
-              style={{ 
-                position: 'absolute', top: '-40px', right: '-40px',
-                background: 'transparent', border: 'none', color: 'var(--text-main)', cursor: 'pointer'
-              }}
-            >
-              <X size={32} />
-            </button>
-            <img 
-              src={getImageUrl(showImageModal)} 
-              alt="Store" 
-              style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }} 
-            />
+        <div 
+          onClick={() => setShowImageModal(null)}
+          style={{ 
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+            padding: '40px'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              width: '100%', maxWidth: '1000px', height: '100%', 
+              display: 'flex', flexDirection: 'column', gap: '16px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ color: '#fff', fontSize: '20px', fontWeight: 700 }}>Store Picture Preview</h3>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button 
+                  onClick={() => downloadFile(getImageUrl(showImageModal))}
+                  style={{ 
+                    padding: '10px 20px', borderRadius: '12px', border: 'none', 
+                    background: '#6366f1', color: '#fff', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600
+                  }}
+                >
+                  <Download size={18} /> Download
+                </button>
+                <button 
+                  onClick={() => setShowImageModal(null)}
+                  style={{ 
+                    padding: '10px', borderRadius: '12px', border: 'none', 
+                    background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#ef4444', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}
+                  title="Close Preview"
+                >
+                  <XCircle size={24} />
+                </button>
+              </div>
+            </div>
+            
+            <div style={{ flex: 1, background: '#000', borderRadius: '20px', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+              <img 
+                src={getImageUrl(showImageModal)} 
+                alt="Store Picture" 
+                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '12px' }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -444,13 +524,13 @@ const B2BVerification = () => {
             display: 'flex', flexDirection: 'column', gap: '16px'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ color: 'var(--text-main)', fontSize: '20px', fontWeight: 600 }}>Document Preview</h3>
+              <h3 style={{ color: '#fff', fontSize: '20px', fontWeight: 700 }}>Document Preview</h3>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button 
                   onClick={() => downloadFile(selectedPdf)}
                   style={{ 
                     padding: '10px 20px', borderRadius: '12px', border: 'none', 
-                    background: '#6366f1', color: 'var(--text-main)', cursor: 'pointer',
+                    background: '#6366f1', color: '#fff', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600
                   }}
                 >
@@ -460,7 +540,7 @@ const B2BVerification = () => {
                   onClick={() => setSelectedPdf(null)}
                   style={{ 
                     padding: '10px', borderRadius: '12px', border: 'none', 
-                    background: 'rgba(255,255,255,0.1)', color: 'var(--text-main)', cursor: 'pointer'
+                    background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#ef4444', cursor: 'pointer'
                   }}
                 >
                   <XCircle size={24} />
@@ -539,6 +619,118 @@ const B2BVerification = () => {
           </div>
         </div>
       )}
+      {/* Edit Phone Modal */}
+      {editingPhoneUser && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--card-bg, #1e1e2d)',
+            border: '1px solid var(--glass-border, rgba(255,255,255,0.1))',
+            borderRadius: '20px',
+            width: '100%',
+            maxWidth: '440px',
+            padding: '24px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(99, 102, 241, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
+                  <Phone size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--text-main)' }}>Update Mobile Number</h3>
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{editingPhoneUser.businessName || editingPhoneUser.name}</div>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEditingPhoneUser(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePhone} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-dim)', marginBottom: '6px', fontWeight: 600 }}>
+                  Mobile / Phone Number
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Phone size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+                  <input
+                    type="tel"
+                    value={phoneInput}
+                    onChange={(e) => setPhoneInput(e.target.value)}
+                    placeholder="Enter 10-digit mobile number"
+                    autoFocus
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px 12px 38px',
+                      borderRadius: '12px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--glass-border, rgba(255,255,255,0.1))',
+                      color: 'var(--text-main)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingPhoneUser(null)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--glass-border, rgba(255,255,255,0.1))',
+                    background: 'transparent',
+                    color: 'var(--text-dim)',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 600
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPhone}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: '#6366f1',
+                    color: '#fff',
+                    cursor: savingPhone ? 'not-allowed' : 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+                  }}
+                >
+                  {savingPhone ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                  Save Mobile Number
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

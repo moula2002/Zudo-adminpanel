@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import api from '../utils/api';
 import { getFullUrl } from '../utils/media_utils';
-import { 
-  FileSpreadsheet, 
-  Download, 
-  Loader2, 
-  ShoppingBag, 
-  Users, 
-  Store, 
-  Truck, 
-  Wallet, 
-  MessageSquare, 
-  Clock, 
-  Percent, 
-  Coins, 
+import {
+  FileSpreadsheet,
+  Download,
+  Loader2,
+  ShoppingBag,
+  Users,
+  Store,
+  Truck,
+  Wallet,
+  MessageSquare,
+  Clock,
+  Percent,
+  Coins,
   FileText,
   CheckCircle,
   CalendarRange,
@@ -285,7 +285,7 @@ const Reports = () => {
         ]);
         const cats = catRes.data;
         const comms = commRes.data;
-        
+
         cats.forEach(cat => {
           const catComms = comms.filter(c => c.categoryId === cat._id);
           if (catComms.length > 0) {
@@ -431,12 +431,12 @@ const Reports = () => {
         ['Report Generated At', new Date().toLocaleString()],
         ['Security Scope', 'Confidential - Administrative Access Only']
       ];
-      
+
       const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-      
+
       const finalWb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(finalWb, wsSummary, 'Executive KPI Overview');
-      
+
       wb.SheetNames.forEach(name => {
         XLSX.utils.book_append_sheet(finalWb, wb.Sheets[name], name);
       });
@@ -458,7 +458,7 @@ const Reports = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      
+
       {/* Reports Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
@@ -566,13 +566,13 @@ const Reports = () => {
 
       {/* Progress & Feedback Billboard */}
       {statusMsg && (
-        <div className="glass-card" style={{ 
-          padding: '16px 24px', 
-          borderRadius: '16px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '16px', 
-          background: 'rgba(99, 102, 241, 0.05)', 
+        <div className="glass-card" style={{
+          padding: '16px 24px',
+          borderRadius: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          background: 'rgba(99, 102, 241, 0.05)',
           border: '1px solid rgba(99, 102, 241, 0.15)',
           animation: 'fadeIn 0.3s ease-out'
         }}>
@@ -597,14 +597,14 @@ const Reports = () => {
             const Icon = report.icon;
             const isProcessing = loading && activeReport === report.id;
             return (
-              <div 
-                key={report.id} 
-                className="glass-card hover-row" 
-                style={{ 
-                  padding: '28px', 
-                  borderRadius: '24px', 
-                  display: 'flex', 
-                  flexDirection: 'column', 
+              <div
+                key={report.id}
+                className="glass-card hover-row"
+                style={{
+                  padding: '28px',
+                  borderRadius: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
                   justifyContent: 'space-between',
                   gap: '20px',
                   border: '1px solid var(--glass-border)',
@@ -613,25 +613,25 @@ const Reports = () => {
                 }}
               >
                 {/* Visual back glow corresponding to card color */}
-                <div style={{ 
-                  position: 'absolute', 
-                  top: '-20px', 
-                  right: '-20px', 
-                  width: '90px', 
-                  height: '90px', 
+                <div style={{
+                  position: 'absolute',
+                  top: '-20px',
+                  right: '-20px',
+                  width: '90px',
+                  height: '90px',
                   borderRadius: '50%',
-                  background: `${report.color}0c`, 
+                  background: `${report.color}0c`,
                   filter: 'blur(10px)',
                   pointerEvents: 'none'
                 }}></div>
 
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-                    <div style={{ 
-                      padding: '12px', 
-                      borderRadius: '16px', 
-                      background: `${report.color}15`, 
-                      color: report.color 
+                    <div style={{
+                      padding: '12px',
+                      borderRadius: '16px',
+                      background: `${report.color}15`,
+                      color: report.color
                     }}>
                       <Icon size={22} />
                     </div>
@@ -644,7 +644,7 @@ const Reports = () => {
                   </p>
                 </div>
 
-                <button 
+                <button
                   onClick={() => handleExportSingle(report)}
                   disabled={loading}
                   style={{

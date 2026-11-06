@@ -14,7 +14,7 @@ import {
   X,
   ArrowUpRight,
   ArrowDownLeft,
-  DollarSign,
+  IndianRupee,
   Clock,
   Loader2,
   CheckCircle2,
@@ -767,7 +767,7 @@ const Cash = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div style={{ position: 'relative' }}>
-                    <DollarSign size={14} style={{ position: 'absolute', left: '12px', top: '12px', color: '#6366f1' }} />
+                    <IndianRupee size={14} style={{ position: 'absolute', left: '12px', top: '12px', color: '#6366f1' }} />
                     <input
                       type="number"
                       className="input-field"
