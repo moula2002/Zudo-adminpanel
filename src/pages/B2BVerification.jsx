@@ -19,7 +19,8 @@ import {
   Ban,
   CheckCircle2,
   Trash2,
-  Image
+  Image,
+  Pencil
 } from 'lucide-react';
 
 const B2BVerification = () => {
