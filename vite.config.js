@@ -25,7 +25,7 @@ export default defineConfig({
         target: 'https://snbtradingco.in',
         changeOrigin: true,
         secure: false,
-        ws: false
+        ws: true
       }
     }
   }

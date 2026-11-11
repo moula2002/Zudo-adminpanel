@@ -16,11 +16,17 @@ export const SocketProvider = ({ children }) => {
     // In local dev, BASE_DOMAIN is localhost:5173, and vite proxies /socket.io
     const newSocket = io(BASE_DOMAIN, {
       withCredentials: true,
-      transports: ['polling', 'websocket']
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: 5,
+      timeout: 10000
     });
 
     newSocket.on('connect', () => {
       console.log('Socket.IO connected');
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.warn('Socket connection note (polling active):', error.message || error);
     });
 
     newSocket.on('disconnect', () => {
