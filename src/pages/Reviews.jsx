@@ -70,7 +70,7 @@ const Reviews = () => {
     setModeratingId(reviewId);
     try {
       const { data } = await api.put(`/reviews/${reviewId}/status`, { status: newStatus });
-      if (data?.success || data?.review) {
+      if (data?.success !== false) {
         toast.success(`Review ${newStatus.toLowerCase()} successfully`);
         setReviews(prev => prev.map(r => r._id === reviewId ? { ...r, status: newStatus } : r));
       } else {
@@ -93,11 +93,11 @@ const Reviews = () => {
     setSubmittingReply(true);
     try {
       const { data } = await api.post(`/reviews/${reviewId}/reply`, { comment: replyText.trim() });
-      if (data?.success || data?.review) {
+      if (data?.success !== false) {
         toast.success(data?.message || 'Official reply posted successfully');
         setReviews(prev => prev.map(r => r._id === reviewId ? {
           ...r,
-          adminReply: data.review?.adminReply || { comment: replyText.trim(), repliedAt: new Date() }
+          adminReply: data?.review?.adminReply || { comment: replyText.trim(), repliedAt: new Date() }
         } : r));
         setReplyingReviewId(null);
         setReplyText('');

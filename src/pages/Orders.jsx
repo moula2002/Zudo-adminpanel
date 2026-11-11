@@ -78,6 +78,11 @@ const Orders = () => {
   const [driverModalType, setDriverModalType] = useState('delivery');
   const [showCashModal, setShowCashModal] = useState(false);
   const [showReturnsModal, setShowReturnsModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectOrder, setRejectOrder] = useState(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [rejectLoading, setRejectLoading] = useState(false);
+  const [approveLoadingId, setApproveLoadingId] = useState(null);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [statusActionData, setStatusActionData] = useState({ orderId: null, status: null });
@@ -434,6 +439,84 @@ const Orders = () => {
       setCashCollectors(collectors);
     } catch (error) {
       console.error('Final error in fetchCashCollectors:', error);
+    }
+  };
+
+  const hasPendingReturn = (order) => {
+    if (!order) return false;
+    const status = (order.returnStatus || '').toLowerCase();
+    const isPendingOrder = ['pending', 'requested', 'return requested'].includes(status) || 
+      (order.orderStatus || '').toLowerCase() === 'return requested';
+    const hasItemPending = Array.isArray(order.items) && order.items.some(i => 
+      ['pending', 'requested', 'return requested'].includes((i.returnStatus || '').toLowerCase())
+    );
+    return isPendingOrder || hasItemPending;
+  };
+
+  const handleApproveReturn = async (orderId) => {
+    if (!orderId) return;
+    if (isDriver) {
+      toast.error('Access Denied: Drivers cannot approve returns.');
+      return;
+    }
+    const confirmed = window.confirm('Are you sure you want to approve this return request? The customer will be notified and the order will move to the return pickup workflow.');
+    if (!confirmed) return;
+    setApproveLoadingId(orderId);
+    try {
+      const { data } = await axios.put(`/orders/${orderId}/return-approve`);
+      toast.success(data?.message || 'Return request approved successfully!');
+      fetchOrders(true);
+      if (viewingOrder && viewingOrder._id === orderId) {
+        setViewingOrder(prev => prev ? {
+          ...prev,
+          returnStatus: 'Approved',
+          orderStatus: 'Return Approved',
+          returnApprovedAt: new Date(),
+          returnApprovedBy: { name: user.name || 'Admin', email: user.email || '' }
+        } : null);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to approve return request');
+    } finally {
+      setApproveLoadingId(null);
+    }
+  };
+
+  const handleOpenRejectReturnModal = (order) => {
+    setRejectOrder(order);
+    setRejectionReasonInput('');
+    setShowRejectModal(true);
+  };
+
+  const confirmRejectReturn = async () => {
+    if (!rejectOrder) return;
+    if (!rejectionReasonInput.trim()) {
+      toast.error('Please enter a rejection reason.');
+      return;
+    }
+    setRejectLoading(true);
+    try {
+      const { data } = await axios.put(`/orders/${rejectOrder._id}/return-reject`, {
+        rejectionReason: rejectionReasonInput.trim()
+      });
+      toast.success(data?.message || 'Return request rejected.');
+      setShowRejectModal(false);
+      setRejectOrder(null);
+      setRejectionReasonInput('');
+      fetchOrders(true);
+      if (viewingOrder && viewingOrder._id === rejectOrder._id) {
+        setViewingOrder(prev => prev ? {
+          ...prev,
+          returnStatus: 'Rejected',
+          returnRejectionReason: rejectionReasonInput.trim(),
+          returnRejectedAt: new Date(),
+          returnRejectedBy: { name: user.name || 'Admin', email: user.email || '' }
+        } : null);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to reject return request');
+    } finally {
+      setRejectLoading(false);
     }
   };
 
@@ -1663,12 +1746,20 @@ const Orders = () => {
   const getStatusBadge = (status, returnStatus) => {
     if (returnStatus && returnStatus !== 'None') {
       const returnStyles = {
+        'Pending': { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', text: 'Return Pending Approval' },
         'Requested': { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', text: 'Return Requested' },
+        'Return Requested': { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', text: 'Return Requested' },
         'Approved': { bg: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', text: 'Return Approved' },
+        'Return Approved': { bg: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', text: 'Return Approved' },
         'Rejected': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', text: 'Return Rejected' },
+        'Return Rejected': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', text: 'Return Rejected' },
+        'Return Picked Up': { bg: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', text: 'Return Picked Up' },
+        'Picked Up from Customer': { bg: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', text: 'Return Picked Up' },
+        'Return Completed': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', text: 'Return Completed' },
+        'Returned to Seller': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', text: 'Return Completed' },
         'Completed': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', text: 'Return Completed' }
       };
-      const style = returnStyles[returnStatus];
+      const style = returnStyles[returnStatus] || { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', text: `Return: ${returnStatus}` };
       return (
         <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: style.bg, color: style.color }}>
           {style.text}
@@ -1696,7 +1787,7 @@ const Orders = () => {
     const statusMatch = activeTab === 'All' 
       ? true 
       : activeTab === 'Returns' 
-        ? (order.returnStatus && order.returnStatus !== 'None') || (order.items && order.items.some(i => i.returnStatus && i.returnStatus !== 'None'))
+        ? (order.returnStatus && order.returnStatus !== 'None') || (order.items && order.items.some(i => i.returnStatus && i.returnStatus !== 'None')) || hasPendingReturn(order) || (order.orderStatus || '').toLowerCase().includes('return')
         : order.orderStatus === activeTab;
     
     const typeMatch = activeType === 'All' || (order.userId?.role || 'b2c').toUpperCase() === activeType;
@@ -2178,7 +2269,53 @@ const Orders = () => {
 
                         {/* Actions */}
                         <td style={{ padding: '16px 20px', verticalAlign: 'top', textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                            {hasPendingReturn(order) && !isDriver && (
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <button
+                                  onClick={() => handleApproveReturn(order._id)}
+                                  disabled={approveLoadingId === order._id}
+                                  style={{
+                                    background: '#10b981',
+                                    border: 'none',
+                                    color: '#fff',
+                                    padding: '5px 10px',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)'
+                                  }}
+                                  title="Approve Customer Return Request"
+                                >
+                                  {approveLoadingId === order._id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleOpenRejectReturnModal(order)}
+                                  style={{
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    color: '#ef4444',
+                                    padding: '5px 10px',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: 700
+                                  }}
+                                  title="Reject Customer Return Request"
+                                >
+                                  <X size={12} /> Reject
+                                </button>
+                              </div>
+                            )}
+
                             {(order.driverId || order.returnDriverId) && (
                               <button
                                 onClick={() => handleTrackDriver(order.driverId || order.returnDriverId)}
@@ -2393,6 +2530,50 @@ const Orders = () => {
                       <Edit size={12} />
                     </button>
                   </p>
+                  {hasPendingReturn(order) && !isDriver && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        onClick={() => handleApproveReturn(order._id)}
+                        disabled={approveLoadingId === order._id}
+                        style={{
+                          background: '#10b981',
+                          border: 'none',
+                          color: '#fff',
+                          padding: '4px 10px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Approve Return Request"
+                      >
+                        <Check size={12} /> Approve
+                      </button>
+                      <button
+                        onClick={() => handleOpenRejectReturnModal(order)}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#ef4444',
+                          padding: '4px 10px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Reject Return Request"
+                      >
+                        <X size={12} /> Reject
+                      </button>
+                    </div>
+                  )}
+
                   <button
                     onClick={() => handleViewOrder(order)}
                     style={{
@@ -4898,8 +5079,159 @@ const Orders = () => {
                   </div>
                 )}
 
+                {/* Return Request Details Card */}
+                {(viewingOrder.returnStatus !== 'None' || viewingOrder.returnReason || hasPendingReturn(viewingOrder)) && (
+                  <div style={{
+                    padding: '20px 24px',
+                    borderRadius: '20px',
+                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(99, 102, 241, 0.05) 100%)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <RefreshCcw size={16} style={{ color: '#f59e0b' }} />
+                        <span style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', color: '#f59e0b', letterSpacing: '0.5px' }}>
+                          Customer Return Request Details
+                        </span>
+                      </div>
+                      <div>
+                        {getStatusBadge(viewingOrder.orderStatus, viewingOrder.returnStatus)}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', fontSize: '12px' }}>
+                      <div style={{ background: 'var(--card-bg)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '3px' }}>Return Request Date</span>
+                        <strong style={{ color: 'var(--text-main)' }}>
+                          {viewingOrder.returnRequestedAt ? new Date(viewingOrder.returnRequestedAt).toLocaleString('en-IN') : 'Submitted with order'}
+                        </strong>
+                      </div>
+                      <div style={{ background: 'var(--card-bg)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '3px' }}>Original Delivery Date</span>
+                        <strong style={{ color: 'var(--text-main)' }}>
+                          {viewingOrder.deliveredAt ? new Date(viewingOrder.deliveredAt).toLocaleString('en-IN') : 'N/A'}
+                        </strong>
+                      </div>
+                      <div style={{ background: 'var(--card-bg)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '3px' }}>Customer Return Reason</span>
+                        <strong style={{ color: '#f59e0b' }}>
+                          {viewingOrder.returnReason || viewingOrder.items?.find(i => i.returnReason)?.returnReason || 'General Return'}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {(viewingOrder.returnComment || viewingOrder.items?.some(i => i.returnComment)) && (
+                      <div style={{ background: 'var(--card-bg)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--glass-border)', fontSize: '12px' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Customer Description / Notes</span>
+                        <p style={{ margin: 0, color: 'var(--text-main)', lineHeight: '1.4' }}>
+                          {viewingOrder.returnComment || viewingOrder.items?.find(i => i.returnComment)?.returnComment}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Uploaded Evidence Images */}
+                    {(() => {
+                      const allReturnImages = [];
+                      if (viewingOrder.returnImage) allReturnImages.push(viewingOrder.returnImage);
+                      if (Array.isArray(viewingOrder.returnImages)) allReturnImages.push(...viewingOrder.returnImages);
+                      if (viewingOrder.items) {
+                        viewingOrder.items.forEach(i => {
+                          if (i.returnImage && !allReturnImages.includes(i.returnImage)) allReturnImages.push(i.returnImage);
+                        });
+                      }
+                      if (allReturnImages.length === 0) return null;
+                      return (
+                        <div style={{ background: 'var(--card-bg)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                          <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                            Customer Uploaded Return Images ({allReturnImages.length})
+                          </span>
+                          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                            {allReturnImages.map((imgUri, imgIdx) => (
+                              <a
+                                key={imgIdx}
+                                href={getImageUrl(imgUri)}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ display: 'block', position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--glass-border)' }}
+                                title="Click to view full image"
+                              >
+                                <img
+                                  src={getImageUrl(imgUri)}
+                                  alt="Return Evidence"
+                                  style={{ width: '70px', height: '70px', objectFit: 'cover' }}
+                                />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Approval / Rejection Audit Info */}
+                    {viewingOrder.returnApprovedAt && (
+                      <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '12px 14px', borderRadius: '12px', fontSize: '12px', color: '#10b981' }}>
+                        <strong>Return Approved:</strong> Approved on {new Date(viewingOrder.returnApprovedAt).toLocaleString('en-IN')} by {viewingOrder.returnApprovedBy?.name || 'Authorized Admin'}
+                      </div>
+                    )}
+                    {viewingOrder.returnRejectedAt && (
+                      <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', padding: '12px 14px', borderRadius: '12px', fontSize: '12px', color: '#ef4444' }}>
+                        <div style={{ fontWeight: 'bold' }}>Return Rejected on {new Date(viewingOrder.returnRejectedAt).toLocaleString('en-IN')} by {viewingOrder.returnRejectedBy?.name || 'Authorized Admin'}</div>
+                        {viewingOrder.returnRejectionReason && (
+                          <div style={{ marginTop: '4px' }}><strong>Rejection Reason:</strong> {viewingOrder.returnRejectionReason}</div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Direct Action Buttons Inside Details Card */}
+                    {hasPendingReturn(viewingOrder) && !isDriver && (
+                      <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
+                        <button
+                          onClick={() => handleApproveReturn(viewingOrder._id)}
+                          disabled={approveLoadingId === viewingOrder._id}
+                          className="btn-primary"
+                          style={{
+                            flex: 1,
+                            padding: '12px',
+                            background: '#10b981',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            fontWeight: 700
+                          }}
+                        >
+                          {approveLoadingId === viewingOrder._id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                          Approve Return Request
+                        </button>
+                        <button
+                          onClick={() => handleOpenRejectReturnModal(viewingOrder)}
+                          style={{
+                            flex: 1,
+                            padding: '12px',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <X size={15} /> Reject Return Request
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Additional Information (Notes / Cancellation / Returns) */}
-                {(viewingOrder.adminNotes || viewingOrder.notes || viewingOrder.cancellationReason || viewingOrder.returnReason) && (
+                {(viewingOrder.adminNotes || viewingOrder.notes || viewingOrder.cancellationReason) && (
                   <div style={{
                     padding: '16px 20px',
                     borderRadius: '16px',
@@ -5025,6 +5357,134 @@ const Orders = () => {
             >
               <X size={16} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Return Rejection Reason Modal */}
+      {showRejectModal && (
+        <div
+          onClick={() => !rejectLoading && setShowRejectModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1250,
+            padding: '20px'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--card-bg)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '20px',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '480px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+                  <XCircle size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>Reject Return Request</h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                    Order #{rejectOrder?._id?.slice(-8)?.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => !rejectLoading && setShowRejectModal(false)}
+                disabled={rejectLoading}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-dim)',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '8px' }}>
+                Rejection Reason <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <textarea
+                value={rejectionReasonInput}
+                onChange={e => setRejectionReasonInput(e.target.value)}
+                placeholder="Enter clear reason for rejecting the customer's return request..."
+                rows={4}
+                disabled={rejectLoading}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: '1px solid var(--glass-border)',
+                  background: 'var(--bg-main)',
+                  color: 'var(--text-main)',
+                  fontSize: '13px',
+                  resize: 'none',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowRejectModal(false)}
+                disabled={rejectLoading}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--glass-border)',
+                  background: 'var(--card-bg)',
+                  color: 'var(--text-main)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRejectReturn}
+                disabled={rejectLoading || !rejectionReasonInput.trim()}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: rejectLoading || !rejectionReasonInput.trim() ? 'not-allowed' : 'pointer',
+                  opacity: rejectLoading || !rejectionReasonInput.trim() ? 0.6 : 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {rejectLoading ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                Confirm Rejection
+              </button>
+            </div>
           </div>
         </div>
       )}
