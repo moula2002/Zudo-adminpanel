@@ -373,16 +373,40 @@ const Orders = () => {
     }
   };
 
-  const handleUpdateStatus = (orderId, status) => {
+  const handleCancelOrder = async (orderId) => {
+    if (!orderId) return;
     if (isDriver) {
-      if (['Out for Delivery', 'Cancelled'].includes(status)) {
-        toast.error(`Access Denied: Drivers are not permitted to manually change status to ${status}. Only Admins can set this status.`);
-        return;
+      toast.error('Access Denied: Drivers are not permitted to cancel orders.');
+      return;
+    }
+    const confirmed = window.confirm('Are you sure you want to cancel this order through the authorized cancellation workflow? Product stock will be restored.');
+    if (!confirmed) return;
+    const reason = window.prompt('Enter cancellation reason (optional):', 'Cancelled by Admin');
+    if (reason === null) return;
+    try {
+      await axios.put(`/orders/${orderId}/cancel`, { cancellationReason: reason || 'Cancelled by Admin' });
+      toast.success('Order cancelled successfully via authorized cancellation workflow');
+      fetchOrders();
+      if (viewingOrder && viewingOrder._id === orderId) {
+        setViewingOrder(prev => ({ ...prev, orderStatus: 'Cancelled', cancellationReason: reason || 'Cancelled by Admin' }));
       }
-      if (status !== 'Delivered') {
-        toast.error(`Access Denied: Drivers cannot manually update order status to ${status}.`);
-        return;
-      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to cancel order');
+    }
+  };
+
+  const handleUpdateStatus = (orderId, status) => {
+    if (isDriver && status !== 'Delivered') {
+      toast.error('Access Denied: Drivers cannot manually update order status.');
+      return;
+    }
+    if (['Out for Delivery', 'Cancelled'].includes(status)) {
+      toast.error(`Access Denied: ${status} cannot be updated manually. Please use the authorized workflow.`);
+      return;
+    }
+    if (status !== 'Delivered' && !['Pending', 'Packed'].includes(status)) {
+      toast.error('Access Denied: Only Pending and Packed can be manually selected.');
+      return;
     }
     setStatusActionData({ orderId, status });
     setStatusOtpInput('');
@@ -404,47 +428,65 @@ const Orders = () => {
     const { orderId, status } = statusActionData;
     if (!orderId || !status) return;
 
-    if (isDriver) {
-      if (['Out for Delivery', 'Cancelled'].includes(status)) {
-        toast.error(`Access Denied: Drivers cannot change status to ${status}.`);
-        setShowStatusModal(false);
-        return;
-      }
-      if (status !== 'Delivered') {
-        toast.error('Access Denied: Drivers can only perform authorized OTP delivery verification.');
-        setShowStatusModal(false);
-        return;
-      }
+    if (isDriver && status !== 'Delivered') {
+      toast.error('Access Denied: Drivers can only perform authorized OTP delivery verification.');
+      setShowStatusModal(false);
+      return;
     }
-    
+
+    if (['Out for Delivery', 'Cancelled'].includes(status)) {
+      toast.error(`Access Denied: ${status} cannot be updated manually. Please use the authorized workflow.`);
+      setShowStatusModal(false);
+      return;
+    }
+
     if (status === 'Delivered') {
       const cleanOtp = statusOtpInput.trim();
       if (!cleanOtp || cleanOtp.length !== 6) {
         toast.error('Please enter the valid 6-digit Delivery OTP collected from the customer');
         return;
       }
+      try {
+        await axios.post(`/orders/${orderId}/verify-delivery-otp`, { otp: cleanOtp });
+        toast.success('Customer OTP verified! Order marked as Delivered successfully.');
+        setShowStatusModal(false);
+        setStatusActionData({ orderId: null, status: null });
+        setStatusOtpInput('');
+        fetchOrders();
+        if (viewingOrder && viewingOrder._id === orderId) {
+          setViewingOrder(prev => ({ ...prev, orderStatus: 'Delivered', deliveredAt: new Date() }));
+        }
+        return;
+      } catch (error) {
+        const errorMsg = error.response?.data?.message || 'OTP verification failed';
+        toast.error(errorMsg);
+        return;
+      }
+    }
+
+    // Only Pending and Packed can be sent to /orders/:id/status
+    if (!['Pending', 'Packed'].includes(status)) {
+      toast.error('Access Denied: Only Pending and Packed statuses can be updated manually.');
+      setShowStatusModal(false);
+      return;
     }
 
     try {
-      const payload = { status };
-      if (status === 'Delivered') {
-        payload.otp = statusOtpInput.trim();
-      }
-      await axios.put(`/orders/${orderId}/status`, payload);
-      toast.success(status === 'Delivered' ? 'OTP verified and Order delivered!' : 'Status updated successfully');
+      await axios.put(`/orders/${orderId}/status`, { status });
+      toast.success(`Order status updated to ${status} successfully`);
       setShowStatusModal(false);
       setStatusActionData({ orderId: null, status: null });
       setStatusOtpInput('');
       fetchOrders();
+      if (viewingOrder && viewingOrder._id === orderId) {
+        setViewingOrder(prev => ({ ...prev, orderStatus: status }));
+      }
     } catch (error) {
       const errorMsg = error.response?.data?.message || 'Failed to update status';
       toast.error(errorMsg);
-      // Keep modal open if OTP error so user can re-try
-      if (status !== 'Delivered') {
-        setShowStatusModal(false);
-        setStatusActionData({ orderId: null, status: null });
-        setStatusOtpInput('');
-      }
+      setShowStatusModal(false);
+      setStatusActionData({ orderId: null, status: null });
+      setStatusOtpInput('');
     }
   };
 
@@ -2043,7 +2085,7 @@ const Orders = () => {
                               </span>
                             </div>
 
-                            {!isDriver ? (
+                            {!isDriver && ['Pending', 'Packed'].includes(order.orderStatus) ? (
                               <select
                                 value={order.orderStatus}
                                 onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
@@ -2059,9 +2101,8 @@ const Orders = () => {
                                   cursor: 'pointer'
                                 }}
                               >
-                                {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
-                                  <option key={s} value={s} style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>{s}</option>
-                                ))}
+                                <option value="Pending" style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>Pending</option>
+                                <option value="Packed" style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>Packed</option>
                               </select>
                             ) : null}
 
@@ -2435,8 +2476,8 @@ const Orders = () => {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {/* Dynamic Status Dropdown - Admins Only */}
-                    {!isDriver && (
+                    {/* Dynamic Status Dropdown - Admins Only (Pending and Packed only; locked for Out for Delivery, Delivered, Cancelled) */}
+                    {!isDriver && ['Pending', 'Packed'].includes(order.orderStatus) && (
                       <div style={{ position: 'relative' }}>
                         <select 
                           value={order.orderStatus}
@@ -2446,9 +2487,8 @@ const Orders = () => {
                             border: '1px solid var(--glass-border)', color: 'var(--text-main)', fontSize: '12px', fontWeight: 600, cursor: 'pointer'
                           }}
                         >
-                          {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
-                            <option key={s} value={s} style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>{s}</option>
-                          ))}
+                          <option value="Pending" style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>Pending</option>
+                          <option value="Packed" style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>Packed</option>
                         </select>
                       </div>
                     )}
@@ -2554,7 +2594,7 @@ const Orders = () => {
                       </button>
                     )}
                     {!isDriver && ['Pending', 'Packed'].includes(order.orderStatus) && (
-                      <button onClick={() => handleUpdateStatus(order._id, 'Cancelled')} style={{ background: 'transparent', border: 'none', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Cancel Order</button>
+                      <button onClick={() => handleCancelOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Cancel Order</button>
                     )}
                     {!isDriver && (
                       <button onClick={() => handleDeleteOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Delete Order</button>
@@ -2661,7 +2701,7 @@ const Orders = () => {
                       if (driverModalType === 'return') {
                         await axios.put(`/orders/${selectedOrderId}/assign-return-driver`, { driverId: driver._id });
                       } else {
-                        await axios.put(`/orders/${selectedOrderId}/ship`, { driverId: driver._id });
+                        await axios.put(`/orders/${selectedOrderId}/ship`, { driverId: driver._id, outForDelivery: true });
                       }
                       setShowDriverModal(false);
                       fetchOrders();
