@@ -504,11 +504,25 @@ const Orders = () => {
       // Fallback: If backend server returned 500 due to legacy orderStatus enum, approve return via item-level return-status
       try {
         const targetOrder = (viewingOrder && viewingOrder._id === orderId) ? viewingOrder : orders.find(o => o._id === orderId);
-        const itemsToApprove = targetOrder?.items?.filter(i => ['Return Requested', 'Requested', 'Pending', 'None'].includes(i.returnStatus)) || targetOrder?.items || [];
-        if (itemsToApprove.length > 0) {
-          for (const it of itemsToApprove) {
+        const allItems = targetOrder?.items || [];
+        const itemsToApprove = allItems.filter(i => ['Return Requested', 'Requested', 'Pending', 'None'].includes(i.returnStatus));
+        const listToUpdate = itemsToApprove.length > 0 ? itemsToApprove : allItems;
+        if (listToUpdate.length > 0) {
+          for (const it of listToUpdate) {
             await axios.put(`/orders/${orderId}/items/${it._id}/return-status`, { status: 'Return Approved' });
           }
+          toast.success('Return request approved successfully!');
+          fetchOrders(true);
+          if (viewingOrder && viewingOrder._id === orderId) {
+            setViewingOrder(prev => prev ? {
+              ...prev,
+              returnStatus: 'Approved',
+              items: prev.items?.map(it => ({ ...it, returnStatus: 'Return Approved' }))
+            } : null);
+          }
+          return;
+        } else {
+          // If items were already approved, refresh and show success
           toast.success('Return request approved successfully!');
           fetchOrders(true);
           if (viewingOrder && viewingOrder._id === orderId) {
