@@ -91,6 +91,8 @@ const Orders = () => {
   const [assigning, setAssigning] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
   const user = JSON.parse(localStorage.getItem('zudo_admin_user') || '{}');
+  const isDriver = (user.role || '').toLowerCase() === 'driver';
+  const isAdmin = !user.role || ['super_admin', 'normal_admin', 'manager', 'logistics', 'sales', 'accounting', 'b2b_admin', 'b2c_admin'].includes(user.role);
   const { refreshFlag } = useSocket();
   const [activeType, setActiveType] = useState(user.targetSegment && user.targetSegment !== 'Both' ? user.targetSegment : 'All');
   const [cashStats, setCashStats] = useState({ b2b: 0, b2c: 0 });
@@ -372,6 +374,16 @@ const Orders = () => {
   };
 
   const handleUpdateStatus = (orderId, status) => {
+    if (isDriver) {
+      if (['Out for Delivery', 'Cancelled'].includes(status)) {
+        toast.error(`Access Denied: Drivers are not permitted to manually change status to ${status}. Only Admins can set this status.`);
+        return;
+      }
+      if (status !== 'Delivered') {
+        toast.error(`Access Denied: Drivers cannot manually update order status to ${status}.`);
+        return;
+      }
+    }
     setStatusActionData({ orderId, status });
     setStatusOtpInput('');
     setShowStatusModal(true);
@@ -391,6 +403,19 @@ const Orders = () => {
   const confirmUpdateStatus = async () => {
     const { orderId, status } = statusActionData;
     if (!orderId || !status) return;
+
+    if (isDriver) {
+      if (['Out for Delivery', 'Cancelled'].includes(status)) {
+        toast.error(`Access Denied: Drivers cannot change status to ${status}.`);
+        setShowStatusModal(false);
+        return;
+      }
+      if (status !== 'Delivered') {
+        toast.error('Access Denied: Drivers can only perform authorized OTP delivery verification.');
+        setShowStatusModal(false);
+        return;
+      }
+    }
     
     if (status === 'Delivered') {
       const cleanOtp = statusOtpInput.trim();
@@ -2018,25 +2043,27 @@ const Orders = () => {
                               </span>
                             </div>
 
-                            <select
-                              value={order.orderStatus}
-                              onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
-                              style={{
-                                width: '100%',
-                                padding: '6px 8px',
-                                borderRadius: '8px',
-                                background: 'var(--glass-bg)',
-                                border: '1px solid var(--glass-border)',
-                                color: 'var(--text-main)',
-                                fontSize: '11px',
-                                fontWeight: 600,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
-                                <option key={s} value={s} style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>{s}</option>
-                              ))}
-                            </select>
+                            {!isDriver ? (
+                              <select
+                                value={order.orderStatus}
+                                onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '6px 8px',
+                                  borderRadius: '8px',
+                                  background: 'var(--glass-bg)',
+                                  border: '1px solid var(--glass-border)',
+                                  color: 'var(--text-main)',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
+                                  <option key={s} value={s} style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>{s}</option>
+                                ))}
+                              </select>
+                            ) : null}
 
                             <div>
                               {getStatusBadge(order.orderStatus, order.returnStatus)}
@@ -2408,27 +2435,58 @@ const Orders = () => {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {/* Dynamic Status Dropdown */}
-                    <div style={{ position: 'relative' }}>
-                      <select 
-                        value={order.orderStatus}
-                        onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
-                        style={{
-                          width: '100%', padding: '10px 12px', borderRadius: '12px', background: 'var(--glass-bg)', 
-                          border: '1px solid var(--glass-border)', color: 'var(--text-main)', fontSize: '12px', fontWeight: 600, cursor: 'pointer'
-                        }}
-                      >
-                        {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
-                          <option key={s} value={s} style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>{s}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {/* Dynamic Status Dropdown - Admins Only */}
+                    {!isDriver && (
+                      <div style={{ position: 'relative' }}>
+                        <select 
+                          value={order.orderStatus}
+                          onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
+                          style={{
+                            width: '100%', padding: '10px 12px', borderRadius: '12px', background: 'var(--glass-bg)', 
+                            border: '1px solid var(--glass-border)', color: 'var(--text-main)', fontSize: '12px', fontWeight: 600, cursor: 'pointer'
+                          }}
+                        >
+                          {['Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled'].map(s => (
+                            <option key={s} value={s} style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
-                    {order.orderStatus === 'Pending' && (
+                    {/* Authorized Driver Delivery Workflow with Customer 6-Digit OTP */}
+                    {isDriver && ['Packed', 'Out for Delivery'].includes(order.orderStatus) && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <button 
+                          onClick={() => handleUpdateStatus(order._id, 'Delivered')}
+                          className="btn-primary" 
+                          style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 8px 16px -4px rgba(16, 185, 129, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                        >
+                          <ShieldCheck size={16} /> Complete Delivery (Customer OTP)
+                        </button>
+                        <button
+                          onClick={() => handleResendOtp(order._id)}
+                          type="button"
+                          style={{
+                            background: 'rgba(99, 102, 241, 0.1)',
+                            border: '1px solid rgba(99, 102, 241, 0.25)',
+                            color: 'var(--primary)',
+                            padding: '8px',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            fontWeight: 700
+                          }}
+                        >
+                          Resend Customer Delivery OTP
+                        </button>
+                      </div>
+                    )}
+
+                    {!isDriver && order.orderStatus === 'Pending' && (
                       <button onClick={() => handleUpdateStatus(order._id, 'Packed')} className="btn-primary" style={{ width: '100%', padding: '12px' }}>Mark as Packed</button>
                     )}
                     
-                    {['Packed', 'Out for Delivery'].includes(order.orderStatus) && (
+                    {!isDriver && ['Packed', 'Out for Delivery'].includes(order.orderStatus) && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
                           <button 
@@ -2495,10 +2553,12 @@ const Orders = () => {
                         <ShieldCheck size={16} /> Collect Payment (OTP)
                       </button>
                     )}
-                    {['Pending', 'Packed'].includes(order.orderStatus) && (
+                    {!isDriver && ['Pending', 'Packed'].includes(order.orderStatus) && (
                       <button onClick={() => handleUpdateStatus(order._id, 'Cancelled')} style={{ background: 'transparent', border: 'none', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Cancel Order</button>
                     )}
-                    <button onClick={() => handleDeleteOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Delete Order</button>
+                    {!isDriver && (
+                      <button onClick={() => handleDeleteOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Delete Order</button>
+                    )}
                   </div>
                 )}
               </div>
