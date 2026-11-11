@@ -144,6 +144,20 @@ const Orders = () => {
   const [eoSubCategoryId, setEoSubCategoryId] = useState('');
   const [eoProductFocused, setEoProductFocused] = useState(false);
 
+  // Inline item editing states for Create Custom Order
+  const [editingCoItemIndex, setEditingCoItemIndex] = useState(null);
+  const [editCoItemQty, setEditCoItemQty] = useState(1);
+  const [editCoItemPrice, setEditCoItemPrice] = useState(0);
+
+  // Inline item editing states for Edit Order
+  const [editingEoItemIndex, setEditingEoItemIndex] = useState(null);
+  const [editEoItemQty, setEditEoItemQty] = useState(1);
+  const [editEoItemPrice, setEditEoItemPrice] = useState(0);
+
+  // Edit Order Modal Tab & Consignee Form
+  const [editOrderTab, setEditOrderTab] = useState('items'); // 'items' or 'consignee'
+  const [eoShippingAddress, setEoShippingAddress] = useState({ name: '', phone: '', address: '', city: '', pincode: '', state: '' });
+
   // Driver Live Tracking States
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [trackingDriver, setTrackingDriver] = useState(null);
@@ -309,21 +323,32 @@ const Orders = () => {
 
   useEffect(() => {
     if (editingOrder) {
-      setEoItems(editingOrder.items.map(item => ({
+      setEoItems((editingOrder.items || []).map(item => ({
         productId: item.productId?._id || item.productId || item.product,
         name: item.name,
         sellerName: item.seller?.businessName || item.seller?.storeName || item.seller?.companyName || item.seller?.name || item.sellerName,
         quantity: item.quantity,
         price: item.price
       })));
+      setEoShippingAddress({
+        name: editingOrder.shippingAddress?.name || editingOrder.userId?.name || '',
+        phone: editingOrder.shippingAddress?.phone || editingOrder.userId?.phone || '',
+        address: editingOrder.shippingAddress?.address || '',
+        city: editingOrder.shippingAddress?.city || '',
+        pincode: editingOrder.shippingAddress?.pincode || '',
+        state: editingOrder.shippingAddress?.state || ''
+      });
+      setEditOrderTab('items');
     } else {
       setEoItems([]);
+      setEoShippingAddress({ name: '', phone: '', address: '', city: '', pincode: '', state: '' });
     }
     setEoCategoryId('');
     setEoSubCategoryId('');
     setEoSelectedProductId('');
     setEoProductSearchTerm('');
     setEoProductFocused(false);
+    setEditingEoItemIndex(null);
   }, [editingOrder]);
 
   const fetchUsers = async () => {
@@ -3751,30 +3776,170 @@ const Orders = () => {
                             <thead>
                               <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
                                 <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--text-dim)' }}>Product Name</th>
-                                <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '100px' }}>Quantity</th>
-                                <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--text-dim)', width: '120px' }}>Est. Price</th>
-                                <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '60px' }}></th>
+                                <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '130px' }}>Quantity</th>
+                                <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--text-dim)', width: '130px' }}>Est. Price</th>
+                                <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '90px' }}>Actions</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {coItems.map((item, index) => (
-                                <tr key={index} style={{ borderBottom: index < coItems.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
-                                  <td style={{ padding: '12px 16px' }}>
-                                    <div style={{ fontWeight: 600 }}>{item.name}</div>
-                                    <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
-                                  </td>
-                                  <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700 }}>{item.quantity}</td>
-                                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--primary)' }}>₹{(item.price * item.quantity).toLocaleString()}</td>
-                                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                                    <button 
-                                      onClick={() => setCoItems(coItems.filter((_, i) => i !== index))}
-                                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                              {coItems.map((item, index) => {
+                                const isEditing = editingCoItemIndex === index;
+                                return (
+                                  <tr key={index} style={{ borderBottom: index < coItems.length - 1 ? '1px solid var(--glass-border)' : 'none', background: isEditing ? 'rgba(99, 102, 241, 0.05)' : 'transparent' }}>
+                                    <td style={{ padding: '12px 16px' }}>
+                                      <div style={{ fontWeight: 600 }}>{item.name}</div>
+                                      <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
+                                    </td>
+
+                                    {/* Quantity Column */}
+                                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                      {isEditing ? (
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'var(--input-bg)', border: '1px solid var(--primary)', borderRadius: '8px', padding: '2px 4px' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditCoItemQty(Math.max(1, editCoItemQty - 1))}
+                                            style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '2px 6px', fontWeight: 800, fontSize: '13px' }}
+                                          >
+                                            -
+                                          </button>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            value={editCoItemQty}
+                                            onChange={(e) => setEditCoItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                                            style={{ width: '42px', textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-main)', fontWeight: 700, fontSize: '12px', outline: 'none' }}
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditCoItemQty(editCoItemQty + 1)}
+                                            style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '2px 6px', fontWeight: 800, fontSize: '13px' }}
+                                          >
+                                            +
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (item.quantity > 1) {
+                                                const updated = [...coItems];
+                                                updated[index].quantity -= 1;
+                                                setCoItems(updated);
+                                              }
+                                            }}
+                                            style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}
+                                            title="Decrease quantity"
+                                          >
+                                            -
+                                          </button>
+                                          <span style={{ fontWeight: 700, minWidth: '24px', textAlign: 'center' }}>{item.quantity}</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const updated = [...coItems];
+                                              updated[index].quantity += 1;
+                                              setCoItems(updated);
+                                            }}
+                                            style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}
+                                            title="Increase quantity"
+                                          >
+                                            +
+                                          </button>
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* Est. Price Column */}
+                                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                                      {isEditing ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>₹/unit:</span>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              step="any"
+                                              value={editCoItemPrice}
+                                              onChange={(e) => setEditCoItemPrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                                              style={{ width: '68px', padding: '3px 6px', borderRadius: '6px', border: '1px solid var(--primary)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '11px', textAlign: 'right', outline: 'none' }}
+                                            />
+                                          </div>
+                                          <span style={{ fontWeight: 800, fontSize: '12px', color: 'var(--primary)' }}>
+                                            = ₹{(editCoItemPrice * editCoItemQty).toLocaleString()}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <div>
+                                          <div style={{ fontWeight: 800, color: 'var(--primary)' }}>
+                                            ₹{(item.price * item.quantity).toLocaleString()}
+                                          </div>
+                                          <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                                            ₹{Number(item.price).toLocaleString()} / unit
+                                          </div>
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* Actions Column */}
+                                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                      {isEditing ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const updated = [...coItems];
+                                              updated[index] = {
+                                                ...updated[index],
+                                                quantity: editCoItemQty,
+                                                price: editCoItemPrice
+                                              };
+                                              setCoItems(updated);
+                                              setEditingCoItemIndex(null);
+                                              toast.success('Product updated');
+                                            }}
+                                            style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            title="Save Item Changes"
+                                          >
+                                            <Check size={14} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingCoItemIndex(null)}
+                                            style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            title="Cancel Editing"
+                                          >
+                                            <X size={14} />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingCoItemIndex(index);
+                                              setEditCoItemQty(item.quantity);
+                                              setEditCoItemPrice(item.price);
+                                            }}
+                                            style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', color: 'var(--primary)', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            title="Edit Item Quantity & Price"
+                                          >
+                                            <Edit size={14} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setCoItems(coItems.filter((_, i) => i !== index))}
+                                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            title="Remove Product"
+                                          >
+                                            <Trash2 size={14} />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -3875,15 +4040,15 @@ const Orders = () => {
         </div>
       )}
 
-      {/* Edit Order Items Modal */}
+      {/* Edit Order Items & Details Modal */}
       {showEditItemsModal && editingOrder && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '650px', borderRadius: '32px', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '720px', borderRadius: '32px', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
             {/* Modal Header */}
             <div style={{ padding: '20px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>Edit Order Products</h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0' }}>Edit quantities or add new products to Order #{filteredOrders.findIndex(o => o._id === editingOrder._id) !== -1 ? filteredOrders.findIndex(o => o._id === editingOrder._id) + 1 : editingOrder._id.slice(-8).toUpperCase()}</p>
+                <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>Edit Order Details</h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0' }}>Modify products, quantities, prices or consignee details for Order #{filteredOrders.findIndex(o => o._id === editingOrder._id) !== -1 ? filteredOrders.findIndex(o => o._id === editingOrder._id) + 1 : editingOrder._id.slice(-8).toUpperCase()}</p>
               </div>
               <button 
                 onClick={() => {
@@ -3896,8 +4061,46 @@ const Orders = () => {
               </button>
             </div>
 
+            {/* Modal Navigation Tabs */}
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--glass-border)', padding: '0 32px', background: 'var(--card-bg)' }}>
+              <button
+                type="button"
+                onClick={() => setEditOrderTab('items')}
+                style={{
+                  padding: '12px 18px',
+                  border: 'none',
+                  borderBottom: editOrderTab === 'items' ? '2px solid var(--primary)' : '2px solid transparent',
+                  background: 'none',
+                  color: editOrderTab === 'items' ? 'var(--primary)' : 'var(--text-dim)',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Order Products ({eoItems.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditOrderTab('consignee')}
+                style={{
+                  padding: '12px 18px',
+                  border: 'none',
+                  borderBottom: editOrderTab === 'consignee' ? '2px solid var(--primary)' : '2px solid transparent',
+                  background: 'none',
+                  color: editOrderTab === 'consignee' ? 'var(--primary)' : 'var(--text-dim)',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Consignee & Shipping Details
+              </button>
+            </div>
+
             {/* Modal Content - Scrollable */}
             <div style={{ padding: '32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px', flex: 1 }}>
+              {editOrderTab === 'items' ? (
+                <>
               {/* Product Selector */}
               <div>
                 <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', margin: '0 0 12px' }}>Add New Product</h4>
@@ -4036,9 +4239,9 @@ const Orders = () => {
                     <thead>
                       <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
                         <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--text-dim)' }}>Product</th>
-                        <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '120px' }}>Quantity</th>
-                        <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--text-dim)', width: '120px' }}>Estimated Price</th>
-                        <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '60px' }}></th>
+                        <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '130px' }}>Quantity</th>
+                        <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--text-dim)', width: '130px' }}>Estimated Price</th>
+                        <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '90px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4046,50 +4249,164 @@ const Orders = () => {
                         <tr>
                           <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)' }}>No products in this order. Add one above.</td>
                         </tr>
-                      ) : eoItems.map((item, index) => (
-                        <tr key={index} style={{ borderBottom: index < eoItems.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
-                          <td style={{ padding: '12px 16px' }}>
-                            <div style={{ fontWeight: 600 }}>{item.name}</div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
-                          </td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                              <button 
-                                onClick={() => {
-                                  if (item.quantity > 1) {
-                                    const updated = [...eoItems];
-                                    updated[index].quantity -= 1;
-                                    setEoItems(updated);
-                                  }
-                                }}
-                                style={{ width: '24px', height: '24px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
-                              >
-                                -
-                              </button>
-                              <span style={{ fontWeight: 700, width: '30px', display: 'inline-block', textAlign: 'center' }}>{item.quantity}</span>
-                              <button 
-                                onClick={() => {
-                                  const updated = [...eoItems];
-                                  updated[index].quantity += 1;
-                                  setEoItems(updated);
-                                }}
-                                style={{ width: '24px', height: '24px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
-                              >
-                                +
-                              </button>
-                            </div>
-                          </td>
-                          <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--primary)' }}>₹{(item.price * item.quantity).toLocaleString()}</td>
-                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                            <button 
-                              onClick={() => setEoItems(eoItems.filter((_, i) => i !== index))}
-                              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      ) : eoItems.map((item, index) => {
+                        const isEditing = editingEoItemIndex === index;
+                        return (
+                          <tr key={index} style={{ borderBottom: index < eoItems.length - 1 ? '1px solid var(--glass-border)' : 'none', background: isEditing ? 'rgba(99, 102, 241, 0.05)' : 'transparent' }}>
+                            <td style={{ padding: '12px 16px' }}>
+                              <div style={{ fontWeight: 600 }}>{item.name}</div>
+                              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
+                            </td>
+
+                            {/* Quantity Column */}
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              {isEditing ? (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'var(--input-bg)', border: '1px solid var(--primary)', borderRadius: '8px', padding: '2px 4px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditEoItemQty(Math.max(1, editEoItemQty - 1))}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '2px 6px', fontWeight: 800, fontSize: '13px' }}
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={editEoItemQty}
+                                    onChange={(e) => setEditEoItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                                    style={{ width: '42px', textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-main)', fontWeight: 700, fontSize: '12px', outline: 'none' }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditEoItemQty(editEoItemQty + 1)}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '2px 6px', fontWeight: 800, fontSize: '13px' }}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      if (item.quantity > 1) {
+                                        const updated = [...eoItems];
+                                        updated[index].quantity -= 1;
+                                        setEoItems(updated);
+                                      }
+                                    }}
+                                    style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}
+                                    title="Decrease quantity"
+                                  >
+                                    -
+                                  </button>
+                                  <span style={{ fontWeight: 700, minWidth: '24px', textAlign: 'center' }}>{item.quantity}</span>
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = [...eoItems];
+                                      updated[index].quantity += 1;
+                                      setEoItems(updated);
+                                    }}
+                                    style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}
+                                    title="Increase quantity"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Estimated Price Column */}
+                            <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                              {isEditing ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>₹/unit:</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="any"
+                                      value={editEoItemPrice}
+                                      onChange={(e) => setEditEoItemPrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                                      style={{ width: '68px', padding: '3px 6px', borderRadius: '6px', border: '1px solid var(--primary)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '11px', textAlign: 'right', outline: 'none' }}
+                                    />
+                                  </div>
+                                  <span style={{ fontWeight: 800, fontSize: '12px', color: 'var(--primary)' }}>
+                                    = ₹{(editEoItemPrice * editEoItemQty).toLocaleString()}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div>
+                                  <div style={{ fontWeight: 800, color: 'var(--primary)' }}>
+                                    ₹{(item.price * item.quantity).toLocaleString()}
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                                    ₹{Number(item.price).toLocaleString()} / unit
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Actions Column */}
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              {isEditing ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = [...eoItems];
+                                      updated[index] = {
+                                        ...updated[index],
+                                        quantity: editEoItemQty,
+                                        price: editEoItemPrice
+                                      };
+                                      setEoItems(updated);
+                                      setEditingEoItemIndex(null);
+                                      toast.success('Product updated');
+                                    }}
+                                    style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    title="Save Item Changes"
+                                  >
+                                    <Check size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingEoItemIndex(null)}
+                                    style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    title="Cancel Editing"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingEoItemIndex(index);
+                                      setEditEoItemQty(item.quantity);
+                                      setEditEoItemPrice(item.price);
+                                    }}
+                                    style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', color: 'var(--primary)', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    title="Edit Item Quantity & Price"
+                                  >
+                                    <Edit size={14} />
+                                  </button>
+                                  <button 
+                                    type="button"
+                                    onClick={() => setEoItems(eoItems.filter((_, i) => i !== index))}
+                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    title="Remove Product"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -4104,44 +4421,119 @@ const Orders = () => {
                   </span>
                 </div>
               </div>
-            </div>
+            </>
+          ) : (
+            /* Consignee & Shipping Details Tab */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', margin: '0 0 4px' }}>Edit Consignee & Delivery Address</h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Recipient Name *</label>
+                  <input
+                    type="text"
+                    value={eoShippingAddress.name}
+                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, name: e.target.value })}
+                    placeholder="Consignee full name"
+                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Contact Phone *</label>
+                  <input
+                    type="text"
+                    value={eoShippingAddress.phone}
+                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, phone: e.target.value })}
+                    placeholder="10-digit mobile number"
+                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                  />
+                </div>
+              </div>
 
-            {/* Modal Actions */}
-            <div style={{ padding: '20px 32px', borderTop: '1px solid var(--glass-border)', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button 
-                onClick={() => {
-                  setShowEditItemsModal(false);
-                  setEditingOrder(null);
-                }} 
-                className="btn-primary" 
-                style={{ background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)' }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={async () => {
-                  if (eoItems.length === 0) {
-                    toast.error('Order must have at least one product');
-                    return;
-                  }
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Street Address *</label>
+                <textarea
+                  rows={3}
+                  value={eoShippingAddress.address}
+                  onChange={e => setEoShippingAddress({ ...eoShippingAddress, address: e.target.value })}
+                  placeholder="Door / Building / Street address"
+                  style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px', resize: 'none' }}
+                />
+              </div>
 
-                  try {
-                    await axios.put(`/orders/admin/${editingOrder._id}/items`, {
-                      items: eoItems
-                    });
-                    toast.success('Order products successfully updated!');
-                    setShowEditItemsModal(false);
-                    setEditingOrder(null);
-                    fetchOrders();
-                  } catch (err) {
-                    toast.error('Failed to update order products: ' + (err.response?.data?.message || err.message));
-                  }
-                }}
-                className="btn-primary"
-              >
-                Save Changes
-              </button>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>City *</label>
+                  <input
+                    type="text"
+                    value={eoShippingAddress.city}
+                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, city: e.target.value })}
+                    placeholder="City"
+                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Pincode *</label>
+                  <input
+                    type="text"
+                    value={eoShippingAddress.pincode}
+                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, pincode: e.target.value })}
+                    placeholder="6-digit pincode"
+                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>State</label>
+                  <input
+                    type="text"
+                    value={eoShippingAddress.state}
+                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, state: e.target.value })}
+                    placeholder="State"
+                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                  />
+                </div>
+              </div>
             </div>
+          )}
+        </div>
+
+        {/* Modal Actions */}
+        <div style={{ padding: '20px 32px', borderTop: '1px solid var(--glass-border)', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+          <button 
+            onClick={() => {
+              setShowEditItemsModal(false);
+              setEditingOrder(null);
+            }} 
+            className="btn-primary" 
+            style={{ background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)' }}
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={async () => {
+              if (eoItems.length === 0) {
+                toast.error('Order must have at least one product');
+                return;
+              }
+
+              try {
+                await axios.put(`/orders/admin/${editingOrder._id}/items`, {
+                  items: eoItems,
+                  shippingAddress: eoShippingAddress
+                });
+                toast.success('Order successfully updated!');
+                setShowEditItemsModal(false);
+                setEditingOrder(null);
+                fetchOrders();
+              } catch (err) {
+                toast.error('Failed to update order: ' + (err.response?.data?.message || err.message));
+              }
+            }}
+            className="btn-primary"
+          >
+            Save Changes
+          </button>
+        </div>
           </div>
         </div>
       )}
