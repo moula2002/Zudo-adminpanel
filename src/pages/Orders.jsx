@@ -81,6 +81,7 @@ const Orders = () => {
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [statusActionData, setStatusActionData] = useState({ orderId: null, status: null });
+  const [statusOtpInput, setStatusOtpInput] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteOrderId, setDeleteOrderId] = useState(null);
   const [showReturnDriverModal, setShowReturnDriverModal] = useState(false);
@@ -372,21 +373,53 @@ const Orders = () => {
 
   const handleUpdateStatus = (orderId, status) => {
     setStatusActionData({ orderId, status });
+    setStatusOtpInput('');
     setShowStatusModal(true);
+  };
+
+  const handleResendOtp = async (orderId) => {
+    if (!orderId) return;
+    try {
+      const res = await axios.post(`/orders/${orderId}/resend-delivery-otp`);
+      toast.success(res.data?.message || '6-digit OTP sent to customer mobile!');
+      fetchOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to resend OTP');
+    }
   };
 
   const confirmUpdateStatus = async () => {
     const { orderId, status } = statusActionData;
     if (!orderId || !status) return;
     
+    if (status === 'Delivered') {
+      const cleanOtp = statusOtpInput.trim();
+      if (!cleanOtp || cleanOtp.length !== 6) {
+        toast.error('Please enter the valid 6-digit Delivery OTP collected from the customer');
+        return;
+      }
+    }
+
     try {
-      await axios.put(`/orders/${orderId}/status`, { status });
-      fetchOrders();
-    } catch (error) {
-      toast.error('Failed to update status');
-    } finally {
+      const payload = { status };
+      if (status === 'Delivered') {
+        payload.otp = statusOtpInput.trim();
+      }
+      await axios.put(`/orders/${orderId}/status`, payload);
+      toast.success(status === 'Delivered' ? 'OTP verified and Order delivered!' : 'Status updated successfully');
       setShowStatusModal(false);
       setStatusActionData({ orderId: null, status: null });
+      setStatusOtpInput('');
+      fetchOrders();
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || 'Failed to update status';
+      toast.error(errorMsg);
+      // Keep modal open if OTP error so user can re-try
+      if (status !== 'Delivered') {
+        setShowStatusModal(false);
+        setStatusActionData({ orderId: null, status: null });
+        setStatusOtpInput('');
+      }
     }
   };
 
@@ -469,18 +502,19 @@ const Orders = () => {
 
 
   const handleOtpVerify = async (orderId) => {
-    if (otp === '1234') { // Dummy OTP for demo
-      try {
-        await axios.put(`/orders/${orderId}/verify-payment`);
-        toast.success('Payment Verified & Collected!');
-        setShowOtpModal(false);
-        setOtp('');
-        fetchOrders();
-      } catch (err) {
-        toast.error('Verification failed on server');
-      }
-    } else {
-      toast.error('Invalid OTP');
+    const cleanOtp = otp.trim();
+    if (!cleanOtp || cleanOtp.length !== 6) {
+      toast.error('Please enter the valid 6-digit Delivery OTP');
+      return;
+    }
+    try {
+      const res = await axios.post(`/orders/${orderId}/verify-delivery-otp`, { otp: cleanOtp, isCash: true });
+      toast.success(res.data?.message || 'Payment & Delivery Verified Successfully!');
+      setShowOtpModal(false);
+      setOtp('');
+      fetchOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invalid OTP. Verification failed.');
     }
   };
 
@@ -2477,16 +2511,16 @@ const Orders = () => {
       {/* OTP Modal */}
       {showOtpModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-card" style={{ padding: '32px', borderRadius: '24px', width: '320px', textAlign: 'center' }}>
+          <div className="glass-card" style={{ padding: '32px', borderRadius: '24px', width: '360px', textAlign: 'center' }}>
             <h3 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '8px' }}>Verify Collection</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '24px' }}>Enter the 4-digit OTP from the customer to verify cash collection.</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '24px' }}>Enter the 6-digit Delivery OTP from the customer to verify delivery and cash collection.</p>
             <input 
               type="text" 
-              maxLength="4" 
-              placeholder="0000" 
+              maxLength="6" 
+              placeholder="000000" 
               value={otp} 
-              onChange={e => setOtp(e.target.value)}
-              style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', textAlign: 'center', fontSize: '24px', fontWeight: 800, marginBottom: '20px' }}
+              onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+              style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', textAlign: 'center', fontSize: '26px', fontWeight: 800, letterSpacing: '4px', marginBottom: '20px', fontFamily: 'monospace' }}
             />
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => setShowOtpModal(false)} className="btn-primary" style={{ flex: 1, background: 'var(--glass-bg)', color: 'var(--text-main)' }}>Cancel</button>
@@ -3771,32 +3805,70 @@ const Orders = () => {
       {showStatusModal && (
         <div style={{ 
           position: 'fixed', inset: 0, 
-          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
         }}>
           <div style={{ 
-            background: 'var(--card-bg)', padding: '24px', borderRadius: '24px',
-            border: '1px solid var(--glass-border)', width: '400px', maxWidth: '90%',
+            background: 'var(--card-bg)', padding: '28px', borderRadius: '24px',
+            border: '1px solid var(--glass-border)', width: '420px', maxWidth: '90%',
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
           }}>
             <div style={{ 
-              width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(99, 102, 241, 0.1)',
+              width: '52px', height: '52px', borderRadius: '26px', 
+              background: statusActionData.status === 'Delivered' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
-              color: '#6366f1'
+              color: statusActionData.status === 'Delivered' ? '#10b981' : '#6366f1'
             }}>
-              <RefreshCw size={24} />
+              {statusActionData.status === 'Delivered' ? <ShieldCheck size={28} /> : <RefreshCw size={24} />}
             </div>
             <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-              Confirm Status Change
+              {statusActionData.status === 'Delivered' ? 'Verify Customer Delivery OTP' : 'Confirm Status Change'}
             </h3>
-            <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
-              Are you sure you want to change order status to <strong style={{ color: 'var(--text-main)' }}>{statusActionData.status}</strong>?
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '18px', lineHeight: '1.5' }}>
+              {statusActionData.status === 'Delivered' ? (
+                <>Enter the <strong>6-digit OTP</strong> collected from the customer to complete delivery.</>
+              ) : (
+                <>Are you sure you want to change order status to <strong style={{ color: 'var(--text-main)' }}>{statusActionData.status}</strong>?</>
+              )}
             </p>
+
+            {statusActionData.status === 'Delivered' && (
+              <div style={{ marginBottom: '20px' }}>
+                <input 
+                  type="text" 
+                  maxLength={6} 
+                  autoFocus
+                  placeholder="000000" 
+                  value={statusOtpInput} 
+                  onChange={e => setStatusOtpInput(e.target.value.replace(/\D/g, ''))}
+                  style={{ 
+                    width: '100%', padding: '14px', borderRadius: '12px', 
+                    border: '2px solid #10b981', background: 'var(--input-bg)', 
+                    color: 'var(--text-main)', textAlign: 'center', fontSize: '26px', 
+                    letterSpacing: '6px', fontWeight: 800, fontFamily: 'monospace' 
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                    OTP sent to customer mobile
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleResendOtp(statusActionData.orderId)}
+                    style={{ background: 'none', border: 'none', color: '#10b981', fontSize: '12px', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Resend OTP
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '12px' }}>
               <button 
                 onClick={() => {
                   setShowStatusModal(false);
                   setStatusActionData({ orderId: null, status: null });
+                  setStatusOtpInput('');
                 }}
                 style={{ 
                   flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
@@ -3809,10 +3881,10 @@ const Orders = () => {
                 onClick={confirmUpdateStatus}
                 style={{ 
                   flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
-                  background: '#6366f1', color: '#fff', fontWeight: 600, cursor: 'pointer'
+                  background: statusActionData.status === 'Delivered' ? '#10b981' : '#6366f1', color: '#fff', fontWeight: 600, cursor: 'pointer'
                 }}
               >
-                Confirm
+                {statusActionData.status === 'Delivered' ? 'Verify & Deliver' : 'Confirm'}
               </button>
             </div>
           </div>
@@ -4227,10 +4299,19 @@ const Orders = () => {
                             {viewingOrder.deliverySlot?.startTime ? `${viewingOrder.deliverySlot.startTime} ${viewingOrder.deliverySlot.endTime && viewingOrder.deliverySlot.endTime !== '*' ? '- ' + viewingOrder.deliverySlot.endTime : ''}` : 'Standard Delivery'}
                           </span>
                         </div>
-                        {viewingOrder.deliveryOtp && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                            <span style={{ color: 'var(--text-dim)' }}>Delivery OTP:</span>
-                            <strong style={{ color: '#10b981', fontFamily: 'monospace', letterSpacing: '1px' }}>{viewingOrder.deliveryOtp}</strong>
+                        {viewingOrder.deliveryOtp && viewingOrder.orderStatus !== 'Delivered' && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: 'rgba(16, 185, 129, 0.08)', padding: '6px 10px', borderRadius: '8px' }}>
+                            <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Delivery OTP:</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <strong style={{ color: '#10b981', fontFamily: 'monospace', letterSpacing: '2px', fontSize: '14px' }}>{viewingOrder.deliveryOtp}</strong>
+                              <button
+                                type="button"
+                                onClick={() => handleResendOtp(viewingOrder._id)}
+                                style={{ background: 'none', border: 'none', color: '#10b981', fontSize: '11px', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                              >
+                                Resend
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
