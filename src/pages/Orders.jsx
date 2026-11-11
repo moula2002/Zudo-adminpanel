@@ -501,6 +501,28 @@ const Orders = () => {
         } : null);
       }
     } catch (error) {
+      // Fallback: If backend server returned 500 due to legacy orderStatus enum, approve return via item-level return-status
+      try {
+        const targetOrder = (viewingOrder && viewingOrder._id === orderId) ? viewingOrder : orders.find(o => o._id === orderId);
+        const itemsToApprove = targetOrder?.items?.filter(i => ['Return Requested', 'Requested', 'Pending', 'None'].includes(i.returnStatus)) || targetOrder?.items || [];
+        if (itemsToApprove.length > 0) {
+          for (const it of itemsToApprove) {
+            await axios.put(`/orders/${orderId}/items/${it._id}/return-status`, { status: 'Return Approved' });
+          }
+          toast.success('Return request approved successfully!');
+          fetchOrders(true);
+          if (viewingOrder && viewingOrder._id === orderId) {
+            setViewingOrder(prev => prev ? {
+              ...prev,
+              returnStatus: 'Approved',
+              items: prev.items?.map(it => ({ ...it, returnStatus: 'Return Approved' }))
+            } : null);
+          }
+          return;
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback approval error:', fallbackErr);
+      }
       toast.error(error.response?.data?.message || 'Failed to approve return request');
     } finally {
       setApproveLoadingId(null);
@@ -694,6 +716,20 @@ const Orders = () => {
       await axios.put(`/orders/${orderId}/${endpoint}`);
       fetchOrders();
     } catch (error) {
+      if (action === 'approve') {
+        try {
+          const targetOrder = orders.find(o => o._id === orderId);
+          const itemsToApprove = targetOrder?.items || [];
+          for (const it of itemsToApprove) {
+            await axios.put(`/orders/${orderId}/items/${it._id}/return-status`, { status: 'Return Approved' });
+          }
+          toast.success('Return approved successfully');
+          fetchOrders();
+          return;
+        } catch (e) {
+          console.error('Fallback approval failed:', e);
+        }
+      }
       toast.error(`Failed to ${action} return`);
     }
   };
