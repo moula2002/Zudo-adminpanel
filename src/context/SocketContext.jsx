@@ -16,7 +16,7 @@ export const SocketProvider = ({ children }) => {
     // In local dev, BASE_DOMAIN is localhost:5173, and vite proxies /socket.io
     const newSocket = io(BASE_DOMAIN, {
       withCredentials: true,
-      transports: ['polling']
+      transports: ['polling', 'websocket']
     });
 
     newSocket.on('connect', () => {
@@ -27,11 +27,17 @@ export const SocketProvider = ({ children }) => {
       console.log('Socket.IO disconnected');
     });
 
-    newSocket.on('data_updated', (data) => {
-      console.log('Real-time update received:', data);
+    const triggerRefresh = (eventName, data) => {
+      console.log(`Real-time update received (${eventName}):`, data);
+      clearApiCache('/orders');
       clearApiCache();
       setRefreshFlag(prev => prev + 1);
-    });
+    };
+
+    newSocket.on('data_updated', (data) => triggerRefresh('data_updated', data));
+    newSocket.on('order:updated', (data) => triggerRefresh('order:updated', data));
+    newSocket.on('order:status_changed', (data) => triggerRefresh('order:status_changed', data));
+    newSocket.on('order:delivered', (data) => triggerRefresh('order:delivered', data));
 
     setSocket(newSocket);
 

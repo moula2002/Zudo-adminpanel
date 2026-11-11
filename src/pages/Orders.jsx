@@ -93,7 +93,7 @@ const Orders = () => {
   const user = JSON.parse(localStorage.getItem('zudo_admin_user') || '{}');
   const isDriver = (user.role || '').toLowerCase() === 'driver';
   const isAdmin = !user.role || ['super_admin', 'normal_admin', 'manager', 'logistics', 'sales', 'accounting', 'b2b_admin', 'b2c_admin'].includes(user.role);
-  const { refreshFlag } = useSocket();
+  const { socket, refreshFlag } = useSocket();
   const [activeType, setActiveType] = useState(user.targetSegment && user.targetSegment !== 'Both' ? user.targetSegment : 'All');
   const [cashStats, setCashStats] = useState({ b2b: 0, b2c: 0 });
   const [cashCollectors, setCashCollectors] = useState([]);
@@ -229,14 +229,78 @@ const Orders = () => {
   }, [showTrackingModal, trackingDriver]);
 
   useEffect(() => {
-    fetchOrders();
-    fetchDrivers();
-    fetchCashStats();
-    fetchCashCollectors();
+    fetchOrders(true);
+    fetchDrivers(true);
+    fetchCashStats(true);
+    fetchCashCollectors(true);
     fetchUsers();
     fetchProducts();
     fetchCategories();
   }, [refreshFlag]);
+
+  // Real-time live status synchronization: updates UI immediately when backend emits changes
+  useEffect(() => {
+    if (!socket) return;
+    const handleLiveOrderUpdate = (data) => {
+      if (!data?.orderId) return;
+      setOrders(prevOrders => prevOrders.map(o => {
+        if (o._id === data.orderId) {
+          return {
+            ...o,
+            orderStatus: data.orderStatus || o.orderStatus,
+            paymentStatus: data.paymentStatus || o.paymentStatus,
+            driverId: data.driverId !== undefined ? data.driverId : o.driverId,
+            cashPersonId: data.cashPersonId !== undefined ? data.cashPersonId : o.cashPersonId
+          };
+        }
+        return o;
+      }));
+      if (viewingOrder && viewingOrder._id === data.orderId) {
+        setViewingOrder(prev => prev ? {
+          ...prev,
+          orderStatus: data.orderStatus || prev.orderStatus,
+          paymentStatus: data.paymentStatus || prev.paymentStatus,
+          driverId: data.driverId !== undefined ? data.driverId : prev.driverId,
+          cashPersonId: data.cashPersonId !== undefined ? data.cashPersonId : prev.cashPersonId
+        } : null);
+      }
+    };
+
+    socket.on('order:status_changed', handleLiveOrderUpdate);
+    socket.on('order:updated', handleLiveOrderUpdate);
+    socket.on('order:delivered', (d) => handleLiveOrderUpdate({ orderId: d?.orderId, orderStatus: 'Delivered' }));
+    socket.on('data_updated', (d) => {
+      if (d?.model === 'Order' && d?.orderId) handleLiveOrderUpdate(d);
+    });
+
+    return () => {
+      socket.off('order:status_changed', handleLiveOrderUpdate);
+      socket.off('order:updated', handleLiveOrderUpdate);
+      socket.off('order:delivered');
+      socket.off('data_updated');
+    };
+  }, [socket, viewingOrder]);
+
+  // Background auto-sync polling every 10 seconds and on tab focus
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchOrders(true);
+    }, 10000);
+
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetchOrders(true);
+      }
+    };
+    window.addEventListener('visibilitychange', handleFocus);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', handleFocus);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   useEffect(() => {
     if (editingOrder) {
