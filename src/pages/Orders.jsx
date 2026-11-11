@@ -2011,7 +2011,7 @@ const Orders = () => {
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1100px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1180px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'var(--card-bg)' }}>
                     <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Order Ref</th>
@@ -2021,7 +2021,7 @@ const Orders = () => {
                     <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 2</th>
                     <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Route 3</th>
                     <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase' }}>Total & Status</th>
-                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
+                    <th style={{ padding: '16px 20px', color: 'var(--text-dim)', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', textAlign: 'right', minWidth: '180px' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2439,10 +2439,10 @@ const Orders = () => {
               <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)' }}>No orders match the selected criteria</h3>
             </div>
           ) : filteredOrders.map((order, index) => (
-          <div key={order._id} className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
+          <div key={order._id} className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--glass-border)', maxWidth: '100%', boxSizing: 'border-box' }}>
             {/* Order Header */}
-            <div style={{ padding: '20px 24px', background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+            <div style={{ padding: '16px 24px', background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                 <div>
                   <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Order Ref</span>
                   <span title={`Order ID: ${order._id}`} style={{ fontWeight: 700, fontSize: '14px' }}>#{index + 1}</span>
@@ -2468,17 +2468,138 @@ const Orders = () => {
                   </>
                 )}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+
+              {/* Right Side: Total, Status & Order-Level Actions */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <div style={{ textAlign: 'right' }}>
                   <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Grand Total</span>
                   <span style={{ fontWeight: 800, fontSize: '16px', color: 'var(--primary)' }}>₹{order.totalAmount.toLocaleString()}</span>
                 </div>
+
                 {getStatusBadge(order.orderStatus, order.returnStatus)}
+
+                {/* Return Request Approve & Reject Buttons */}
+                {hasPendingReturn(order) && !isDriver && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      onClick={() => handleApproveReturn(order._id)}
+                      disabled={approveLoadingId === order._id}
+                      style={{
+                        background: '#10b981',
+                        border: 'none',
+                        color: '#fff',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Approve Customer Return Request"
+                    >
+                      {approveLoadingId === order._id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleOpenRejectReturnModal(order)}
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#ef4444',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Reject Customer Return Request"
+                    >
+                      <X size={12} /> Reject
+                    </button>
+                  </div>
+                )}
+
+                {/* View Details Button */}
+                <button
+                  onClick={() => handleViewOrder(order)}
+                  style={{
+                    background: 'rgba(99, 102, 241, 0.12)',
+                    border: '1px solid rgba(99, 102, 241, 0.35)',
+                    color: 'var(--primary)',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.22)'}
+                  onMouseOut={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)'}
+                  title="View Complete Order Details"
+                >
+                  <Eye size={12} /> View Details
+                </button>
+
+                {/* Quick Print Manifest */}
+                <button
+                  onClick={() => printManifest(order)}
+                  style={{
+                    background: 'var(--glass-bg)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--text-main)',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Print Shipping Manifest"
+                >
+                  <Printer size={12} /> Manifest
+                </button>
+
+                {/* Quick Print Invoice */}
+                <button
+                  onClick={() => printInvoice(order)}
+                  style={{
+                    background: 'var(--glass-bg)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--text-main)',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Print Tax Invoice"
+                >
+                  <FileText size={12} /> Invoice
+                </button>
               </div>
             </div>
 
             {/* Order Content */}
-            <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
+            <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px', boxSizing: 'border-box' }}>
               {/* Customer Intel */}
               <div>
                 <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2531,99 +2652,32 @@ const Orders = () => {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-                    <Package size={12} /> Manifest
-                    <button
-                      onClick={() => {
-                        setEditingOrder(order);
-                        setShowEditItemsModal(true);
-                      }}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--primary)',
-                        cursor: 'pointer',
-                        padding: '2px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        transition: '0.2s',
-                        marginLeft: '4px'
-                      }}
-                      title="Edit Products in Order"
-                      onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
-                      onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      <Edit size={12} />
-                    </button>
+                    <Package size={12} /> Items Manifest
                   </p>
-                  {hasPendingReturn(order) && !isDriver && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                      <button
-                        onClick={() => handleApproveReturn(order._id)}
-                        disabled={approveLoadingId === order._id}
-                        style={{
-                          background: '#10b981',
-                          border: 'none',
-                          color: '#fff',
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                        title="Approve Return Request"
-                      >
-                        <Check size={12} /> Approve
-                      </button>
-                      <button
-                        onClick={() => handleOpenRejectReturnModal(order)}
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                          color: '#ef4444',
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                        title="Reject Return Request"
-                      >
-                        <X size={12} /> Reject
-                      </button>
-                    </div>
-                  )}
-
                   <button
-                    onClick={() => handleViewOrder(order)}
+                    onClick={() => {
+                      setEditingOrder(order);
+                      setShowEditItemsModal(true);
+                    }}
                     style={{
-                      background: 'rgba(99, 102, 241, 0.12)',
-                      border: '1px solid rgba(99, 102, 241, 0.35)',
+                      background: 'rgba(99, 102, 241, 0.1)',
+                      border: '1px solid rgba(99, 102, 241, 0.25)',
                       color: 'var(--primary)',
-                      padding: '4px 10px',
-                      borderRadius: '8px',
-                      fontSize: '11px',
-                      fontWeight: 700,
                       cursor: 'pointer',
-                      display: 'flex',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      display: 'inline-flex',
                       alignItems: 'center',
                       gap: '4px',
-                      transition: 'all 0.2s'
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      transition: '0.2s'
                     }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.background = 'rgba(99, 102, 241, 0.22)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)';
-                    }}
-                    title="View Order Details"
+                    title="Edit products and quantities in this order"
+                    onMouseOver={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)'}
+                    onMouseOut={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'}
                   >
-                    <Eye size={12} /> View Details
+                    <Edit size={11} /> Edit Items
                   </button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
