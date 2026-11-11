@@ -29,7 +29,8 @@ const EditProduct = () => {
     price: '',
     b2bPrice: '',
     moq: '1',
-    unit: 'pcs',
+    unit: 'kg',
+    unitSize: '1',
     categoryId: '',
     subCategoryId: '',
     stock: '',
@@ -69,7 +70,8 @@ const EditProduct = () => {
           price: p.price || '',
           b2bPrice: p.b2bPrice || '',
           moq: p.moq || '1',
-          unit: p.unit || 'pcs',
+          unit: p.unit || 'kg',
+          unitSize: p.unitSize !== undefined ? String(p.unitSize) : '1',
           categoryId: p.categoryId?._id || p.categoryId || '',
           subCategoryId: p.subCategoryId?._id || p.subCategoryId || '',
           stock: p.stock || '',
@@ -169,6 +171,7 @@ const EditProduct = () => {
         .filter(v => v.packetSizeVal && v.price)
         .map(v => ({
           packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
+          unitSize: parseFloat(v.packetSizeVal) || parseFloat(formData.unitSize) || 1,
           price: parseFloat(v.price),
           stock: parseInt(v.stock) || 0
         }));
@@ -177,12 +180,14 @@ const EditProduct = () => {
         .filter(v => v.packetSizeVal && v.price)
         .map(v => ({
           packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
+          unitSize: parseFloat(v.packetSizeVal) || parseFloat(formData.unitSize) || 1,
           price: parseFloat(v.price),
           stock: parseInt(v.stock) || 0
         }));
 
       const payload = {
         ...formData,
+        unitSize: parseFloat(formData.unitSize) || 1,
         b2b: formattedB2b,
         b2c: formattedB2c,
         imageUrl,
@@ -389,15 +394,30 @@ const EditProduct = () => {
                     required
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
-                    <option value="pcs">pcs</option>
-                    <option value="g">g</option>
-                          <option value="kg">kg</option>
-                          <option value="ltr">ltr</option>
-                          <option value="ml">ml</option>
-                          <option value="pcs">pcs</option>
-                          <option value="bag">bag</option>
-                    <option value="bag">bag</option>
+                    <option value="kg">KG</option>
+                    <option value="ton">Ton</option>
+                    <option value="bag">Bag</option>
+                    <option value="tin">Tin</option>
+                    <option value="ltr">Litre</option>
+                    <option value="pcs">Pcs</option>
+                    <option value="g">Gram (g)</option>
+                    <option value="ml">ML</option>
                   </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>
+                    Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 KG bag)</span>
+                  </label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    placeholder="e.g. 30"
+                    value={formData.unitSize}
+                    onChange={e => setFormData({ ...formData, unitSize: e.target.value })}
+                    required
+                    min="0.01"
+                    step="any"
+                  />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>MOQ</label>

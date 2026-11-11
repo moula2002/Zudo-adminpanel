@@ -22,7 +22,8 @@ const AddProduct = () => {
     b2bPrice: '0',
     gstPercent: 0,
     moq: 1,
-    unit: 'pcs',
+    unit: 'kg',
+    unitSize: 1,
     sellerId: '',
     stock: 0,
     hsn: '',
@@ -105,6 +106,7 @@ const AddProduct = () => {
         .filter(v => v.packetSizeVal && v.price)
         .map(v => ({
           packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
+          unitSize: parseFloat(v.packetSizeVal) || parseFloat(formData.unitSize) || 1,
           price: parseFloat(v.price),
           stock: parseInt(v.stock) || 0
         }));
@@ -113,6 +115,7 @@ const AddProduct = () => {
         .filter(v => v.packetSizeVal && v.price)
         .map(v => ({
           packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
+          unitSize: parseFloat(v.packetSizeVal) || parseFloat(formData.unitSize) || 1,
           price: parseFloat(v.price),
           stock: parseInt(v.stock) || 0
         }));
@@ -233,15 +236,33 @@ const AddProduct = () => {
               <input type="number" name="gstPercent" className="input-field" value={formData.gstPercent} onChange={handleInputChange} required min="0" step="0.1" />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 500 }}>Unit *</label>
+              <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 500 }}>Unit Type *</label>
               <select name="unit" className="input-field" value={formData.unit} onChange={handleInputChange} required>
-                <option value="pcs">pcs</option>
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-                <option value="ltr">ltr</option>
-                <option value="ml">ml</option>
-                <option value="bag">bag</option>
+                <option value="kg">KG</option>
+                <option value="ton">Ton</option>
+                <option value="bag">Bag</option>
+                <option value="tin">Tin</option>
+                <option value="ltr">Litre</option>
+                <option value="pcs">Pcs</option>
+                <option value="g">Gram (g)</option>
+                <option value="ml">ML</option>
               </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 500 }}>
+                Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 KG bag)</span>
+              </label>
+              <input 
+                type="number" 
+                name="unitSize" 
+                className="input-field" 
+                value={formData.unitSize} 
+                onChange={handleInputChange} 
+                required 
+                min="0.01" 
+                step="any" 
+                placeholder="e.g. 30" 
+              />
             </div>
           </div>
 

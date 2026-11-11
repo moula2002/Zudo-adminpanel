@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const COMMON_UNITS = ['pcs', 'g', 'kg', 'ltr', 'ml', 'bag'];
+const COMMON_UNITS = ['kg', 'ton', 'bag', 'tin', 'ltr', 'pcs', 'g', 'ml'];
 
 const Commissions = () => {
   const [categories, setCategories] = useState([]);
@@ -542,7 +542,7 @@ const Commissions = () => {
                           <span>
                             {comm.commissionType === 'percentage' 
                               ? `${comm.commissionValue}%` 
-                              : `₹${comm.commissionValue}/unit`
+                              : `₹${comm.commissionValue} per ${comm.unit || 'unit'}`
                             }
                           </span>
                         </div>
@@ -737,7 +737,7 @@ const Commissions = () => {
                             gap: '4px'
                           }}>
                             {comm.commissionType === 'percentage' ? <BadgePercent size={12} /> : <Coins size={12} />}
-                            {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue}/unit`}
+                            {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue} per ${comm.unit || 'unit'}`}
                           </span>
                         </div>
                         <button 

@@ -878,6 +878,18 @@ const Orders = () => {
     const normalPrice = Number(item.normalPrice || catalogProd?.b2bPrice || catalogProd?.price || 0);
     const sellerPrice = Number(item.sellerUnitPrice || catalogProd?.sellerUnitPrice || catalogProd?.sellerPrice || 0);
 
+    const unitSize = Number(item.unitSize || catalogProd?.unitSize || 1);
+    const unit = item.unit || item.variantSize || catalogProd?.unit || 'Unit';
+    const totalProductWeight = Number(item.totalProductWeight || (unitSize * qty));
+    const commissionType = item.commissionType || catalogProd?.commissionType || 'fixed';
+    const commissionRate = Number(item.commissionValue !== undefined ? item.commissionValue : (catalogProd?.commissionValue || 0));
+    const unitCommission = Number(item.unitCommission !== undefined ? item.unitCommission : (
+      commissionType === 'percentage'
+        ? ((sellerPrice || unitPrice) * commissionRate) / 100
+        : (commissionRate * unitSize)
+    ));
+    const totalCommission = Number(item.totalCommission !== undefined ? item.totalCommission : (unitCommission * qty));
+
     return {
       id: prodId || 'N/A',
       name: item.name || catalogProd?.name || 'Product',
@@ -886,7 +898,13 @@ const Orders = () => {
       categoryName,
       subCategoryName,
       hsn: catalogProd?.hsn || item.productId?.hsn || 'N/A',
-      unit: item.variantSize || catalogProd?.unit || '1 Unit',
+      unit,
+      unitSize,
+      totalProductWeight,
+      commissionType,
+      commissionRate,
+      unitCommission,
+      totalCommission,
       stock: catalogProd?.stock !== undefined ? catalogProd.stock : 'N/A',
       stockStatus: catalogProd?.stockStatus || (catalogProd?.stock > 0 ? 'In Stock' : 'Available'),
       normalPrice: normalPrice > 0 ? normalPrice : null,
@@ -899,7 +917,7 @@ const Orders = () => {
       sellerName: getSellerCompanyName(item.seller || catalogProd?.sellerId),
       sellerPhone: item.seller?.phone || 'N/A',
       sellerAddress: item.seller?.address || 'N/A',
-      commission: item.commissionValue ? `${item.commissionType === 'percentage' ? item.commissionValue + '%' : '₹' + item.commissionValue}` : null,
+      commission: commissionRate > 0 ? (commissionType === 'percentage' ? `${commissionRate}%` : `₹${commissionRate} / ${unit}`) : 'Standard Platform',
       sellerPrice: sellerPrice > 0 ? sellerPrice : null,
       returnStatus: item.returnStatus && item.returnStatus !== 'None' ? item.returnStatus : null,
       returnReason: item.returnReason || null
@@ -956,6 +974,9 @@ const Orders = () => {
       subtotalCalc += pInfo.totalPrice;
       const gstText = pInfo.gstPercent ? `${pInfo.gstPercent}%` : '-';
       const variant = pInfo.unit ? ` (${pInfo.unit})` : '';
+      const weightInfo = pInfo.unitSize && pInfo.unitSize !== 1 
+        ? ` &bull; <span>Size: <strong>${pInfo.unitSize} ${pInfo.unit}</strong> (Total: <strong>${pInfo.totalProductWeight} ${pInfo.unit}</strong>)</span>` 
+        : '';
 
       return `
         <tr>
@@ -966,6 +987,7 @@ const Orders = () => {
               <span>Category: <strong>${pInfo.categoryName}</strong></span>
               ${pInfo.hsn !== 'N/A' ? ` &bull; <span>HSN: <strong>${pInfo.hsn}</strong></span>` : ''}
               &bull; <span>Seller: ${pInfo.sellerName}</span>
+              ${weightInfo}
             </div>
           </td>
           <td style="text-align: center; border: 1px solid #e2e8f0; padding: 7px 10px; font-size: 11px; font-weight: 600;">${pInfo.qty}</td>
@@ -5406,20 +5428,40 @@ const Orders = () => {
                                 animation: 'fadeIn 0.2s ease-out'
                               }}>
                                 <div>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Unit Size (per pack/item)</span>
+                                  <strong style={{ color: 'var(--text-main)' }}>{pInfo.unitSize} {pInfo.unit}</strong>
+                                </div>
+                                <div>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Total Weight / Size</span>
+                                  <strong style={{ color: 'var(--text-main)' }}>{pInfo.totalProductWeight} {pInfo.unit}</strong>
+                                </div>
+                                <div>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Commission Rate</span>
+                                  <strong style={{ color: 'var(--primary)' }}>
+                                    {pInfo.commissionRate > 0 
+                                      ? (pInfo.commissionType === 'percentage' ? `${pInfo.commissionRate}%` : `₹${pInfo.commissionRate} per ${pInfo.unit}`) 
+                                      : 'Standard Platform'}
+                                  </strong>
+                                </div>
+                                <div>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Commission Per Pack / Unit</span>
+                                  <strong style={{ color: 'var(--primary)' }}>₹{pInfo.unitCommission.toFixed(2)}</strong>
+                                </div>
+                                <div>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Total Platform Commission</span>
+                                  <strong style={{ color: '#6366f1', fontSize: '12px' }}>₹{pInfo.totalCommission.toFixed(2)}</strong>
+                                </div>
+                                <div>
                                   <span style={{ color: 'var(--text-dim)', display: 'block' }}>Base Seller Price</span>
                                   <strong style={{ color: 'var(--text-main)' }}>{pInfo.sellerPrice ? `₹${pInfo.sellerPrice.toFixed(2)}` : 'N/A'}</strong>
                                 </div>
                                 <div>
-                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Platform Commission</span>
-                                  <strong style={{ color: 'var(--primary)' }}>{pInfo.commission || 'Standard Platform'}</strong>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Available Inventory</span>
+                                  <strong style={{ color: '#10b981' }}>{pInfo.stock} in stock</strong>
                                 </div>
                                 <div>
                                   <span style={{ color: 'var(--text-dim)', display: 'block' }}>Seller Address</span>
                                   <strong style={{ color: 'var(--text-main)' }}>{pInfo.sellerAddress}</strong>
-                                </div>
-                                <div>
-                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Available Inventory</span>
-                                  <strong style={{ color: '#10b981' }}>{pInfo.stock} units in stock</strong>
                                 </div>
                                 {pInfo.returnReason && (
                                   <div style={{ gridColumn: '1 / -1', color: '#f59e0b', paddingTop: '4px' }}>
@@ -5558,6 +5600,24 @@ const Orders = () => {
                             </span>
                           </div>
                         )}
+                        {(() => {
+                          const orderCommission = Number(
+                            viewingOrder.totalCommissionAmount !== undefined 
+                              ? viewingOrder.totalCommissionAmount 
+                              : (viewingOrder.items || []).reduce((sum, it) => {
+                                  const itComm = it.totalCommission !== undefined 
+                                    ? it.totalCommission 
+                                    : ((it.unitCommission || 0) * (it.quantity || 1));
+                                  return sum + itComm;
+                                }, 0)
+                          );
+                          return orderCommission > 0 ? (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6366f1' }}>
+                              <span>Platform Commission:</span>
+                              <strong>₹{orderCommission.toFixed(2)}</strong>
+                            </div>
+                          ) : null;
+                        })()}
                         <div style={{
                           display: 'flex',
                           justifyContent: 'space-between',
