@@ -335,15 +335,26 @@ const Payments = () => {
     }
   };
 
-  const openSellerInvoicesModal = (merchantData) => {
+  const openSellerInvoicesModal = async (merchantData) => {
     setSelectedMerchant(merchantData);
     const end = new Date();
     const start = new Date();
-    start.setDate(end.getDate() - 30);
+    start.setDate(end.getDate() - 90);
     setGenerateStartDate(start.toISOString().split('T')[0]);
     setGenerateEndDate(end.toISOString().split('T')[0]);
     setGenerateInvoiceNumber('');
     setShowSellerInvoicesModal(true);
+
+    try {
+      const res = await api.get(`/seller-invoices/next-number?sellerId=${merchantData.seller._id}`);
+      if (res.data?.nextExpectedNumber) {
+        setGenerateInvoiceNumber(String(res.data.nextExpectedNumber));
+      } else {
+        setGenerateInvoiceNumber('1');
+      }
+    } catch (e) {
+      setGenerateInvoiceNumber('1');
+    }
   };
 
   const handleGenerateInvoice = async (e) => {
@@ -2290,9 +2301,36 @@ const Payments = () => {
             <h3 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 4px 0' }}>
               Generate Seller Invoice
             </h3>
-            <p style={{ color: 'var(--text-dim)', fontSize: '13px', margin: '0 0 20px 0' }}>
-              For {selectedMerchant.seller.name}
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <p style={{ color: 'var(--text-dim)', fontSize: '13px', margin: 0 }}>
+                For {selectedMerchant.seller.name}
+              </p>
+              <span style={{ 
+                fontSize: '11px', 
+                fontWeight: 700, 
+                padding: '3px 8px', 
+                borderRadius: '8px',
+                background: (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) > 0 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                color: (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) > 0 ? '#22c55e' : '#ef4444'
+              }}>
+                {selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0} Delivered Orders
+              </span>
+            </div>
+
+            {(selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) === 0 ? (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                color: '#ef4444',
+                padding: '14px',
+                borderRadius: '12px',
+                fontSize: '13px',
+                lineHeight: '1.5',
+                marginBottom: '16px'
+              }}>
+                <strong>Cannot Generate Invoice:</strong> This merchant partner currently has 0 delivered orders. Commercial invoices require delivered orders with valid delivery timestamps.
+              </div>
+            ) : null}
 
             <form onSubmit={handleGenerateInvoice} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
@@ -2360,7 +2398,7 @@ const Payments = () => {
 
                 <button
                   type="submit"
-                  disabled={generateLoading}
+                  disabled={generateLoading || (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) === 0}
                   className="btn-primary"
                   style={{
                     flex: '2',
@@ -2371,7 +2409,8 @@ const Payments = () => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '6px',
-                    cursor: generateLoading ? 'not-allowed' : 'pointer'
+                    cursor: generateLoading || (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) === 0 ? 'not-allowed' : 'pointer',
+                    opacity: (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) === 0 ? 0.5 : 1
                   }}
                 >
                   {generateLoading ? <Loader2 className="animate-spin" size={16} /> : <FilePlus size={16} />}
