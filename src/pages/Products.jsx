@@ -95,7 +95,28 @@ const Products = () => {
 
   const getProductPricingInfo = (product) => {
     // Determine base unit size (e.g. 30 for 30 KG bag)
-    const unitSize = Number(product.unitSize) > 0 ? Number(product.unitSize) : 1;
+    let unitSize = Number(product.unitSize);
+    if (!unitSize || unitSize <= 1) {
+      const firstVar = (product.b2b && product.b2b[0]) || (product.b2c && product.b2c[0]) || (product.variants && product.variants[0]);
+      if (firstVar) {
+        const vSize = Number(firstVar.unitSize || firstVar.sizeValue);
+        if (vSize && vSize > 1) {
+          unitSize = vSize;
+        } else if (firstVar.packetSize) {
+          const m = String(firstVar.packetSize).match(/([0-9.]+)/);
+          if (m && parseFloat(m[1]) > 1) {
+            unitSize = parseFloat(m[1]);
+          }
+        }
+      }
+      if (!unitSize || unitSize <= 1) {
+        const match = String(product.name || '').match(/([0-9.]+)\s*(kg|g|ltr|pcs|gm|kgs|ton|ml)/i);
+        if (match && parseFloat(match[1]) > 1) {
+          unitSize = parseFloat(match[1]);
+        }
+      }
+    }
+    if (!unitSize || unitSize <= 0) unitSize = 1;
 
     // Determine Packaging Type and Measurement Basis
     const rawUnit = (product.unit || 'unit').toLowerCase();
@@ -107,18 +128,28 @@ const Products = () => {
     // Price Basis: 'per_unit' (Method A) vs 'per_package' (Method B)
     const isPackagePrice = product.priceBasis === 'per_package' || product.isPackagePrice === true;
 
-    const rawSellerPrice = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null
+    let rawSellerPrice = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null
       ? Number(product.sellerPricePerBaseUnit)
       : (product.sellerPrice !== undefined && product.sellerPrice !== null
           ? Number(product.sellerPrice)
           : Number(product.price || 0));
 
+    // Fallback to B2B price or variant price if 0
+    if (rawSellerPrice <= 0) {
+      if (product.sellerB2bPrice > 0) rawSellerPrice = Number(product.sellerB2bPrice);
+      else if (product.b2bPrice > 0) rawSellerPrice = Number(product.b2bPrice);
+      else if (product.b2b && product.b2b.length > 0) {
+        const fvPrice = Number(product.b2b[0].sellerPricePerProductUnit || product.b2b[0].sellerPrice || product.b2b[0].price);
+        if (fvPrice > 0) rawSellerPrice = fvPrice;
+      }
+    }
+
     let sellerPricePerBaseUnit = 0;
     let sellerPricePerProductUnit = 0;
 
-    if (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null) {
+    if (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null && product.sellerPricePerProductUnit > 0) {
       sellerPricePerProductUnit = Number(product.sellerPricePerProductUnit);
-      if (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null) {
+      if (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && product.sellerPricePerBaseUnit > 0) {
         sellerPricePerBaseUnit = Number(product.sellerPricePerBaseUnit);
       } else {
         sellerPricePerBaseUnit = unitSize > 0 ? Math.round((sellerPricePerProductUnit / unitSize) * 100) / 100 : sellerPricePerProductUnit;
@@ -133,7 +164,7 @@ const Products = () => {
       sellerPricePerProductUnit = Math.round(sellerPricePerBaseUnit * unitSize * 100) / 100;
     }
 
-    // 5. Admin Commission Per Base Unit (e.g. ₹20 / KG)
+    // 5. Admin Commission Per Base Unit (e.g. ₹20 / KG or ₹2 / KG)
     const isFlat = (product.commissionType || 'flat') === 'flat';
     const adminCommissionPerBaseUnit = product.adminCommissionPerBaseUnit !== undefined && product.adminCommissionPerBaseUnit !== null
       ? Number(product.adminCommissionPerBaseUnit)
@@ -141,12 +172,13 @@ const Products = () => {
           ? Number(product.commissionRate)
           : Number(product.commissionValue ?? 0));
 
-    // 6. Commission Per Product Unit (e.g. 20 * 30 = ₹600)
-    const commissionPerProductUnit = product.commissionPerProductUnit !== undefined && product.commissionPerProductUnit !== null
-      ? Number(product.commissionPerProductUnit)
-      : (isFlat
-          ? Math.round(adminCommissionPerBaseUnit * unitSize * 100) / 100
-          : Math.round((sellerPricePerProductUnit * adminCommissionPerBaseUnit / 100) * 100) / 100);
+    // 6. Commission Per Product Unit (e.g. 20 * 30 = ₹600 or 2 * 30 = ₹60)
+    let commissionPerProductUnit = 0;
+    if (isFlat) {
+      commissionPerProductUnit = Math.round(adminCommissionPerBaseUnit * unitSize * 100) / 100;
+    } else {
+      commissionPerProductUnit = Math.round((sellerPricePerProductUnit * adminCommissionPerBaseUnit / 100) * 100) / 100;
+    }
 
     // 7. Customer Unit Base Price (1500 + 600 = ₹2,100)
     const customerUnitBasePrice = product.customerUnitBasePrice !== undefined && product.customerUnitBasePrice !== null
@@ -263,16 +295,26 @@ const Products = () => {
     XLSX.writeFile(wb, "Zudo_Products_Catalog.xlsx");
   };
 
-  const renderVariants = (variants, defaultUnit, defaultPackaging) => {
+  const renderVariants = (variants, defaultUnit, defaultPackaging, adminRate = 0) => {
     if (!variants || variants.length === 0) return <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>N/A</span>;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {variants.map((v, idx) => {
-          const vUnitSize = Number(v.unitSize || v.sizeValue) || 1;
+          let vUnitSize = Number(v.unitSize || v.sizeValue);
+          if (!vUnitSize || vUnitSize <= 0) {
+            const parsed = String(v.packetSize || '').match(/([0-9.]+)/);
+            if (parsed && parseFloat(parsed[1]) > 0) vUnitSize = parseFloat(parsed[1]);
+            else vUnitSize = 1;
+          }
           const vPackaging = (v.packagingType || defaultPackaging || 'BAG').toUpperCase();
           const vMeas = (v.measurementBasis || v.measurementUnit || defaultUnit || 'KG').toUpperCase();
           const vSeller = v.sellerPricePerProductUnit ?? v.sellerPrice;
-          const vComm = v.commissionPerProductUnit ?? v.commissionAmount;
+          let vComm = v.commissionPerProductUnit ?? v.commissionAmount;
+          // Protect against corrupt old historical 1000x values (e.g. 60000)
+          const expectedComm = adminRate > 0 && vUnitSize > 0 ? Math.round(adminRate * vUnitSize * 100) / 100 : null;
+          if (expectedComm !== null && (vComm === undefined || vComm === null || vComm > expectedComm * 2.5)) {
+            vComm = expectedComm;
+          }
           const vCust = v.price;
           const vStock = v.stock;
           return (
@@ -504,8 +546,8 @@ const Products = () => {
                       )}
                     </div>
                   </td>
-                  <td style={{ padding: '16px 24px', minWidth: '130px' }}>{renderVariants(product.b2c, product.measurementUnit || product.unit, product.packagingType || product.unit)}</td>
-                  <td style={{ padding: '16px 24px', minWidth: '140px' }}>{renderVariants(product.b2b, product.measurementUnit || product.unit, product.packagingType || product.unit)}</td>
+                  <td style={{ padding: '16px 24px', minWidth: '130px' }}>{renderVariants(product.b2c, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit)}</td>
+                  <td style={{ padding: '16px 24px', minWidth: '140px' }}>{renderVariants(product.b2b, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit)}</td>
                   <td style={{ padding: '16px 24px' }}>{product.gstPercent || 0}%</td>
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
