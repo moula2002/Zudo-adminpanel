@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { BASE_DOMAIN, clearApiCache } from '../utils/api';
 
@@ -11,33 +11,54 @@ export const useSocket = () => {
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [refreshFlag, setRefreshFlag] = useState(0);
+  const refreshTimerRef = useRef(null);
+  const errorLoggedRef = useRef(false);
 
   useEffect(() => {
-    // In local dev, BASE_DOMAIN is localhost:5173, and vite proxies /socket.io
-    const newSocket = io(BASE_DOMAIN, {
+    const socketUrl = BASE_DOMAIN || window.location.origin;
+
+    // Prefer WebSocket first to avoid polling 503/xhr-poll errors on CDNs/proxies
+    const newSocket = io(socketUrl, {
       withCredentials: true,
-      transports: ['polling', 'websocket'],
-      reconnectionAttempts: 5,
-      timeout: 10000
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 3000,
+      reconnectionDelayMax: 10000,
+      timeout: 10000,
+      autoConnect: true
     });
 
     newSocket.on('connect', () => {
       console.log('Socket.IO connected');
+      errorLoggedRef.current = false;
     });
 
     newSocket.on('connect_error', (error) => {
-      console.warn('Socket connection note (polling active):', error.message || error);
+      // Log connection note once instead of spamming on every polling retry
+      if (!errorLoggedRef.current) {
+        console.warn('Socket connection note (reconnecting in background):', error.message || error);
+        errorLoggedRef.current = true;
+      }
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('Socket.IO disconnected');
+    newSocket.on('disconnect', (reason) => {
+      if (reason !== 'io client disconnect') {
+        console.log('Socket.IO disconnected:', reason);
+      }
     });
 
     const triggerRefresh = (eventName, data) => {
       console.log(`Real-time update received (${eventName}):`, data);
       clearApiCache('/orders');
       clearApiCache();
-      setRefreshFlag(prev => prev + 1);
+      // Debounce refresh flag to prevent cascade requests and rate limiting
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+      refreshTimerRef.current = setTimeout(() => {
+        setRefreshFlag(prev => prev + 1);
+      }, 300);
     };
 
     newSocket.on('data_updated', (data) => triggerRefresh('data_updated', data));
@@ -48,6 +69,9 @@ export const SocketProvider = ({ children }) => {
     setSocket(newSocket);
 
     return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
       newSocket.close();
     };
   }, []);
