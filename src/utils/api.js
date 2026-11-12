@@ -1,7 +1,7 @@
 import toast from 'react-hot-toast';
 import axios from 'axios';
 
-const isLocal = window.location.hostname === 'localhost' ||
+export const isLocal = window.location.hostname === 'localhost' ||
   window.location.hostname === '127.0.0.1' ||
   window.location.hostname.startsWith('192.168.') ||
   window.location.hostname.startsWith('10.') ||
@@ -14,6 +14,7 @@ export const BASE_DOMAIN = isLocal ? window.location.origin : PRODUCTION_DOMAIN;
 export const BASE_URL = `${BASE_DOMAIN}/api`;
 export const UPLOAD_URL = BASE_URL;
 export const IMAGE_BASE_URL = PRODUCTION_DOMAIN;
+export const SOCKET_URL = isLocal ? (import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000') : PRODUCTION_DOMAIN;
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -204,8 +205,8 @@ export const getImageUrl = (url) => {
     if (finalUrl.includes('via.placeholder.com')) {
       finalUrl = finalUrl.replace('via.placeholder.com', 'placehold.co');
     }
-    // Fix connection refused for hardcoded localhost URLs saved in DB
-    if (finalUrl.includes('localhost:5000')) {
+    // Fix connection refused for hardcoded localhost URLs saved in DB (only when in production)
+    if (!isLocal && finalUrl.includes('localhost:5000')) {
       finalUrl = finalUrl.replace(/https?:\/\/localhost:5000/g, IMAGE_BASE_URL);
     }
     // Fix old production domain saved in DB
