@@ -37,15 +37,7 @@ export default defineConfig(({ mode }) => {
           target: proxyTarget,
           changeOrigin: true,
           secure: false,
-          ws: true,
-          configure: (proxy) => {
-            proxy.on('error', (err, req, res) => {
-              if (res && !res.headersSent && res.writeHead) {
-                res.writeHead(502, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Socket proxy error', message: err.message }));
-              }
-            });
-          }
+          ws: false
         }
       }
     }

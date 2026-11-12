@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { BASE_DOMAIN, clearApiCache } from '../utils/api';
+import { SOCKET_URL, clearApiCache } from '../utils/api';
 
 const SocketContext = createContext();
 
@@ -15,9 +15,9 @@ export const SocketProvider = ({ children }) => {
   const errorLoggedRef = useRef(false);
 
   useEffect(() => {
-    const socketUrl = BASE_DOMAIN || window.location.origin;
+    const socketUrl = SOCKET_URL || window.location.origin;
 
-    // Prefer WebSocket first to avoid polling 503/xhr-poll errors on CDNs/proxies
+    // Prefer WebSocket directly to backend, avoiding Vite proxy ECONNABORTED errors
     const newSocket = io(socketUrl, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
@@ -35,7 +35,7 @@ export const SocketProvider = ({ children }) => {
     });
 
     newSocket.on('connect_error', (error) => {
-      // Log connection note once instead of spamming on every polling retry
+      // Log connection note once instead of spamming on every retry
       if (!errorLoggedRef.current) {
         console.warn('Socket connection note (reconnecting in background):', error.message || error);
         errorLoggedRef.current = true;
