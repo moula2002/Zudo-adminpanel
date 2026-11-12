@@ -55,6 +55,7 @@ const Login = () => {
       });
       localStorage.setItem('zudo_admin_token', data.token);
       localStorage.setItem('zudo_admin_user', JSON.stringify(data));
+      window.dispatchEvent(new Event('adminAuthChange'));
       if (selectedLocation) {
         localStorage.setItem('zudo_admin_location', selectedLocation._id);
         const dbIdentifier = selectedLocation.dbName || selectedLocation.name || `zudo-${selectedLocation.city.toLowerCase().replace(/[^a-z0-9]/g, '')}`;

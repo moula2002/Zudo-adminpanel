@@ -108,6 +108,7 @@ const Payments = () => {
   const [proofFile, setProofFile] = useState(null);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [settleLoading, setSettleLoading] = useState(false);
+  const [settleSuccessData, setSettleSuccessData] = useState(null);
 
   // Seller Details / Ledger Modal States
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -181,7 +182,52 @@ const Payments = () => {
     setTransactionRef('');
     setSettleRemarks('');
     setProofFile(null);
+    setSettleSuccessData(null);
     setShowSettleModal(true);
+  };
+
+  const handleDownloadReceipt = async (paymentId, receiptNumber) => {
+    try {
+      toast.loading('Generating payment receipt PDF...', { id: 'receipt-dl' });
+      const res = await api.get(`/payments/receipt/${paymentId}/download`, {
+        responseType: 'blob'
+      });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Payment_Receipt_${receiptNumber || paymentId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Receipt downloaded successfully!', { id: 'receipt-dl' });
+    } catch (err) {
+      console.error('Download receipt error:', err);
+      toast.error('Failed to download payment receipt.', { id: 'receipt-dl' });
+    }
+  };
+
+  const handleDownloadAllReceipts = async (sellerId, sellerName) => {
+    try {
+      toast.loading('Generating seller settlement receipts PDF...', { id: 'all-receipts-dl' });
+      const res = await api.get(`/payments/sellers/${sellerId}/receipts/download-all`, {
+        responseType: 'blob'
+      });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Settlement_Receipts_${(sellerName || 'Seller').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Settlement receipts downloaded successfully!', { id: 'all-receipts-dl' });
+    } catch (err) {
+      console.error('Download all receipts error:', err);
+      toast.error('Failed to download settlement receipts.', { id: 'all-receipts-dl' });
+    }
   };
 
   const handleFileUpload = async (e) => {
@@ -230,7 +276,12 @@ const Payments = () => {
       });
 
       toast.success(res.data.message || 'Settlement recorded successfully!');
-      setShowSettleModal(false);
+      setSettleSuccessData({
+        payout: res.data.payout,
+        seller: selectedMerchant.seller,
+        remainingOutstanding: res.data.remainingOutstanding,
+        message: res.data.message
+      });
       fetchAllData();
     } catch (err) {
       console.error('Settlement error:', err);
@@ -1713,7 +1764,88 @@ const Payments = () => {
               </div>
             </div>
 
-            {/* Settlement Form */}
+            {/* Settlement Form or Success Receipt State */}
+            {settleSuccessData ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center', padding: '10px 0' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
+                  <CheckCircle2 size={36} />
+                </div>
+
+                <div>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 6px 0' }}>Settlement Confirmed!</h3>
+                  <p style={{ color: 'var(--text-dim)', fontSize: '13px', margin: 0 }}>
+                    {settleSuccessData.message || `Payout of ₹${safeFormatCurrency(settleSuccessData.payout.amount)} successfully recorded.`}
+                  </p>
+                </div>
+
+                <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', textAlign: 'left' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>RECEIPT NUMBER</span>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--primary)', fontFamily: 'monospace' }}>
+                      {settleSuccessData.payout.receiptNumber || 'ZUDO-PAY-' + (settleSuccessData.payout.receiptSequence ? String(settleSuccessData.payout.receiptSequence).padStart(4, '0') : '0001')}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>AMOUNT SETTLED</span>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#22c55e' }}>
+                      ₹{safeFormatCurrency(settleSuccessData.payout.amount, 2)}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>SETTLEMENT TYPE</span>
+                    <div style={{ fontSize: '13px', fontWeight: 700 }}>
+                      {settleSuccessData.payout.settlementType || 'Partial Settlement'}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>REMAINING BALANCE</span>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: settleSuccessData.remainingOutstanding > 0 ? '#f59e0b' : '#22c55e' }}>
+                      ₹{safeFormatCurrency(settleSuccessData.remainingOutstanding, 2)}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadReceipt(settleSuccessData.payout._id, settleSuccessData.payout.receiptNumber)}
+                    className="btn-primary"
+                    style={{
+                      height: '46px',
+                      borderRadius: '12px',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Download size={18} />
+                    <span>Download Payment Receipt (PDF)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSettleModal(false);
+                      setSettleSuccessData(null);
+                    }}
+                    style={{
+                      height: '42px',
+                      borderRadius: '12px',
+                      background: 'var(--glass-bg)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--glass-border)',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Done / Close
+                  </button>
+                </div>
+              </div>
+            ) : (
             <form onSubmit={handleManualSettlementSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -1865,6 +1997,7 @@ const Payments = () => {
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}
@@ -2053,42 +2186,117 @@ const Payments = () => {
                   </tbody>
                 </table>
               ) : detailsTab === 'payouts' ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(255, 255, 255, 0.03)', borderBottom: '1px solid var(--glass-border)' }}>
-                      <th style={{ padding: '10px' }}>Date</th>
-                      <th style={{ padding: '10px' }}>Settled Amount</th>
-                      <th style={{ padding: '10px' }}>Method</th>
-                      <th style={{ padding: '10px' }}>UTR / Reference</th>
-                      <th style={{ padding: '10px' }}>Admin</th>
-                      <th style={{ padding: '10px' }}>Remarks</th>
-                      <th style={{ padding: '10px' }}>Proof</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sellerDetails?.payouts?.length === 0 ? (
-                      <tr><td colSpan="7" style={{ padding: '30px', textAlign: 'center', color: 'var(--text-dim)' }}>No payout records found.</td></tr>
-                    ) : (
-                      sellerDetails?.payouts?.map((p) => (
-                        <tr key={p._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                          <td style={{ padding: '10px', color: 'var(--text-dim)' }}>{safeFormatDate(p.date || p.createdAt)}</td>
-                          <td style={{ padding: '10px', fontWeight: 800, color: '#22c55e' }}>₹{safeFormatCurrency(p.amount)}</td>
-                          <td style={{ padding: '10px' }}>{p.paymentMethod}</td>
-                          <td style={{ padding: '10px', fontFamily: 'monospace' }}>{p.utrReference || p.transactionId || '—'}</td>
-                          <td style={{ padding: '10px' }}>{p.adminName || 'Admin'}</td>
-                          <td style={{ padding: '10px', color: 'var(--text-dim)' }}>{p.remarks || '—'}</td>
-                          <td style={{ padding: '10px' }}>
-                            {p.proofUrl ? (
-                              <a href={p.proofUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                                View Proof
-                              </a>
-                            ) : '—'}
-                          </td>
-                        </tr>
-                      ))
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: '13px', fontWeight: 700 }}>Settlement & Payment Receipts</span>
+                      <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)' }}>
+                        Sequential receipt records for partial and full settlements
+                      </p>
+                    </div>
+
+                    {sellerDetails?.payouts?.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadAllReceipts(sellerDetails.seller._id, sellerDetails.seller.name)}
+                        className="btn-primary"
+                        style={{
+                          height: '34px',
+                          padding: '0 14px',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Download size={14} /> Download Settlement Receipt
+                      </button>
                     )}
-                  </tbody>
-                </table>
+                  </div>
+
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(255, 255, 255, 0.03)', borderBottom: '1px solid var(--glass-border)' }}>
+                        <th style={{ padding: '10px' }}>Receipt #</th>
+                        <th style={{ padding: '10px' }}>Date</th>
+                        <th style={{ padding: '10px' }}>Settled Amount</th>
+                        <th style={{ padding: '10px' }}>Type</th>
+                        <th style={{ padding: '10px' }}>Method</th>
+                        <th style={{ padding: '10px' }}>UTR / Reference</th>
+                        <th style={{ padding: '10px' }}>Admin</th>
+                        <th style={{ padding: '10px' }}>Remarks</th>
+                        <th style={{ padding: '10px' }}>Proof</th>
+                        <th style={{ padding: '10px', textAlign: 'center' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sellerDetails?.payouts?.length === 0 ? (
+                        <tr><td colSpan="10" style={{ padding: '30px', textAlign: 'center', color: 'var(--text-dim)' }}>No payout records found.</td></tr>
+                      ) : (
+                        sellerDetails?.payouts?.map((p) => {
+                          const receiptNum = p.receiptNumber || (p.receiptSequence ? `ZUDO-PAY-${String(p.receiptSequence).padStart(4, '0')}` : `ZUDO-PAY-${p._id.toString().slice(-4).toUpperCase()}`);
+                          return (
+                            <tr key={p._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                              <td style={{ padding: '10px', fontFamily: 'monospace', fontWeight: 800, color: 'var(--primary)' }}>
+                                {receiptNum}
+                              </td>
+                              <td style={{ padding: '10px', color: 'var(--text-dim)' }}>{safeFormatDate(p.date || p.createdAt)}</td>
+                              <td style={{ padding: '10px', fontWeight: 800, color: '#22c55e' }}>₹{safeFormatCurrency(p.amount)}</td>
+                              <td style={{ padding: '10px' }}>
+                                <span style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  background: p.settlementType === 'Full Settlement' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                  color: p.settlementType === 'Full Settlement' ? '#22c55e' : '#f59e0b'
+                                }}>
+                                  {p.settlementType || 'Partial'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '10px' }}>{p.paymentMethod}</td>
+                              <td style={{ padding: '10px', fontFamily: 'monospace' }}>{p.utrReference || p.transactionId || '—'}</td>
+                              <td style={{ padding: '10px' }}>{p.adminName || 'Admin'}</td>
+                              <td style={{ padding: '10px', color: 'var(--text-dim)' }}>{p.remarks || '—'}</td>
+                              <td style={{ padding: '10px' }}>
+                                {p.proofUrl ? (
+                                  <a href={p.proofUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                                    View Proof
+                                  </a>
+                                ) : '—'}
+                              </td>
+                              <td style={{ padding: '10px', textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadReceipt(p._id, receiptNum)}
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: '8px',
+                                    background: 'rgba(79, 70, 229, 0.1)',
+                                    color: 'var(--primary)',
+                                    border: '1px solid rgba(79, 70, 229, 0.3)',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                  title="Download Payment Receipt PDF"
+                                >
+                                  <Download size={12} /> Receipt
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {sellerDetails?.auditLogs?.length === 0 ? (

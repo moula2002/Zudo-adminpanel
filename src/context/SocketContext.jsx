@@ -10,17 +10,39 @@ export const useSocket = () => {
 
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('zudo_admin_token'));
   const [refreshFlag, setRefreshFlag] = useState(0);
   const refreshTimerRef = useRef(null);
   const errorLoggedRef = useRef(false);
 
   useEffect(() => {
+    const handleAuthChange = () => {
+      setAuthToken(localStorage.getItem('zudo_admin_token'));
+    };
+    window.addEventListener('adminAuthChange', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+    return () => {
+      window.removeEventListener('adminAuthChange', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Do not initiate socket connection on public unauthenticated views (e.g. Login page)
+    if (!authToken) {
+      if (socket) {
+        socket.close();
+        setSocket(null);
+      }
+      return;
+    }
+
     const socketUrl = SOCKET_URL || window.location.origin;
 
-    // Connect directly to backend using polling handshake then upgrade to websocket
+    // Connect via WebSocket first for low latency and zero HTTP polling CORS overhead
     const newSocket = io(socketUrl, {
       withCredentials: true,
-      transports: ['polling', 'websocket'],
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 3000,
@@ -74,7 +96,7 @@ export const SocketProvider = ({ children }) => {
       }
       newSocket.close();
     };
-  }, []);
+  }, [authToken]);
 
   return (
     <SocketContext.Provider value={{ socket, refreshFlag }}>
