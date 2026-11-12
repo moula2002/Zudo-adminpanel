@@ -658,9 +658,11 @@ const Products = () => {
                     <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{simulatorProduct.name}</span>
                       <span>•</span>
-                      <span>Unit Size: <strong style={{ color: '#6366f1' }}>{info.unitSize} {simulatorProduct.unit || 'units'} / pack</strong></span>
+                      <span style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                        1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit}
+                      </span>
                       <span>•</span>
-                      <span>Available Stock: <strong style={{ color: info.availableStock <= 10 ? '#ef4444' : '#10b981' }}>{info.availableStock} packs {info.unitSize > 1 ? `(${info.totalStockWeight} ${simulatorProduct.unit || 'units'})` : ''}</strong></span>
+                      <span>Available Stock: <strong style={{ color: info.availableStock <= 10 ? '#ef4444' : '#10b981' }}>{info.availableStock} {info.packagingType}s ({info.totalStockWeight} {info.productMeasurementUnit})</strong></span>
                       {simulatorProduct.categoryId?.name && (
                         <>
                           <span>•</span>
@@ -695,29 +697,38 @@ const Products = () => {
 
               {/* Modal Body */}
               <div className="simulator-modal-body custom-scrollbar">
-                {/* 10-Step Pricing Breakdown Overview Cards */}
-                <div className="simulator-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
+                {/* 11-Step Pricing Breakdown Overview Cards */}
+                <div className="simulator-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))' }}>
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      1. Seller / Base Unit
+                      1. Seller Price / Base Unit
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
-                      ₹{info.sellerPricePerBaseUnit.toFixed(2)}
+                      ₹{info.sellerPricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}
                     </strong>
                   </div>
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      2. Measurement Unit
+                      2. Packaging Type
                     </span>
-                    <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700, textTransform: 'uppercase' }}>
+                    <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700, textTransform: 'uppercase' }}>
+                      {info.packagingType}
+                    </strong>
+                  </div>
+
+                  <div className="simulator-stat-card">
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
+                      3. Measurement Basis
+                    </span>
+                    <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700, textTransform: 'uppercase' }}>
                       {info.productMeasurementUnit}
                     </strong>
                   </div>
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      3. Product Unit Size
+                      4. Product Unit Size
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
                       {info.unitSize} {info.productMeasurementUnit}
@@ -726,7 +737,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      4. Seller / Product Unit
+                      5. Seller Price / Package
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
                       ₹{info.sellerPricePerProductUnit.toFixed(2)}
@@ -735,16 +746,16 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      5. Comm / Base Unit
+                      6. Admin Comm / Base Unit
                     </span>
                     <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700 }}>
-                      {info.isFlat ? `₹${info.adminCommissionPerBaseUnit.toFixed(2)}` : `${info.adminCommissionPerBaseUnit}%`}
+                      {info.isFlat ? `₹${info.adminCommissionPerBaseUnit.toFixed(2)} / ${info.productMeasurementUnit}` : `${info.adminCommissionPerBaseUnit}%`}
                     </strong>
                   </div>
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      6. Comm / Product Unit
+                      7. Commission / Package
                     </span>
                     <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700 }}>
                       ₹{info.commissionPerProductUnit.toFixed(2)}
@@ -753,7 +764,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      7. Customer Base Price
+                      8. Customer Base Price
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
                       ₹{info.customerUnitBasePrice.toFixed(2)}
@@ -762,7 +773,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      8. GST %
+                      9. GST %
                     </span>
                     <strong style={{ fontSize: '14px', color: '#f59e0b', fontWeight: 700 }}>
                       {info.gstPercent}%
@@ -771,7 +782,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      9. GST / Unit
+                      10. GST Amount / Package
                     </span>
                     <strong style={{ fontSize: '14px', color: '#f59e0b', fontWeight: 700 }}>
                       ₹{info.gstAmountPerProductUnit.toFixed(2)}
@@ -780,7 +791,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card highlight">
                     <span style={{ fontSize: '10px', color: '#10b981', display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      10. Final Price / Unit
+                      11. Customer Final Price
                     </span>
                     <strong style={{ fontSize: '15px', color: '#10b981', fontWeight: 800 }}>
                       ₹{info.customerFinalPricePerProductUnit.toFixed(2)}
@@ -803,7 +814,7 @@ const Products = () => {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
-                      Simulate Ordered Packs / Quantity:
+                      Simulate Ordered {info.packagingType}s / Quantity:
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <button
@@ -847,7 +858,7 @@ const Products = () => {
                         +
                       </button>
                       <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-dim)', marginLeft: '2px' }}>
-                        packs ({simTotalWeight} {simulatorProduct.unit || 'units'})
+                        {info.packagingType}s ({simTotalWeight} {info.productMeasurementUnit})
                       </span>
                     </div>
                   </div>
@@ -877,7 +888,7 @@ const Products = () => {
                             boxShadow: isSelected ? '0 0 10px rgba(99, 102, 241, 0.2)' : 'none'
                           }}
                         >
-                          <span>{preset} {preset === 1 ? 'pack' : 'packs'}</span>
+                          <span>{preset} {info.packagingType}{preset > 1 ? 's' : ''}</span>
                           {isFullStock && (
                             <span style={{ fontSize: '10px', opacity: 0.85, fontWeight: 700 }}>
                               (Full Stock)
