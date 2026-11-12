@@ -820,6 +820,8 @@ const Orders = () => {
         'Segment': (o.userId?.role || 'B2C').toUpperCase(),
         'Order Status': o.orderStatus,
         'Total Amount (INR)': o.totalAmount,
+        'Total Commission (₹)': Number(o.totalCommissionAmount !== undefined ? o.totalCommissionAmount : (o.items || []).reduce((sum, it) => sum + (it.totalCommission || 0), 0)).toFixed(2),
+        'Total Seller Payout (₹)': Number(o.totalSellerAmount !== undefined ? o.totalSellerAmount : (o.items || []).reduce((sum, it) => sum + (it.totalSellerAmount || ((it.sellerUnitPrice || 0) * (it.quantity || 1))), 0)).toFixed(2),
         'Payment Method': o.paymentMethod,
         'Payment Status': o.paymentStatus || 'Pending',
         'Shipping Company / Name': getOrderCompanyName(o),
@@ -878,18 +880,22 @@ const Orders = () => {
     const normalPrice = Number(item.normalPrice || catalogProd?.b2bPrice || catalogProd?.price || 0);
     const sellerPrice = Number(item.sellerUnitPrice || catalogProd?.sellerUnitPrice || catalogProd?.sellerPrice || 0);
 
-    const unitSize = Number(item.unitSize || catalogProd?.unitSize || 1);
-    const unit = item.unit || item.variantSize || catalogProd?.unit || 'Unit';
-    const measurementUnit = item.measurementUnit || catalogProd?.measurementUnit || unit;
-    const totalProductWeight = Number(item.totalProductWeight || (unitSize * qty));
+    const unitSize = Number(item.productUnitSize || item.unitSize || catalogProd?.unitSize || 1);
+    const packagingType = (item.packagingType || item.unit || catalogProd?.packagingType || catalogProd?.unit || 'BAG').toUpperCase();
+    const measurementBasis = (item.measurementBasis || item.measurementUnit || catalogProd?.measurementBasis || catalogProd?.measurementUnit || 'KG').toUpperCase();
+    const unit = packagingType;
+    const measurementUnit = measurementBasis;
+    const totalProductWeight = Number(item.totalMeasurementQuantity || item.totalProductWeight || (unitSize * qty));
     const commissionType = item.commissionType || catalogProd?.commissionType || 'fixed';
-    const commissionRate = Number(item.commissionValue !== undefined ? item.commissionValue : (catalogProd?.commissionValue || 0));
-    const unitCommission = Number(item.unitCommission !== undefined ? item.unitCommission : (
+    const commissionRate = Number(item.adminCommissionRate !== undefined ? item.adminCommissionRate : (item.commissionValue !== undefined ? item.commissionValue : (catalogProd?.commissionValue || 0)));
+    const unitCommission = Number(item.commissionPerPackage !== undefined ? item.commissionPerPackage : (item.unitCommission !== undefined ? item.unitCommission : (
       commissionType === 'percentage'
         ? ((sellerPrice || unitPrice) * commissionRate) / 100
         : (commissionRate * unitSize)
-    ));
+    )));
     const totalCommission = Number(item.totalCommission !== undefined ? item.totalCommission : (unitCommission * qty));
+    const sellerPricePerPackage = Number(item.sellerPricePerPackage !== undefined ? item.sellerPricePerPackage : (sellerPrice || 0));
+    const totalSellerAmount = Number(item.totalSellerAmount !== undefined ? item.totalSellerAmount : (sellerPricePerPackage * qty));
 
     return {
       id: prodId || 'N/A',
@@ -900,6 +906,8 @@ const Orders = () => {
       subCategoryName,
       hsn: catalogProd?.hsn || item.productId?.hsn || 'N/A',
       unit,
+      packagingType,
+      measurementBasis,
       measurementUnit,
       unitSize,
       totalProductWeight,
@@ -907,6 +915,8 @@ const Orders = () => {
       commissionRate,
       unitCommission,
       totalCommission,
+      sellerPricePerPackage,
+      totalSellerAmount,
       stock: catalogProd?.stock !== undefined ? catalogProd.stock : 'N/A',
       stockStatus: catalogProd?.stockStatus || (catalogProd?.stock > 0 ? 'In Stock' : 'Available'),
       normalPrice: normalPrice > 0 ? normalPrice : null,
@@ -919,8 +929,8 @@ const Orders = () => {
       sellerName: getSellerCompanyName(item.seller || catalogProd?.sellerId),
       sellerPhone: item.seller?.phone || 'N/A',
       sellerAddress: item.seller?.address || 'N/A',
-      commission: commissionRate > 0 ? (commissionType === 'percentage' ? `${commissionRate}%` : `₹${commissionRate} / ${measurementUnit}`) : 'Standard Platform',
-      sellerPrice: sellerPrice > 0 ? sellerPrice : null,
+      commission: commissionRate > 0 ? (commissionType === 'percentage' ? `${commissionRate}%` : `₹${commissionRate} / ${measurementBasis}`) : 'Standard Platform',
+      sellerPrice: sellerPricePerPackage > 0 ? sellerPricePerPackage : (sellerPrice > 0 ? sellerPrice : null),
       returnStatus: item.returnStatus && item.returnStatus !== 'None' ? item.returnStatus : null,
       returnReason: item.returnReason || null
     };
@@ -5430,32 +5440,36 @@ const Orders = () => {
                                 animation: 'fadeIn 0.2s ease-out'
                               }}>
                                 <div>
-                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Unit Size (per pack/item)</span>
-                                  <strong style={{ color: 'var(--text-main)' }}>{pInfo.unitSize} {pInfo.unit}</strong>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Package Size (per sellable pack)</span>
+                                  <strong style={{ color: 'var(--text-main)' }}>1 {pInfo.packagingType} = {pInfo.unitSize} {pInfo.measurementBasis}</strong>
                                 </div>
                                 <div>
-                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Total Weight / Size</span>
-                                  <strong style={{ color: 'var(--text-main)' }}>{pInfo.totalProductWeight} {pInfo.unit}</strong>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Total Measurement Quantity</span>
+                                  <strong style={{ color: 'var(--text-main)' }}>{pInfo.totalProductWeight} {pInfo.measurementBasis}</strong>
                                 </div>
                                 <div>
-                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Commission Rate</span>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Admin Commission Rate</span>
                                   <strong style={{ color: 'var(--primary)' }}>
                                     {pInfo.commissionRate > 0 
-                                      ? (pInfo.commissionType === 'percentage' ? `${pInfo.commissionRate}%` : `₹${pInfo.commissionRate} per ${pInfo.unit}`) 
+                                      ? (pInfo.commissionType === 'percentage' ? `${pInfo.commissionRate}%` : `₹${pInfo.commissionRate} / ${pInfo.measurementBasis}`) 
                                       : 'Standard Platform'}
                                   </strong>
                                 </div>
                                 <div>
-                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Commission Per Pack / Unit</span>
-                                  <strong style={{ color: 'var(--primary)' }}>₹{pInfo.unitCommission.toFixed(2)}</strong>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Commission Per Package</span>
+                                  <strong style={{ color: 'var(--primary)' }}>₹{pInfo.unitCommission.toFixed(2)} / {pInfo.packagingType}</strong>
                                 </div>
                                 <div>
                                   <span style={{ color: 'var(--text-dim)', display: 'block' }}>Total Platform Commission</span>
                                   <strong style={{ color: '#6366f1', fontSize: '12px' }}>₹{pInfo.totalCommission.toFixed(2)}</strong>
                                 </div>
                                 <div>
-                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Base Seller Price</span>
-                                  <strong style={{ color: 'var(--text-main)' }}>{pInfo.sellerPrice ? `₹${pInfo.sellerPrice.toFixed(2)}` : 'N/A'}</strong>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Seller Price Per Package</span>
+                                  <strong style={{ color: 'var(--text-main)' }}>{pInfo.sellerPrice ? `₹${pInfo.sellerPrice.toFixed(2)} / ${pInfo.packagingType}` : 'N/A'}</strong>
+                                </div>
+                                <div>
+                                  <span style={{ color: 'var(--text-dim)', display: 'block' }}>Total Seller Amount (Payout)</span>
+                                  <strong style={{ color: '#10b981', fontSize: '12px' }}>₹{pInfo.totalSellerAmount.toFixed(2)}</strong>
                                 </div>
                                 <div>
                                   <span style={{ color: 'var(--text-dim)', display: 'block' }}>Available Inventory</span>

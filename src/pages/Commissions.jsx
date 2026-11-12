@@ -22,6 +22,7 @@ const SUPPORTED_COMMISSION_UNITS = [
   { value: 'g', label: 'Per Gram (g)' },
   { value: 'ton', label: 'Per Ton (ton)' },
   { value: 'ltr', label: 'Per Litre (ltr)' },
+  { value: 'ml', label: 'Per Millilitre (ml)' },
   { value: 'pcs', label: 'Per Piece (pcs)' },
   { value: 'tin', label: 'Per Tin (tin)' },
   { value: 'bag', label: 'Per Bag (bag)' }

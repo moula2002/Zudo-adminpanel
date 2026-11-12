@@ -28,9 +28,12 @@ const EditProduct = () => {
     description: '',
     price: '',
     b2bPrice: '',
+    priceBasis: 'per_unit',
     moq: '1',
-    unit: 'kg',
+    unit: 'BAG',
+    packagingType: 'BAG',
     measurementUnit: 'kg',
+    measurementBasis: 'KG',
     unitSize: '1',
     categoryId: '',
     subCategoryId: '',
@@ -38,7 +41,6 @@ const EditProduct = () => {
     stockStatus: 'Available',
     sku: '',
     hsn: '',
-    stockStatus: 'Available',
     gstPercent: '0',
     sellerId: '',
     sellerName: '',
@@ -65,14 +67,21 @@ const EditProduct = () => {
         ]);
         setCategories(catRes.data);
         const p = productRes.data;
+        const loadedPackaging = (p.packagingType || p.unit || 'BAG').toUpperCase();
+        const loadedMeas = (p.measurementBasis || p.measurementUnit || 'KG').toUpperCase();
+        const loadedPriceBasis = p.priceBasis || (p.isPackagePrice ? 'per_package' : 'per_unit');
+
         setFormData({
           name: p.name || '',
           description: p.description || '',
           price: p.price || '',
           b2bPrice: p.b2bPrice || '',
+          priceBasis: loadedPriceBasis,
           moq: p.moq || '1',
-          unit: p.unit || 'kg',
-          measurementUnit: p.measurementUnit || (['bag', 'tin'].includes(p.unit) ? 'kg' : (p.unit || 'kg')),
+          unit: loadedPackaging,
+          packagingType: loadedPackaging,
+          measurementUnit: loadedMeas.toLowerCase(),
+          measurementBasis: loadedMeas,
           unitSize: p.unitSize !== undefined ? String(p.unitSize) : '1',
           categoryId: p.categoryId?._id || p.categoryId || '',
           subCategoryId: p.subCategoryId?._id || p.subCategoryId || '',
@@ -98,10 +107,19 @@ const EditProduct = () => {
 
         const parsedB2b = (p.b2b || []).map(v => {
           const parsed = parsePacketSize(v.packetSize);
+          const vUnitSize = v.unitSize !== undefined && v.unitSize !== null ? String(v.unitSize) : (v.sizeValue ? String(v.sizeValue) : (parsed.val || '1'));
+          const vPriceBasis = v.priceBasis || loadedPriceBasis || 'per_unit';
+          const vPrice = vPriceBasis === 'per_unit' && v.sellerPricePerBaseUnit !== undefined && v.sellerPricePerBaseUnit !== null
+            ? String(v.sellerPricePerBaseUnit)
+            : (v.sellerPrice !== undefined && v.sellerPrice !== null ? String(v.sellerPrice) : (v.price ? String(v.price) : ''));
+          const variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'kg').toLowerCase();
+          const variantPkg = (v.packagingType || loadedPackaging || 'BAG').toUpperCase();
           return {
-            packetSizeVal: parsed.val,
-            packetSizeUnit: parsed.unit,
-            price: v.price || '',
+            packetSizeVal: vUnitSize,
+            packetSizeUnit: variantMeas,
+            packagingType: variantPkg,
+            priceBasis: vPriceBasis,
+            price: vPrice,
             stock: v.stock !== undefined ? v.stock : ''
           };
         });
@@ -180,15 +198,40 @@ const EditProduct = () => {
 
       const formattedB2b = b2bVariants
         .filter(v => v.packetSizeVal && v.price)
-        .map(v => ({
-          packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
-          unitSize: parseFloat(v.packetSizeVal) || parseFloat(formData.unitSize) || 1,
-          price: parseFloat(v.price),
-          stock: parseInt(v.stock) || 0
-        }));
+        .map(v => {
+          const rawPrice = parseFloat(v.price) || 0;
+          const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
+          const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
+          const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
+          const vPriceBasis = v.priceBasis || formData.priceBasis || 'per_unit';
+          const isPkg = vPriceBasis === 'per_package';
+          const pkgPrice = isPkg ? rawPrice : Math.round(rawPrice * uSize * 100) / 100;
+          const basePrice = isPkg ? (uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice) : rawPrice;
+          return {
+            packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
+            sizeValue: uSize,
+            unitSize: uSize,
+            measurementUnit: mUnit,
+            measurementBasis: mUnit,
+            packagingType: pType,
+            priceBasis: vPriceBasis,
+            isPackagePrice: isPkg,
+            price: pkgPrice,
+            sellerPrice: pkgPrice,
+            sellerPricePerProductUnit: pkgPrice,
+            sellerPricePerBaseUnit: basePrice,
+            stock: parseInt(v.stock) || 0
+          };
+        });
 
       const payload = {
         ...formData,
+        unit: (formData.unit || 'BAG').toUpperCase(),
+        packagingType: (formData.packagingType || formData.unit || 'BAG').toUpperCase(),
+        measurementBasis: (formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase(),
+        measurementUnit: (formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase(),
+        priceBasis: formData.priceBasis || 'per_unit',
+        isPackagePrice: formData.priceBasis === 'per_package',
         unitSize: parseFloat(formData.unitSize) || 1,
         b2b: formattedB2b,
         b2c: formattedB2c,
@@ -388,51 +431,64 @@ const EditProduct = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Price Calculation Basis *</label>
+                  <select
+                    className="input-field"
+                    value={formData.priceBasis || 'per_unit'}
+                    onChange={e => setFormData({ ...formData, priceBasis: e.target.value })}
+                    required
+                    style={{ height: '50px', cursor: 'pointer' }}
+                  >
+                    <option value="per_unit">Method A – Base Measurement Unit Pricing (e.g. ₹50/KG)</option>
+                    <option value="per_package">Method B – Complete Package Pricing (e.g. ₹1,500/Bag)</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Packaging / Unit Type *</label>
                   <select
                     className="input-field"
                     value={formData.unit}
                     onChange={e => {
                       const val = e.target.value;
-                      const autoMeas = ['kg', 'ton', 'ltr', 'g', 'ml', 'pcs'].includes(val) ? val : (formData.measurementUnit || 'kg');
-                      setFormData({ ...formData, unit: val, measurementUnit: autoMeas });
+                      const autoMeas = ['kg', 'ton', 'ltr', 'g', 'ml', 'pcs'].includes(val.toLowerCase()) ? val.toLowerCase() : (formData.measurementUnit || 'kg');
+                      setFormData({ ...formData, unit: val, packagingType: val, measurementUnit: autoMeas, measurementBasis: autoMeas.toUpperCase() });
+                    }}
+                    required
+                    style={{ height: '50px', cursor: 'pointer' }}
+                  >
+                    <option value="BAG">BAG</option>
+                    <option value="BOX">BOX</option>
+                    <option value="TIN">TIN</option>
+                    <option value="BOTTLE">BOTTLE</option>
+                    <option value="PACK">PACK</option>
+                    <option value="PIECE">PIECE</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>
+                    Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG for Bag of Rice)</span>
+                  </label>
+                  <select
+                    className="input-field"
+                    value={formData.measurementUnit || 'kg'}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setFormData({ ...formData, measurementUnit: val, measurementBasis: val.toUpperCase() });
                     }}
                     required
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
                     <option value="kg">KG</option>
-                    <option value="bag">Bag</option>
-                    <option value="tin">Tin</option>
+                    <option value="g">Gram (g)</option>
                     <option value="ton">Ton</option>
                     <option value="ltr">Litre</option>
-                    <option value="pcs">Pcs</option>
-                    <option value="g">Gram (g)</option>
-                    <option value="ml">ML</option>
+                    <option value="ml">Millilitre (ml)</option>
+                    <option value="pcs">Piece</option>
                   </select>
                 </div>
-                {['bag', 'tin', 'custom'].includes(formData.unit) && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                      Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG for Bag of Rice)</span>
-                    </label>
-                    <select
-                      className="input-field"
-                      value={formData.measurementUnit || 'kg'}
-                      onChange={e => setFormData({ ...formData, measurementUnit: e.target.value })}
-                      required
-                      style={{ height: '50px', cursor: 'pointer' }}
-                    >
-                      <option value="kg">KG</option>
-                      <option value="ltr">Litre</option>
-                      <option value="g">Gram (g)</option>
-                      <option value="ton">Ton</option>
-                      <option value="pcs">Piece</option>
-                    </select>
-                  </div>
-                )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                    Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 {(formData.measurementUnit || 'KG').toUpperCase()} {formData.unit})</span>
+                    Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 {(formData.measurementUnit || 'KG').toUpperCase()} per {formData.unit})</span>
                   </label>
                   <input
                     type="number"

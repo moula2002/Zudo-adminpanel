@@ -97,27 +97,41 @@ const Products = () => {
     // Determine base unit size (e.g. 30 for 30 KG bag)
     const unitSize = Number(product.unitSize) > 0 ? Number(product.unitSize) : 1;
 
-    // 1. Seller Price Per Base Unit (e.g. ₹50 / KG)
+    // Determine Packaging Type and Measurement Basis
+    const rawUnit = (product.unit || 'unit').toLowerCase();
+    const rawMeas = (product.measurementBasis || product.measurementUnit || '').toLowerCase();
+    const BASE_UNITS = ['kg', 'g', 'ton', 'ltr', 'ml', 'pcs'];
+    const productMeasurementUnit = (rawMeas || (BASE_UNITS.includes(rawUnit) ? rawUnit : 'kg')).toUpperCase();
+    const packagingType = (product.packagingType || product.unit || 'BAG').toUpperCase();
+
+    // Price Basis: 'per_unit' (Method A) vs 'per_package' (Method B)
+    const isPackagePrice = product.priceBasis === 'per_package' || product.isPackagePrice === true;
+
     const rawSellerPrice = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null
       ? Number(product.sellerPricePerBaseUnit)
       : (product.sellerPrice !== undefined && product.sellerPrice !== null
           ? Number(product.sellerPrice)
           : Number(product.price || 0));
 
-    const sellerPricePerBaseUnit = rawSellerPrice > 0 ? rawSellerPrice : 0;
+    let sellerPricePerBaseUnit = 0;
+    let sellerPricePerProductUnit = 0;
 
-    // 2. Product Measurement Unit
-    const rawUnit = (product.unit || 'unit').toLowerCase();
-    const rawMeas = (product.measurementUnit || '').toLowerCase();
-    const BASE_UNITS = ['kg', 'g', 'ton', 'ltr', 'ml', 'pcs'];
-    const productMeasurementUnit = rawMeas || (BASE_UNITS.includes(rawUnit) ? rawUnit : rawUnit);
-
-    // 3. Product Unit Size = unitSize
-
-    // 4. Seller Price Per Product Unit (e.g. 50 * 30 = ₹1,500)
-    const sellerPricePerProductUnit = product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null
-      ? Number(product.sellerPricePerProductUnit)
-      : Math.round(sellerPricePerBaseUnit * unitSize * 100) / 100;
+    if (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null) {
+      sellerPricePerProductUnit = Number(product.sellerPricePerProductUnit);
+      if (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null) {
+        sellerPricePerBaseUnit = Number(product.sellerPricePerBaseUnit);
+      } else {
+        sellerPricePerBaseUnit = unitSize > 0 ? Math.round((sellerPricePerProductUnit / unitSize) * 100) / 100 : sellerPricePerProductUnit;
+      }
+    } else if (isPackagePrice) {
+      // Method B - Complete Package Pricing
+      sellerPricePerProductUnit = rawSellerPrice > 0 ? rawSellerPrice : 0;
+      sellerPricePerBaseUnit = unitSize > 0 ? Math.round((sellerPricePerProductUnit / unitSize) * 100) / 100 : sellerPricePerProductUnit;
+    } else {
+      // Method A - Base Measurement Unit Pricing
+      sellerPricePerBaseUnit = rawSellerPrice > 0 ? rawSellerPrice : 0;
+      sellerPricePerProductUnit = Math.round(sellerPricePerBaseUnit * unitSize * 100) / 100;
+    }
 
     // 5. Admin Commission Per Base Unit (e.g. ₹20 / KG)
     const isFlat = (product.commissionType || 'flat') === 'flat';
@@ -174,8 +188,6 @@ const Products = () => {
     const totalStockSubtotal = Math.round((totalSellerStockValue + totalStockCommission) * 100) / 100;
     const totalStockGst = isGstInclusive ? 0 : Math.round((totalStockSubtotal * (gstPercent / 100)) * 100) / 100;
     const totalStockValuation = isGstInclusive ? totalStockSubtotal : Math.round((totalStockSubtotal + totalStockGst) * 100) / 100;
-
-    const packagingType = (product.packagingType || product.unit || 'unit').toUpperCase();
 
     return {
       // 11-Step Breakdown (Section 5)
@@ -251,29 +263,38 @@ const Products = () => {
     XLSX.writeFile(wb, "Zudo_Products_Catalog.xlsx");
   };
 
-  const renderVariants = (variants, defaultUnit) => {
+  const renderVariants = (variants, defaultUnit, defaultPackaging) => {
     if (!variants || variants.length === 0) return <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>N/A</span>;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {variants.map((v, idx) => {
-          const sizeLabel = v.packetSize || `${v.unitSize || v.sizeValue || ''} ${v.measurementUnit || defaultUnit || ''}`.trim() || 'Standard';
-          const price = v.price ?? v.sellerPrice;
-          const comm = v.commissionAmount ?? v.commissionPerProductUnit;
+          const vUnitSize = Number(v.unitSize || v.sizeValue) || 1;
+          const vPackaging = (v.packagingType || defaultPackaging || 'BAG').toUpperCase();
+          const vMeas = (v.measurementBasis || v.measurementUnit || defaultUnit || 'KG').toUpperCase();
+          const vSeller = v.sellerPricePerProductUnit ?? v.sellerPrice;
+          const vComm = v.commissionPerProductUnit ?? v.commissionAmount;
+          const vCust = v.price;
+          const vStock = v.stock;
           return (
             <div key={idx} style={{
               background: 'rgba(255, 255, 255, 0.04)',
-              padding: '4px 8px',
-              borderRadius: '6px',
+              padding: '6px 10px',
+              borderRadius: '8px',
               fontSize: '11px',
-              border: '1px solid var(--glass-border)'
+              border: '1px solid var(--glass-border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px'
             }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{sizeLabel}</span>
-              {price !== undefined && (
-                <span style={{ marginLeft: '6px', color: '#10b981', fontWeight: 600 }}>₹{Number(price).toFixed(2)}</span>
-              )}
-              {comm !== undefined && comm !== null && (
-                <span style={{ marginLeft: '6px', color: '#6366f1', fontSize: '10px' }}>(Comm: ₹{Number(comm).toFixed(2)})</span>
-              )}
+              <div style={{ fontWeight: 700, color: 'var(--text-main)', display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+                <span>1 {vPackaging} = {vUnitSize} {vMeas}</span>
+                {vStock !== undefined && <span style={{ color: vStock < 10 ? '#ef4444' : '#22c55e', fontSize: '10px' }}>Stock: {vStock}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: '8px', fontSize: '10.5px', color: 'var(--text-dim)', flexWrap: 'wrap' }}>
+                {vSeller !== undefined && <span>Seller: <strong style={{ color: 'var(--text-main)' }}>₹{Number(vSeller).toFixed(2)}</strong></span>}
+                {vComm !== undefined && <span>Comm: <strong style={{ color: '#6366f1' }}>₹{Number(vComm).toFixed(2)}</strong></span>}
+                {vCust !== undefined && <span>Final: <strong style={{ color: '#10b981' }}>₹{Number(vCust).toFixed(2)}</strong></span>}
+              </div>
             </div>
           );
         })}
@@ -434,20 +455,20 @@ const Products = () => {
                         <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>2. Measurement Unit:</span>
-                        <strong style={{ color: 'var(--text-main)', textTransform: 'uppercase' }}>{info.productMeasurementUnit}</strong>
+                        <span style={{ color: 'var(--text-dim)' }}>2. Packaging Type:</span>
+                        <strong style={{ color: 'var(--text-main)', textTransform: 'uppercase' }}>{info.packagingType}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>3. Packaging Type:</span>
-                        <strong style={{ color: 'var(--text-main)', textTransform: 'uppercase' }}>{info.packagingType}</strong>
+                        <span style={{ color: 'var(--text-dim)' }}>3. Measurement Basis:</span>
+                        <strong style={{ color: 'var(--text-main)', textTransform: 'uppercase' }}>{info.productMeasurementUnit}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                         <span style={{ color: 'var(--text-dim)' }}>4. Product Unit Size:</span>
                         <strong style={{ color: 'var(--text-main)' }}>1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>5. Seller Price / Product Unit:</span>
-                        <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerProductUnit.toFixed(2)}</strong>
+                        <span style={{ color: 'var(--text-dim)' }}>5. Seller Price / Package:</span>
+                        <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerProductUnit.toFixed(2)} / {info.packagingType}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                         <span style={{ color: 'var(--text-dim)' }}>6. Admin Comm / Base Unit:</span>
@@ -456,11 +477,11 @@ const Products = () => {
                         </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>7. Comm / Product Unit:</span>
-                        <strong style={{ color: '#6366f1' }}>₹{info.commissionPerProductUnit.toFixed(2)}</strong>
+                        <span style={{ color: 'var(--text-dim)' }}>7. Commission / Package:</span>
+                        <strong style={{ color: '#6366f1' }}>₹{info.commissionPerProductUnit.toFixed(2)} / {info.packagingType}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px dashed var(--glass-border)', paddingTop: '4px' }}>
-                        <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>8. Customer Unit Base Price:</span>
+                        <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>8. Customer Base Price / Package:</span>
                         <strong style={{ color: 'var(--text-main)' }}>₹{info.customerUnitBasePrice.toFixed(2)}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
@@ -468,11 +489,11 @@ const Products = () => {
                         <span style={{ color: '#f59e0b', fontWeight: 600 }}>{info.gstPercent}%{info.isGstInclusive ? ' (incl)' : ''}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>10. GST Amount / Unit:</span>
+                        <span style={{ color: 'var(--text-dim)' }}>10. GST Amount / Package:</span>
                         <span style={{ color: '#f59e0b' }}>₹{info.gstAmountPerProductUnit.toFixed(2)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '4px', marginTop: '2px' }}>
-                        <span style={{ fontWeight: 700, color: '#10b981' }}>11. Customer Final Price:</span>
+                        <span style={{ fontWeight: 700, color: '#10b981' }}>11. Customer Final Price / Package:</span>
                         <strong style={{ color: '#10b981', fontSize: '13px' }}>₹{info.customerFinalPricePerProductUnit.toFixed(2)}</strong>
                       </div>
 
@@ -483,8 +504,8 @@ const Products = () => {
                       )}
                     </div>
                   </td>
-                  <td style={{ padding: '16px 24px', minWidth: '130px' }}>{renderVariants(product.b2c, product.unit)}</td>
-                  <td style={{ padding: '16px 24px', minWidth: '140px' }}>{renderVariants(product.b2b, product.unit)}</td>
+                  <td style={{ padding: '16px 24px', minWidth: '130px' }}>{renderVariants(product.b2c, product.measurementUnit || product.unit, product.packagingType || product.unit)}</td>
+                  <td style={{ padding: '16px 24px', minWidth: '140px' }}>{renderVariants(product.b2b, product.measurementUnit || product.unit, product.packagingType || product.unit)}</td>
                   <td style={{ padding: '16px 24px' }}>{product.gstPercent || 0}%</td>
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
