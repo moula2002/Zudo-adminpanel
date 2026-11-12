@@ -67,8 +67,15 @@ export const cancelAllPendingRequests = () => {
 
 const setupInterceptors = (instance) => {
   instance.interceptors.request.use(async (config) => {
-    // Attach the current global abort signal to the request
-    config.signal = globalAbortController.signal;
+    const isAuthRequest = config.url && (
+      config.url.includes('/auth/') || 
+      config.url.includes('/locations/active')
+    );
+
+    // Attach global abort signal to background data requests only
+    if (!isAuthRequest) {
+      config.signal = globalAbortController.signal;
+    }
 
     // Determine the expected location header for the cache key
     const currentDbName = localStorage.getItem('zudo_admin_db_name') || localStorage.getItem('zudo_admin_location') || 'global';
@@ -98,10 +105,14 @@ const setupInterceptors = (instance) => {
       }
     }
 
-    // Queue the request to avoid 429 Rate Limiting
-    const currentQueue = globalApiQueue;
-    globalApiQueue = currentQueue.then(() => new Promise(resolve => setTimeout(resolve, GLOBAL_REQUEST_DELAY)));
-    await currentQueue;
+    // Queue data requests to avoid 429 Rate Limiting (bypass for auth)
+    if (!isAuthRequest) {
+      const currentQueue = globalApiQueue;
+      globalApiQueue = currentQueue
+        .catch(() => {})
+        .then(() => new Promise(resolve => setTimeout(resolve, GLOBAL_REQUEST_DELAY)));
+      await currentQueue.catch(() => {});
+    }
 
     // Admin panel uses admin token
     const token = localStorage.getItem('zudo_admin_token');
