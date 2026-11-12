@@ -1025,7 +1025,7 @@ const Products = () => {
                 }}>
                   <div style={{ minWidth: '320px', flex: 1 }}>
                     <span style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                      Live Calculation Formula (for {currentQty} {currentQty === 1 ? 'pack' : 'packs'} = {simTotalWeight} {simulatorProduct.unit || 'units'}):
+                      Live Calculation Formula (for {currentQty} {currentQty === 1 ? 'pack' : 'packs'} = {simTotalWeight} {info.productMeasurementUnit || 'units'}):
                     </span>
                     <div style={{
                       fontSize: '13px',
@@ -1038,8 +1038,10 @@ const Products = () => {
                     }}>
                       <span>₹{info.sellerPricePerProductUnit.toFixed(2)} × {currentQty} = <strong style={{ color: 'var(--text-main)' }}>₹{simSellerAmount.toFixed(2)} Seller</strong></span>
                       <span style={{ color: 'var(--text-dim)' }}>+</span>
-                      <span style={{ background: 'rgba(99, 102, 241, 0.12)', padding: '2px 8px', borderRadius: '6px', color: '#6366f1', fontWeight: 700 }}>
-                        ₹{info.commissionPerProductUnit.toFixed(2)} × {currentQty} = ₹{simComm.toFixed(2)} Comm
+                      <span style={{ background: 'rgba(99, 102, 241, 0.12)', padding: '4px 10px', borderRadius: '6px', color: '#6366f1', fontWeight: 700 }}>
+                        {info.isFlat 
+                          ? `(₹${info.adminCommissionPerBaseUnit.toFixed(2)}/${info.productMeasurementUnit} × ${info.unitSize} ${info.productMeasurementUnit} = ₹${info.commissionPerProductUnit.toFixed(2)}/pack) × ${currentQty} = ₹${simComm.toFixed(2)} Comm`
+                          : `(${info.adminCommissionPerBaseUnit}% = ₹${info.commissionPerProductUnit.toFixed(2)}/pack) × ${currentQty} = ₹${simComm.toFixed(2)} Comm`}
                       </span>
                       <span style={{ color: 'var(--text-dim)' }}>=</span>
                       <strong style={{ color: 'var(--text-main)' }}>₹{simSubtotal.toFixed(2)} Subtotal</strong>
