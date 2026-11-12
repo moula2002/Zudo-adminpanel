@@ -17,10 +17,10 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     const socketUrl = SOCKET_URL || window.location.origin;
 
-    // Prefer WebSocket directly to backend, avoiding Vite proxy ECONNABORTED errors
+    // Connect directly to backend using polling handshake then upgrade to websocket
     const newSocket = io(socketUrl, {
       withCredentials: true,
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 3000,

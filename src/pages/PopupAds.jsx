@@ -54,6 +54,14 @@ const PopupAds = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.title?.trim()) {
+      toast.error('Please enter a campaign title');
+      return;
+    }
+    if (!editingAd && !formData.image) {
+      toast.error('Please select an image for the popup ad');
+      return;
+    }
     setSubmitting(true);
     try {
       let imageUrl = editingAd?.imageUrl || '';
@@ -65,12 +73,23 @@ const PopupAds = () => {
         const uploadRes = await uploadApi.post('/upload', fileData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
-        imageUrl = uploadRes.data.url;
+        imageUrl = uploadRes.data?.url || uploadRes.data?.fileUrl;
+        if (!imageUrl) {
+          toast.error('Image upload failed. Please try again.');
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      if (!imageUrl) {
+        toast.error('Creative image is required');
+        setSubmitting(false);
+        return;
       }
 
       const payload = {
-        title: formData.title,
-        link: formData.link,
+        title: formData.title.trim(),
+        link: formData.link ? formData.link.trim() : '',
         showOn: formData.showOn,
         isActive: formData.isActive,
         imageUrl,
@@ -79,21 +98,24 @@ const PopupAds = () => {
 
       if (editingAd) {
         await api.put(`/popup-ads/${editingAd._id}`, payload);
+        toast.success('Popup ad updated successfully');
       } else {
         await api.post('/popup-ads', payload);
+        toast.success('Popup ad launched successfully');
       }
 
       setShowModal(false);
       resetForm();
       fetchAds();
     } catch (err) {
-      toast.error('Failed to save popup ad');
+      console.error('Error saving popup ad:', err);
+      toast.error(err.response?.data?.message || 'Failed to save popup ad');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const resetForm = () => {
+const resetForm = () => {
     setFormData({
       title: '',
       link: '',
