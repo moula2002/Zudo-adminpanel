@@ -295,7 +295,7 @@ const Products = () => {
     XLSX.writeFile(wb, "Zudo_Products_Catalog.xlsx");
   };
 
-  const renderVariants = (variants, defaultUnit, defaultPackaging, adminRate = 0) => {
+  const renderVariants = (variants, defaultUnit, defaultPackaging, adminRate = 0, productInfo = null) => {
     if (!variants || variants.length === 0) return <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>N/A</span>;
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -308,14 +308,25 @@ const Products = () => {
           }
           const vPackaging = (v.packagingType || defaultPackaging || 'BAG').toUpperCase();
           const vMeas = (v.measurementBasis || v.measurementUnit || defaultUnit || 'KG').toUpperCase();
-          const vSeller = v.sellerPricePerProductUnit ?? v.sellerPrice;
+          let vSeller = v.sellerPricePerProductUnit ?? v.sellerPrice;
           let vComm = v.commissionPerProductUnit ?? v.commissionAmount;
-          // Protect against corrupt old historical 1000x values (e.g. 60000)
-          const expectedComm = adminRate > 0 && vUnitSize > 0 ? Math.round(adminRate * vUnitSize * 100) / 100 : null;
-          if (expectedComm !== null && (vComm === undefined || vComm === null || vComm > expectedComm * 2.5)) {
-            vComm = expectedComm;
+          let vCust = v.price;
+
+          // If variant corresponds to root product package size & packaging, ensure synchronized canonical display
+          if (productInfo && vUnitSize === productInfo.unitSize && vPackaging === productInfo.packagingType && productInfo.sellerPricePerProductUnit > 0) {
+            vSeller = productInfo.sellerPricePerProductUnit;
+            vComm = productInfo.commissionPerProductUnit;
+            vCust = productInfo.customerFinalPricePerProductUnit;
+          } else {
+            // Protect against corrupt old historical 1000x values (e.g. 60000)
+            const expectedComm = adminRate > 0 && vUnitSize > 0 ? Math.round(adminRate * vUnitSize * 100) / 100 : null;
+            if (expectedComm !== null && (vComm === undefined || vComm === null || vComm > expectedComm * 2.5)) {
+              vComm = expectedComm;
+            }
+            if (vSeller !== undefined && vComm !== undefined && (vCust === undefined || vCust === null || Math.abs(vCust - (vSeller + vComm)) > 1)) {
+              vCust = Math.round((Number(vSeller) + Number(vComm)) * 100) / 100;
+            }
           }
-          const vCust = v.price;
           const vStock = v.stock;
           return (
             <div key={idx} style={{
@@ -546,8 +557,8 @@ const Products = () => {
                       )}
                     </div>
                   </td>
-                  <td style={{ padding: '16px 24px', minWidth: '130px' }}>{renderVariants(product.b2c, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit)}</td>
-                  <td style={{ padding: '16px 24px', minWidth: '140px' }}>{renderVariants(product.b2b, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit)}</td>
+                  <td style={{ padding: '16px 24px', minWidth: '130px' }}>{renderVariants(product.b2c, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit, info)}</td>
+                  <td style={{ padding: '16px 24px', minWidth: '140px' }}>{renderVariants(product.b2b, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit, info)}</td>
                   <td style={{ padding: '16px 24px' }}>{product.gstPercent || 0}%</td>
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
