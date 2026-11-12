@@ -205,8 +205,8 @@ export const getImageUrl = (url) => {
     if (finalUrl.includes('via.placeholder.com')) {
       finalUrl = finalUrl.replace('via.placeholder.com', 'placehold.co');
     }
-    // Fix connection refused for hardcoded localhost URLs saved in DB
-    if (finalUrl.includes('localhost:5000')) {
+    // Fix connection refused for hardcoded localhost URLs saved in DB (only when in production)
+    if (!isLocal && finalUrl.includes('localhost:5000')) {
       finalUrl = finalUrl.replace(/https?:\/\/localhost:5000/g, IMAGE_BASE_URL);
     }
     // Fix old production domain saved in DB
