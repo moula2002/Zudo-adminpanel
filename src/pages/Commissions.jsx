@@ -17,7 +17,17 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const COMMON_UNITS = ['kg', 'ton', 'bag', 'tin', 'ltr', 'pcs', 'g', 'ml'];
+const SUPPORTED_COMMISSION_UNITS = [
+  { value: 'kg', label: 'Per KG (kg)' },
+  { value: 'g', label: 'Per Gram (g)' },
+  { value: 'ton', label: 'Per Ton (ton)' },
+  { value: 'ltr', label: 'Per Litre (ltr)' },
+  { value: 'pcs', label: 'Per Piece (pcs)' },
+  { value: 'tin', label: 'Per Tin (tin)' },
+  { value: 'bag', label: 'Per Bag (bag)' }
+];
+
+const COMMON_UNITS = ['kg', 'g', 'ton', 'ltr', 'pcs', 'tin', 'bag', 'ml'];
 
 const Commissions = () => {
   const [categories, setCategories] = useState([]);
@@ -39,18 +49,18 @@ const Commissions = () => {
             'Category Name': cat.name,
             'Subcategories Count': (cat.subCategories || []).length,
             'Pincode': comm.pincode || 'All',
-            'Packaging Unit': comm.unit,
-            'Commission Type': comm.commissionType === 'percentage' ? 'Percentage (%)' : 'Flat (₹)',
-            'Commission Value': comm.commissionValue
+            'Commission Unit': (comm.unit || 'unit').toUpperCase(),
+            'Commission Type': comm.commissionType === 'percentage' ? 'Percentage (%)' : `Per ${(comm.unit || 'Unit').toUpperCase()} (₹)`,
+            'Commission Rate': comm.commissionValue
           });
         });
       } else {
         exportData.push({
           'Category Name': cat.name,
           'Subcategories Count': (cat.subCategories || []).length,
-          'Packaging Unit': 'N/A',
+          'Commission Unit': 'N/A',
           'Commission Type': 'None',
-          'Commission Value': 0
+          'Commission Rate': 0
         });
       }
     });
@@ -68,8 +78,8 @@ const Commissions = () => {
 
   // Form State for new commission rule inside modal
   const [newRule, setNewRule] = useState({
-    unit: 'pcs',
-    commissionType: 'percentage',
+    unit: 'kg',
+    commissionType: 'flat',
     commissionValue: '',
     pincode: ''
   });
@@ -192,8 +202,8 @@ const Commissions = () => {
       }))
     );
     setNewRule({
-      unit: 'pcs',
-      commissionType: 'percentage',
+      unit: 'kg',
+      commissionType: 'flat',
       commissionValue: '',
       pincode: ''
     });
@@ -236,8 +246,8 @@ const Commissions = () => {
     
     // Reset add rule form
     setNewRule({
-      unit: 'pcs',
-      commissionType: 'percentage',
+      unit: 'kg',
+      commissionType: 'flat',
       commissionValue: '',
       pincode: ''
     });
@@ -538,11 +548,14 @@ const Commissions = () => {
                               : '1px solid rgba(16, 185, 129, 0.2)'
                           }}
                         >
-                          <span style={{ color: 'var(--text-main)', opacity: 0.6 }}>{comm.unit} {comm.pincode && comm.pincode !== 'All' ? `(${comm.pincode})` : ''}:</span>
-                          <span>
+                          <span style={{ color: 'var(--text-main)', opacity: 0.7, fontWeight: 700, textTransform: 'uppercase' }}>
+                            {comm.unit} {comm.pincode && comm.pincode !== 'All' ? `(${comm.pincode})` : ''}:
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {comm.commissionType === 'percentage' ? <BadgePercent size={13} /> : <Coins size={13} />}
                             {comm.commissionType === 'percentage' 
                               ? `${comm.commissionValue}%` 
-                              : `₹${comm.commissionValue} per ${comm.unit || 'unit'}`
+                              : `₹${comm.commissionValue} / ${(comm.unit || 'unit').toUpperCase()}`
                             }
                           </span>
                         </div>
@@ -614,9 +627,9 @@ const Commissions = () => {
                 </p>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
-                  {/* Unit Select */}
+                  {/* Commission Unit Select */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Unit</label>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Commission Unit *</label>
                     <select 
                       className="input-field" 
                       value={newRule.unit} 
@@ -626,10 +639,10 @@ const Commissions = () => {
                       }}
                       style={{ cursor: 'pointer', width: '100%' }}
                     >
-                      {COMMON_UNITS.map(unit => (
-                        <option key={unit} value={unit}>{unit}</option>
+                      {SUPPORTED_COMMISSION_UNITS.map(u => (
+                        <option key={u.value} value={u.value}>{u.label}</option>
                       ))}
-                      <option value="custom">Custom...</option>
+                      <option value="custom">Custom Measurement Unit...</option>
                     </select>
                   </div>
 
@@ -661,34 +674,43 @@ const Commissions = () => {
 
                   {/* Comm Type */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Type</label>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>Commission Type</label>
                     <select 
                       className="input-field" 
                       value={newRule.commissionType} 
                       onChange={(e) => setNewRule({ ...newRule, commissionType: e.target.value })}
                       style={{ cursor: 'pointer', width: '100%' }}
                     >
+                      <option value="flat">Per Unit Rate (₹ / unit)</option>
                       <option value="percentage">Percentage (%)</option>
-                      <option value="flat">Flat (₹)</option>
                     </select>
                   </div>
 
                   {/* Comm Value */}
                   <div>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px' }}>
-                      Value {newRule.commissionType === 'flat' ? '(₹ per unit)' : '(%)'}
+                      {newRule.commissionType === 'flat' 
+                        ? `Rate (₹ / ${newRule.unit === 'custom' ? (customUnit || 'unit') : newRule.unit.toUpperCase()})` 
+                        : 'Rate (%)'}
                     </label>
                     <input 
                       type="number" 
                       className="input-field" 
-                      placeholder={newRule.commissionType === 'flat' ? "e.g. 2 (₹/unit)" : "e.g. 5 (%)"} 
+                      placeholder={newRule.commissionType === 'flat' ? "e.g. 20 (₹ per unit)" : "e.g. 5 (%)"} 
                       value={newRule.commissionValue} 
                       onChange={(e) => setNewRule({ ...newRule, commissionValue: e.target.value })}
                       min="0"
+                      step="any"
                       style={{ width: '100%' }}
                     />
                   </div>
                 </div>
+
+                {newRule.commissionType === 'flat' && (
+                  <div style={{ fontSize: '11px', color: '#6366f1', background: 'rgba(99, 102, 241, 0.08)', padding: '6px 10px', borderRadius: '8px' }}>
+                    💡 <strong>Formula:</strong> Commission Per Product Unit = Admin Commission Rate ({newRule.commissionValue ? `₹${newRule.commissionValue}` : '₹Rate'} / {newRule.unit === 'custom' ? (customUnit || 'unit') : newRule.unit.toUpperCase()}) × Product Unit Size.
+                  </div>
+                )}
 
                 <div style={{ marginTop: '4px' }}>
                   <button 
@@ -737,7 +759,7 @@ const Commissions = () => {
                             gap: '4px'
                           }}>
                             {comm.commissionType === 'percentage' ? <BadgePercent size={12} /> : <Coins size={12} />}
-                            {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue} per ${comm.unit || 'unit'}`}
+                            {comm.commissionType === 'percentage' ? `${comm.commissionValue}%` : `₹${comm.commissionValue} / ${(comm.unit || 'unit').toUpperCase()}`}
                           </span>
                         </div>
                         <button 

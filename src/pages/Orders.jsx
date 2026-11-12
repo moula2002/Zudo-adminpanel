@@ -880,6 +880,7 @@ const Orders = () => {
 
     const unitSize = Number(item.unitSize || catalogProd?.unitSize || 1);
     const unit = item.unit || item.variantSize || catalogProd?.unit || 'Unit';
+    const measurementUnit = item.measurementUnit || catalogProd?.measurementUnit || unit;
     const totalProductWeight = Number(item.totalProductWeight || (unitSize * qty));
     const commissionType = item.commissionType || catalogProd?.commissionType || 'fixed';
     const commissionRate = Number(item.commissionValue !== undefined ? item.commissionValue : (catalogProd?.commissionValue || 0));
@@ -899,6 +900,7 @@ const Orders = () => {
       subCategoryName,
       hsn: catalogProd?.hsn || item.productId?.hsn || 'N/A',
       unit,
+      measurementUnit,
       unitSize,
       totalProductWeight,
       commissionType,
@@ -917,7 +919,7 @@ const Orders = () => {
       sellerName: getSellerCompanyName(item.seller || catalogProd?.sellerId),
       sellerPhone: item.seller?.phone || 'N/A',
       sellerAddress: item.seller?.address || 'N/A',
-      commission: commissionRate > 0 ? (commissionType === 'percentage' ? `${commissionRate}%` : `₹${commissionRate} / ${unit}`) : 'Standard Platform',
+      commission: commissionRate > 0 ? (commissionType === 'percentage' ? `${commissionRate}%` : `₹${commissionRate} / ${measurementUnit}`) : 'Standard Platform',
       sellerPrice: sellerPrice > 0 ? sellerPrice : null,
       returnStatus: item.returnStatus && item.returnStatus !== 'None' ? item.returnStatus : null,
       returnReason: item.returnReason || null
