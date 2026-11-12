@@ -32,6 +32,34 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+const safeFormatCurrency = (val, fractionDigits = 0) => {
+  const num = Number(val);
+  if (isNaN(num)) return fractionDigits > 0 ? '0.00' : '0';
+  return fractionDigits > 0
+    ? num.toLocaleString('en-IN', { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits })
+    : num.toLocaleString('en-IN');
+};
+
+const safeFormatDate = (dateVal, fallback = '—') => {
+  if (!dateVal) return fallback;
+  try {
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? fallback : d.toLocaleDateString();
+  } catch {
+    return fallback;
+  }
+};
+
+const safeFormatDateTime = (dateVal, fallback = '—') => {
+  if (!dateVal) return fallback;
+  try {
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? fallback : d.toLocaleString();
+  } catch {
+    return fallback;
+  }
+};
+
 const Payments = () => {
   // Navigation Tabs: 'sellers', 'cod', 'online', 'audit', 'invoices'
   const [activeTab, setActiveTab] = useState('sellers');
@@ -384,7 +412,7 @@ const Payments = () => {
         'Sellers': order.sellerNames,
         'Order Amount (₹)': order.orderAmount,
         'Order Status': order.orderStatus,
-        'Delivery Date': order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : 'N/A',
+        'Delivery Date': safeFormatDate(order.deliveryDate, 'N/A'),
         'Driver': order.driverName,
         'COD Collection Status': order.codCollectionStatus,
         'COD Collected Amount (₹)': order.codCollectedAmount,
@@ -403,7 +431,7 @@ const Payments = () => {
         'Payment Amount (₹)': order.onlinePaymentAmount,
         'Payment Gateway': order.paymentGateway,
         'Transaction ID': order.transactionId,
-        'Payment Date': order.paymentDate ? new Date(order.paymentDate).toLocaleDateString() : 'N/A',
+        'Payment Date': safeFormatDate(order.paymentDate, 'N/A'),
         'Payment Verification Status': order.paymentVerificationStatus,
         'Seller Settlement Status': order.sellerSettlementStatus,
         'Remarks': order.remarks || 'N/A'
@@ -411,7 +439,7 @@ const Payments = () => {
       filename = 'Zudo_Online_Payments_Report.xlsx';
     } else if (reportType === 'audit') {
       exportData = auditLogs.map(log => ({
-        'Date & Time': new Date(log.date || log.createdAt).toLocaleString(),
+        'Date & Time': safeFormatDateTime(log.date || log.createdAt),
         'Action': log.action,
         'Seller': log.sellerName || 'N/A',
         'Order ID': log.orderId || 'N/A',
@@ -588,14 +616,14 @@ const Payments = () => {
       {/* -------------------------------------------------------------------- */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '16px' }}>
         {[
-          { label: 'Total Seller Sales', value: `₹${(dashboardStats.totalSellerSales || 0).toLocaleString('en-IN')}`, icon: Activity, color: '#6366f1', sub: `${dashboardStats.deliveredOrdersCount || 0} delivered orders` },
-          { label: 'Total COD Sales', value: `₹${(dashboardStats.totalCodSales || 0).toLocaleString('en-IN')}`, icon: Banknote, color: '#f59e0b', sub: 'Cash at Delivery' },
-          { label: 'Total Online Sales', value: `₹${(dashboardStats.totalOnlineSales || 0).toLocaleString('en-IN')}`, icon: CreditCard, color: '#3b82f6', sub: 'Gateways & UPI' },
-          { label: 'Total Settled Amount', value: `₹${(dashboardStats.totalSettledAmount || 0).toLocaleString('en-IN')}`, icon: CheckCircle2, color: '#22c55e', sub: 'Paid out to sellers' },
-          { label: 'Total Pending Payments', value: `₹${(dashboardStats.totalPendingPayments || 0).toLocaleString('en-IN')}`, icon: AlertCircle, color: '#ef4444', sub: 'Awaiting settlement' },
-          { label: 'Total Outstanding Amount', value: `₹${(dashboardStats.totalOutstandingAmount || 0).toLocaleString('en-IN')}`, icon: Wallet, color: '#ec4899', sub: 'Net balance due' },
-          { label: 'Total COD Collection', value: `₹${(dashboardStats.totalCodCollection || 0).toLocaleString('en-IN')}`, icon: ShieldCheck, color: '#10b981', sub: 'Collected & verified' },
-          { label: 'Total Online Collection', value: `₹${(dashboardStats.totalOnlineCollection || 0).toLocaleString('en-IN')}`, icon: ArrowUpRight, color: '#8b5cf6', sub: 'Gateway confirmed' },
+          { label: 'Total Seller Sales', value: `₹${safeFormatCurrency(dashboardStats.totalSellerSales)}`, icon: Activity, color: '#6366f1', sub: `${dashboardStats.deliveredOrdersCount || 0} delivered orders` },
+          { label: 'Total COD Sales', value: `₹${safeFormatCurrency(dashboardStats.totalCodSales)}`, icon: Banknote, color: '#f59e0b', sub: 'Cash at Delivery' },
+          { label: 'Total Online Sales', value: `₹${safeFormatCurrency(dashboardStats.totalOnlineSales)}`, icon: CreditCard, color: '#3b82f6', sub: 'Gateways & UPI' },
+          { label: 'Total Settled Amount', value: `₹${safeFormatCurrency(dashboardStats.totalSettledAmount)}`, icon: CheckCircle2, color: '#22c55e', sub: 'Paid out to sellers' },
+          { label: 'Total Pending Payments', value: `₹${safeFormatCurrency(dashboardStats.totalPendingPayments)}`, icon: AlertCircle, color: '#ef4444', sub: 'Awaiting settlement' },
+          { label: 'Total Outstanding Amount', value: `₹${safeFormatCurrency(dashboardStats.totalOutstandingAmount)}`, icon: Wallet, color: '#ec4899', sub: 'Net balance due' },
+          { label: 'Total COD Collection', value: `₹${safeFormatCurrency(dashboardStats.totalCodCollection)}`, icon: ShieldCheck, color: '#10b981', sub: 'Collected & verified' },
+          { label: 'Total Online Collection', value: `₹${safeFormatCurrency(dashboardStats.totalOnlineCollection)}`, icon: ArrowUpRight, color: '#8b5cf6', sub: 'Gateway confirmed' },
         ].map((stat, idx) => (
           <div key={idx} className="glass-card" style={{ padding: '20px', borderRadius: '18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -744,7 +772,7 @@ const Payments = () => {
                     filteredMerchants.map((item) => {
                       const statusStyle = getStatusBadge(item.paymentStatus);
                       return (
-                        <tr key={item.seller._id} style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s' }}>
+                        <tr key={item.seller?._id || item.sellerId || Math.random()} style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s' }}>
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                               <div style={{ 
@@ -759,14 +787,14 @@ const Payments = () => {
                                 fontWeight: 800,
                                 fontSize: '14px'
                               }}>
-                                {item.seller.name.charAt(0).toUpperCase()}
+                                {(item.seller?.name || item.sellerName || 'S').charAt(0).toUpperCase()}
                               </div>
                               <div>
                                 <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-main)' }}>
-                                  {item.seller.name}
+                                  {item.seller?.name || item.sellerName || 'Unknown Seller'}
                                 </div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
-                                  {item.seller.businessName || item.seller.storeName || item.seller.phone || 'No Store Name'}
+                                  {item.seller?.businessName || item.seller?.storeName || item.seller?.phone || 'No Store Name'}
                                 </div>
                               </div>
                             </div>
@@ -774,7 +802,7 @@ const Payments = () => {
 
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ fontWeight: 700, fontSize: '14px' }}>
-                              ₹{item.totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              ₹{safeFormatCurrency(item.totalSales, 2)}
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
                               {item.orderCount} delivered orders
@@ -783,19 +811,19 @@ const Payments = () => {
 
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ fontWeight: 600, fontSize: '13px', color: '#f59e0b' }}>
-                              ₹{item.codSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              ₹{safeFormatCurrency(item.codSales, 2)}
                             </div>
                           </td>
 
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ fontWeight: 600, fontSize: '13px', color: '#3b82f6' }}>
-                              ₹{item.onlineSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              ₹{safeFormatCurrency(item.onlineSales, 2)}
                             </div>
                           </td>
 
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ fontWeight: 700, fontSize: '14px', color: '#22c55e' }}>
-                              ₹{item.settledAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              ₹{safeFormatCurrency(item.settledAmount, 2)}
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
                               {item.payoutCount} payout records
@@ -808,10 +836,10 @@ const Payments = () => {
                               fontSize: '14px', 
                               color: item.outstandingBalance > 0 ? '#f59e0b' : item.outstandingBalance < 0 ? '#ef4444' : '#22c55e' 
                             }}>
-                              ₹{item.outstandingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              ₹{safeFormatCurrency(item.outstandingBalance, 2)}
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                              Payable: ₹{item.sellerPayable.toLocaleString('en-IN')}
+                              Payable: ₹{safeFormatCurrency(item.sellerPayable)}
                             </div>
                           </td>
 
@@ -1019,18 +1047,18 @@ const Payments = () => {
 
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-main)' }}>
-                              ₹{order.orderAmount.toLocaleString('en-IN')}
+                              ₹{safeFormatCurrency(order.orderAmount)}
                             </div>
                             {order.codCollectedAmount > 0 && order.codCollectedAmount !== order.orderAmount && (
                               <div style={{ fontSize: '11px', color: '#10b981' }}>
-                                Coll: ₹{order.codCollectedAmount.toLocaleString('en-IN')}
+                                Coll: ₹{safeFormatCurrency(order.codCollectedAmount)}
                               </div>
                             )}
                           </td>
 
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>
-                              {order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : 'Pending'}
+                              {safeFormatDate(order.deliveryDate, 'Pending')}
                             </div>
                           </td>
 
@@ -1248,7 +1276,7 @@ const Payments = () => {
 
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-main)' }}>
-                              ₹{order.onlinePaymentAmount.toLocaleString('en-IN')}
+                              ₹{safeFormatCurrency(order.onlinePaymentAmount)}
                             </div>
                           </td>
 
@@ -1263,7 +1291,7 @@ const Payments = () => {
 
                           <td style={{ padding: '16px 20px' }}>
                             <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>
-                              {order.paymentDate ? new Date(order.paymentDate).toLocaleDateString() : 'N/A'}
+                              {safeFormatDate(order.paymentDate, 'N/A')}
                             </div>
                           </td>
 
@@ -1399,7 +1427,7 @@ const Payments = () => {
                     auditLogs.map((log) => (
                       <tr key={log._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                         <td style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-dim)' }}>
-                          {new Date(log.date || log.createdAt).toLocaleString()}
+                          {safeFormatDateTime(log.date || log.createdAt)}
                         </td>
 
                         <td style={{ padding: '14px 18px' }}>
@@ -1428,7 +1456,7 @@ const Payments = () => {
                         <td style={{ padding: '14px 18px' }}>
                           {log.amount > 0 && (
                             <div style={{ fontWeight: 700, fontSize: '13px' }}>
-                              ₹{log.amount.toLocaleString('en-IN')}
+                              ₹{safeFormatCurrency(log.amount)}
                             </div>
                           )}
                           <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
@@ -1507,16 +1535,16 @@ const Payments = () => {
                           {inv.sellerId?.name || 'Seller'}
                         </td>
                         <td style={{ padding: '16px 20px', fontSize: '12px', color: 'var(--text-dim)' }}>
-                          {new Date(inv.startDate).toLocaleDateString()} – {new Date(inv.endDate).toLocaleDateString()}
+                          {safeFormatDate(inv.startDate)} – {safeFormatDate(inv.endDate)}
                         </td>
                         <td style={{ padding: '16px 20px', fontWeight: 600 }}>
                           {inv.orderCount || 0}
                         </td>
                         <td style={{ padding: '16px 20px', fontWeight: 700 }}>
-                          ₹{inv.totalAmount.toLocaleString('en-IN')}
+                          ₹{safeFormatCurrency(inv.totalAmount)}
                         </td>
                         <td style={{ padding: '16px 20px', color: '#ec4899', fontWeight: 600 }}>
-                          ₹{inv.totalCommission.toLocaleString('en-IN')}
+                          ₹{safeFormatCurrency(inv.totalCommission)}
                         </td>
                         <td style={{ padding: '16px 20px' }}>
                           <span style={{ 
@@ -1648,28 +1676,28 @@ const Payments = () => {
               <div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>TOTAL DELIVERED SALES</span>
                 <div style={{ fontSize: '16px', fontWeight: 700, marginTop: '2px' }}>
-                  ₹{selectedMerchant.totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{safeFormatCurrency(selectedMerchant?.totalSales, 2)}
                 </div>
               </div>
 
               <div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>TOTAL SELLER PAYABLE</span>
                 <div style={{ fontSize: '16px', fontWeight: 700, marginTop: '2px', color: '#6366f1' }}>
-                  ₹{selectedMerchant.sellerPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{safeFormatCurrency(selectedMerchant?.sellerPayable, 2)}
                 </div>
               </div>
 
               <div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>PREVIOUSLY SETTLED</span>
                 <div style={{ fontSize: '16px', fontWeight: 700, marginTop: '2px', color: '#22c55e' }}>
-                  ₹{selectedMerchant.settledAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{safeFormatCurrency(selectedMerchant?.settledAmount, 2)}
                 </div>
               </div>
 
               <div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>CURRENT OUTSTANDING</span>
                 <div style={{ fontSize: '18px', fontWeight: 800, marginTop: '2px', color: selectedMerchant.outstandingBalance > 0 ? '#f59e0b' : '#22c55e' }}>
-                  ₹{selectedMerchant.outstandingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{safeFormatCurrency(selectedMerchant?.outstandingBalance, 2)}
                 </div>
               </div>
             </div>
@@ -1687,7 +1715,7 @@ const Payments = () => {
                       onClick={() => setSettleAmount(selectedMerchant.outstandingBalance.toFixed(2))}
                       style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
                     >
-                      Fill Outstanding (₹{selectedMerchant.outstandingBalance.toLocaleString('en-IN')})
+                      Fill Outstanding (₹{safeFormatCurrency(selectedMerchant?.outstandingBalance)})
                     </button>
                   )}
                 </div>
@@ -1909,13 +1937,13 @@ const Payments = () => {
               }}>
                 {[
                   { label: 'DELIVERED ORDERS', val: sellerDetails.summary.deliveredOrdersCount, color: '#6366f1' },
-                  { label: 'GROSS SALES', val: `₹${sellerDetails.summary.totalSales.toLocaleString('en-IN')}`, color: 'var(--text-main)' },
-                  { label: 'COD SALES', val: `₹${sellerDetails.summary.codSales.toLocaleString('en-IN')}`, color: '#f59e0b' },
-                  { label: 'ONLINE SALES', val: `₹${sellerDetails.summary.onlineSales.toLocaleString('en-IN')}`, color: '#3b82f6' },
-                  { label: 'COMMISSION DEDUCTED', val: `₹${sellerDetails.summary.totalCommission.toLocaleString('en-IN')}`, color: '#ec4899' },
-                  { label: 'NET PAYABLE', val: `₹${sellerDetails.summary.totalSellerPayable.toLocaleString('en-IN')}`, color: '#6366f1' },
-                  { label: 'SETTLED AMOUNT', val: `₹${sellerDetails.summary.settledAmount.toLocaleString('en-IN')}`, color: '#22c55e' },
-                  { label: 'OUTSTANDING DUES', val: `₹${sellerDetails.summary.outstandingBalance.toLocaleString('en-IN')}`, color: sellerDetails.summary.outstandingBalance > 0 ? '#f59e0b' : '#22c55e' }
+                  { label: 'GROSS SALES', val: `₹${safeFormatCurrency(sellerDetails?.summary?.totalSales)}`, color: 'var(--text-main)' },
+                  { label: 'COD SALES', val: `₹${safeFormatCurrency(sellerDetails?.summary?.codSales)}`, color: '#f59e0b' },
+                  { label: 'ONLINE SALES', val: `₹${safeFormatCurrency(sellerDetails?.summary?.onlineSales)}`, color: '#3b82f6' },
+                  { label: 'COMMISSION DEDUCTED', val: `₹${safeFormatCurrency(sellerDetails?.summary?.totalCommission)}`, color: '#ec4899' },
+                  { label: 'NET PAYABLE', val: `₹${safeFormatCurrency(sellerDetails?.summary?.totalSellerPayable)}`, color: '#6366f1' },
+                  { label: 'SETTLED AMOUNT', val: `₹${safeFormatCurrency(sellerDetails?.summary?.settledAmount)}`, color: '#22c55e' },
+                  { label: 'OUTSTANDING DUES', val: `₹${safeFormatCurrency(sellerDetails?.summary?.outstandingBalance)}`, color: sellerDetails.summary.outstandingBalance > 0 ? '#f59e0b' : '#22c55e' }
                 ].map((s, idx) => (
                   <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--glass-border)', padding: '12px', borderRadius: '12px' }}>
                     <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)' }}>{s.label}</div>
@@ -1980,7 +2008,7 @@ const Payments = () => {
                       sellerDetails?.orders?.map((ord) => (
                         <tr key={ord.orderId} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                           <td style={{ padding: '10px', fontWeight: 700, color: 'var(--primary)' }}>#{ord.orderRef}</td>
-                          <td style={{ padding: '10px', color: 'var(--text-dim)' }}>{new Date(ord.orderDate).toLocaleDateString()}</td>
+                          <td style={{ padding: '10px', color: 'var(--text-dim)' }}>{safeFormatDate(ord.orderDate)}</td>
                           <td style={{ padding: '10px' }}>{ord.customerName}</td>
                           <td style={{ padding: '10px' }}>
                             <span style={{ 
@@ -1994,9 +2022,9 @@ const Payments = () => {
                             </span>
                           </td>
                           <td style={{ padding: '10px' }}>{ord.orderStatus}</td>
-                          <td style={{ padding: '10px', fontWeight: 600 }}>₹{ord.sellerGrossSales.toLocaleString('en-IN')}</td>
-                          <td style={{ padding: '10px', color: '#ec4899' }}>₹{ord.sellerCommission.toLocaleString('en-IN')}</td>
-                          <td style={{ padding: '10px', fontWeight: 800, color: '#22c55e' }}>₹{ord.sellerPayable.toLocaleString('en-IN')}</td>
+                          <td style={{ padding: '10px', fontWeight: 600 }}>₹{safeFormatCurrency(ord.sellerGrossSales)}</td>
+                          <td style={{ padding: '10px', color: '#ec4899' }}>₹{safeFormatCurrency(ord.sellerCommission)}</td>
+                          <td style={{ padding: '10px', fontWeight: 800, color: '#22c55e' }}>₹{safeFormatCurrency(ord.sellerPayable)}</td>
                           <td style={{ padding: '10px' }}>
                             <span style={{ 
                               padding: '2px 8px', 
@@ -2032,8 +2060,8 @@ const Payments = () => {
                     ) : (
                       sellerDetails?.payouts?.map((p) => (
                         <tr key={p._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                          <td style={{ padding: '10px', color: 'var(--text-dim)' }}>{new Date(p.date || p.createdAt).toLocaleDateString()}</td>
-                          <td style={{ padding: '10px', fontWeight: 800, color: '#22c55e' }}>₹{p.amount.toLocaleString('en-IN')}</td>
+                          <td style={{ padding: '10px', color: 'var(--text-dim)' }}>{safeFormatDate(p.date || p.createdAt)}</td>
+                          <td style={{ padding: '10px', fontWeight: 800, color: '#22c55e' }}>₹{safeFormatCurrency(p.amount)}</td>
                           <td style={{ padding: '10px' }}>{p.paymentMethod}</td>
                           <td style={{ padding: '10px', fontFamily: 'monospace' }}>{p.utrReference || p.transactionId || '—'}</td>
                           <td style={{ padding: '10px' }}>{p.adminName || 'Admin'}</td>
@@ -2059,13 +2087,13 @@ const Payments = () => {
                       <div key={a._id} style={{ padding: '12px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--glass-border)', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '13px' }}>{a.action}</span>
-                          <span style={{ color: 'var(--text-dim)', fontSize: '12px', marginLeft: '10px' }}>{new Date(a.date || a.createdAt).toLocaleString()}</span>
+                          <span style={{ color: 'var(--text-dim)', fontSize: '12px', marginLeft: '10px' }}>{safeFormatDateTime(a.date || a.createdAt)}</span>
                           <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>
                             {a.remarks || `Changed status from ${a.previousStatus} to ${a.updatedStatus}`}
                           </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: 700, fontSize: '13px' }}>₹{(a.amount || 0).toLocaleString('en-IN')}</div>
+                          <div style={{ fontWeight: 700, fontSize: '13px' }}>₹{safeFormatCurrency(a.amount)}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>By {a.adminName || 'Admin'}</div>
                         </div>
                       </div>
