@@ -208,11 +208,13 @@ const Payments = () => {
   };
 
   const toggleSelectOrderForSettle = (orderId) => {
+    if (!orderId) return;
+    const idStr = String(orderId);
     setSelectedOrderIdsForSettle(prev => {
-      const isSelected = prev.includes(orderId);
-      const next = isSelected ? prev.filter(id => id !== orderId) : [...prev, orderId];
+      const isSelected = prev.some(id => String(id) === idStr);
+      const next = isSelected ? prev.filter(id => String(id) !== idStr) : [...prev, idStr];
       const total = sellerOrdersForSettle
-        .filter(o => next.includes(o.orderId))
+        .filter(o => next.includes(String(o.orderId || o._id)))
         .reduce((sum, o) => sum + (Number(o.sellerNetPayable) || Number(o.sellerPayable) || 0), 0);
       setSettleAmount(total > 0 ? total.toFixed(2) : '');
       return next;
@@ -221,7 +223,7 @@ const Payments = () => {
 
   const selectAllUnsettledOrdersForSettle = () => {
     const unsettled = sellerOrdersForSettle.filter(o => o.sellerSettlementStatus !== 'Settled');
-    const ids = unsettled.map(o => o.orderId);
+    const ids = unsettled.map(o => String(o.orderId || o._id)).filter(Boolean);
     setSelectedOrderIdsForSettle(ids);
     const total = unsettled.reduce((sum, o) => sum + (Number(o.sellerNetPayable) || Number(o.sellerPayable) || 0), 0);
     setSettleAmount(total > 0 ? total.toFixed(2) : '');
@@ -2049,14 +2051,18 @@ const Payments = () => {
                     </div>
                   ) : (
                     <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
-                      {sellerOrdersForSettle.map((ord) => {
-                        const isSelected = selectedOrderIdsForSettle.includes(ord._id);
+                      {sellerOrdersForSettle.map((ord, idx) => {
+                        const currentOrderId = ord.orderId || ord._id || `order-${idx}`;
+                        const isSelected = selectedOrderIdsForSettle.includes(String(currentOrderId));
                         const isSettled = ord.sellerSettlementStatus === 'Settled';
                         const isPartial = ord.sellerSettlementStatus === 'Partially Settled';
+                        const orderRefDisplay = ord.orderRef || ord.orderNumber || (currentOrderId ? String(currentOrderId).slice(-6).toUpperCase() : `ORD-${idx + 1}`);
+                        const orderDateDisplay = ord.orderDate || ord.createdAt;
+                        const netPayable = ord.sellerNetPayable ?? ord.sellerPayable ?? 0;
                         return (
                           <div
-                            key={ord._id}
-                            onClick={() => toggleSelectOrderForSettle(ord._id)}
+                            key={currentOrderId}
+                            onClick={() => toggleSelectOrderForSettle(currentOrderId)}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
@@ -2079,7 +2085,7 @@ const Payments = () => {
                               <div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <span style={{ fontSize: '12px', fontWeight: 800, fontFamily: 'monospace' }}>
-                                    {ord.orderNumber || ord._id.slice(-6).toUpperCase()}
+                                    {orderRefDisplay}
                                   </span>
                                   <span style={{
                                     fontSize: '10px',
@@ -2093,17 +2099,17 @@ const Payments = () => {
                                   </span>
                                 </div>
                                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                                  {new Date(ord.createdAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} • {ord.itemsCount || 1} Item(s)
+                                  {orderDateDisplay ? new Date(orderDateDisplay).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'} • {ord.itemsCount || 1} Item(s)
                                 </div>
                               </div>
                             </div>
 
                             <div style={{ textAlign: 'right' }}>
                               <div style={{ fontSize: '13px', fontWeight: 800, color: '#6366f1' }}>
-                                ₹{safeFormatCurrency(ord.sellerNetPayable, 2)}
+                                ₹{safeFormatCurrency(netPayable, 2)}
                               </div>
                               <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-                                Gross: ₹{safeFormatCurrency(ord.sellerGrossSales, 2)}
+                                Gross: ₹{safeFormatCurrency(ord.sellerGrossSales || 0, 2)}
                               </div>
                             </div>
                           </div>
@@ -2537,7 +2543,7 @@ const Payments = () => {
                         <tr><td colSpan="10" style={{ padding: '30px', textAlign: 'center', color: 'var(--text-dim)' }}>No payout records found.</td></tr>
                       ) : (
                         sellerDetails?.payouts?.map((p) => {
-                          const receiptNum = p.receiptNumber || (p.receiptSequence ? `ZUDO-PAY-${String(p.receiptSequence).padStart(4, '0')}` : `ZUDO-PAY-${p._id.toString().slice(-4).toUpperCase()}`);
+                          const receiptNum = p.receiptNumber || (p.receiptSequence ? `ZUDO-PAY-${String(p.receiptSequence).padStart(4, '0')}` : `ZUDO-PAY-${p._id ? p._id.toString().slice(-4).toUpperCase() : '0000'}`);
                           return (
                             <tr key={p._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                               <td style={{ padding: '10px', fontFamily: 'monospace', fontWeight: 800, color: 'var(--primary)' }}>
