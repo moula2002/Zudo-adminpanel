@@ -907,22 +907,22 @@ const Products = () => {
                           Order Quantity
                         </th>
                         <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px' }}>
-                          Total Weight / Size
+                          Total Weight ({info.productMeasurementUnit})
                         </th>
                         <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
-                          Seller Amount (₹)
+                          Seller Total Price (₹)
                         </th>
                         <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
-                          Total Comm (₹)
+                          Total Commission (₹)
                         </th>
                         <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
-                          Subtotal (₹)
+                          Customer Base Price (₹)
                         </th>
                         <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
                           GST ({info.gstPercent}%)
                         </th>
                         <th style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600, fontSize: '12px', textAlign: 'right' }}>
-                          Final Amount (₹)
+                          Customer Final Price (₹)
                         </th>
                       </tr>
                     </thead>
@@ -951,7 +951,7 @@ const Products = () => {
                           >
                             <td style={{ padding: '12px 18px', fontWeight: isSelected ? 700 : 500 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span>{q} {q === 1 ? 'pack' : 'packs'}</span>
+                                <span>{q} {info.packagingType}{q > 1 ? 's' : ''}</span>
                                 {isSelected && (
                                   <span style={{
                                     fontSize: '10px',
@@ -967,7 +967,7 @@ const Products = () => {
                               </div>
                             </td>
                             <td style={{ padding: '12px 18px', color: 'var(--text-dim)', fontWeight: 600 }}>
-                              {rowWeight} {simulatorProduct.unit || 'units'}
+                              {rowWeight} {info.productMeasurementUnit}
                             </td>
                             <td style={{ padding: '12px 18px', textAlign: 'right', fontWeight: isSelected ? 700 : 400 }}>
                               ₹{rowSellerAmount.toFixed(2)}
@@ -1013,8 +1013,8 @@ const Products = () => {
                   gap: '16px'
                 }}>
                   <div style={{ minWidth: '320px', flex: 1 }}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                      Live Calculation Formula (for {currentQty} {currentQty === 1 ? 'pack' : 'packs'} = {simTotalWeight} {info.productMeasurementUnit || 'units'}):
+                    <span style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Live Calculation Flow ({currentQty} {currentQty === 1 ? info.packagingType : `${info.packagingType}s`} = {simTotalWeight} {info.productMeasurementUnit}):
                     </span>
                     <div style={{
                       fontSize: '13px',
@@ -1025,17 +1025,19 @@ const Products = () => {
                       flexWrap: 'wrap',
                       lineHeight: '1.6'
                     }}>
-                      <span>₹{info.sellerPricePerProductUnit.toFixed(2)} × {currentQty} = <strong style={{ color: 'var(--text-main)' }}>₹{simSellerAmount.toFixed(2)} Seller</strong></span>
+                      <span>₹{info.sellerPricePerProductUnit.toFixed(2)} × {currentQty} = <strong style={{ color: 'var(--text-main)' }}>₹{simSellerAmount.toFixed(2)} Seller Total</strong></span>
                       <span style={{ color: 'var(--text-dim)' }}>+</span>
                       <span style={{ background: 'rgba(99, 102, 241, 0.12)', padding: '4px 10px', borderRadius: '6px', color: '#6366f1', fontWeight: 700 }}>
                         {info.isFlat 
-                          ? `(₹${info.adminCommissionPerBaseUnit.toFixed(2)}/${info.productMeasurementUnit} × ${info.unitSize} ${info.productMeasurementUnit} = ₹${info.commissionPerProductUnit.toFixed(2)}/pack) × ${currentQty} = ₹${simComm.toFixed(2)} Comm`
-                          : `(${info.adminCommissionPerBaseUnit}% = ₹${info.commissionPerProductUnit.toFixed(2)}/pack) × ${currentQty} = ₹${simComm.toFixed(2)} Comm`}
+                          ? `${simTotalWeight} ${info.productMeasurementUnit} × ₹${info.adminCommissionPerBaseUnit.toFixed(2)}/${info.productMeasurementUnit} = ₹${simComm.toFixed(2)} Total Comm`
+                          : `${info.adminCommissionPerBaseUnit}% = ₹${simComm.toFixed(2)} Total Comm`}
                       </span>
                       <span style={{ color: 'var(--text-dim)' }}>=</span>
-                      <strong style={{ color: 'var(--text-main)' }}>₹{simSubtotal.toFixed(2)} Subtotal</strong>
+                      <strong style={{ color: 'var(--text-main)', background: 'rgba(255, 255, 255, 0.06)', padding: '4px 8px', borderRadius: '6px' }}>
+                        ₹{simSubtotal.toFixed(2)} Base Price
+                      </strong>
                       <span style={{ color: 'var(--text-dim)' }}>+</span>
-                      <span style={{ background: 'rgba(245, 158, 11, 0.12)', padding: '2px 8px', borderRadius: '6px', color: '#f59e0b', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      <span style={{ background: 'rgba(245, 158, 11, 0.12)', padding: '4px 8px', borderRadius: '6px', color: '#f59e0b', fontWeight: 700, whiteSpace: 'nowrap' }}>
                         ₹{simGst.toFixed(2)} GST ({info.gstPercent}%)
                       </span>
                     </div>
@@ -1050,7 +1052,7 @@ const Products = () => {
                     minWidth: '170px'
                   }}>
                     <span style={{ fontSize: '11px', color: '#10b981', display: 'block', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Final Customer Amount
+                      Customer Final Price
                     </span>
                     <strong style={{ fontSize: '22px', color: '#10b981', fontWeight: 800 }}>
                       ₹{simTotal.toFixed(2)}
