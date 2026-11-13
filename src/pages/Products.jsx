@@ -273,13 +273,12 @@ const Products = () => {
         '2. Product Measurement Unit': info.productMeasurementUnit,
         '3. Packaging Type': info.packagingType,
         '4. Product Unit Size': `${info.unitSize} ${info.productMeasurementUnit} / ${info.packagingType}`,
-        '5. Seller Price / Product Unit (₹)': info.sellerPricePerProductUnit,
-        '6. Admin Commission / Base Unit (₹)': info.adminCommissionPerBaseUnit,
-        '7. Commission / Product Unit (₹)': info.commissionPerProductUnit,
-        '8. Customer Unit Base Price (₹)': info.customerUnitBasePrice,
-        '9. GST %': info.gstPercent,
-        '10. GST Amount / Product Unit (₹)': info.gstAmountPerProductUnit,
-        '11. Customer Final Price / Product Unit (₹)': info.customerFinalPricePerProductUnit,
+        '5. Admin Commission / Base Unit (₹)': info.adminCommissionPerBaseUnit,
+        '6. Commission / Product Unit (₹)': info.commissionPerProductUnit,
+        '7. Customer Unit Base Price (₹)': info.customerUnitBasePrice,
+        '8. GST %': info.gstPercent,
+        '9. GST Amount / Product Unit (₹)': info.gstAmountPerProductUnit,
+        '10. Customer Final Price / Product Unit (₹)': info.customerFinalPricePerProductUnit,
         'Available Stock (Packs)': info.availableStock,
         'Total Stock Weight': `${info.totalStockWeight} ${info.productMeasurementUnit}`,
         'Total Stock Commission (₹)': info.totalStockCommission,
@@ -520,33 +519,29 @@ const Products = () => {
                         <strong style={{ color: 'var(--text-main)' }}>1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>5. Seller Price / Package:</span>
-                        <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerProductUnit.toFixed(2)} / {info.packagingType}</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>6. Admin Comm / Base Unit:</span>
+                        <span style={{ color: 'var(--text-dim)' }}>5. Admin Comm / Base Unit:</span>
                         <span style={{ color: '#6366f1', fontWeight: 600 }}>
                           {info.isFlat ? `₹${info.adminCommissionPerBaseUnit.toFixed(2)} / ${info.productMeasurementUnit}` : `${info.adminCommissionPerBaseUnit}%`}
                         </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>7. Commission / Package:</span>
+                        <span style={{ color: 'var(--text-dim)' }}>6. Commission / Package:</span>
                         <strong style={{ color: '#6366f1' }}>₹{info.commissionPerProductUnit.toFixed(2)} / {info.packagingType}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px dashed var(--glass-border)', paddingTop: '4px' }}>
-                        <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>8. Customer Base Price / Package:</span>
+                        <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>7. Customer Base Price / Package:</span>
                         <strong style={{ color: 'var(--text-main)' }}>₹{info.customerUnitBasePrice.toFixed(2)}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>9. GST Percentage:</span>
+                        <span style={{ color: 'var(--text-dim)' }}>8. GST Percentage:</span>
                         <span style={{ color: '#f59e0b', fontWeight: 600 }}>{info.gstPercent}%{info.isGstInclusive ? ' (incl)' : ''}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>10. GST Amount / Package:</span>
+                        <span style={{ color: 'var(--text-dim)' }}>9. GST Amount / Package:</span>
                         <span style={{ color: '#f59e0b' }}>₹{info.gstAmountPerProductUnit.toFixed(2)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '4px', marginTop: '2px' }}>
-                        <span style={{ fontWeight: 700, color: '#10b981' }}>11. Customer Final Price / Package:</span>
+                        <span style={{ fontWeight: 700, color: '#10b981' }}>10. Customer Final Price / Package:</span>
                         <strong style={{ color: '#10b981', fontSize: '13px' }}>₹{info.customerFinalPricePerProductUnit.toFixed(2)}</strong>
                       </div>
 
@@ -790,16 +785,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      5. Seller Price / Package
-                    </span>
-                    <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
-                      ₹{info.sellerPricePerProductUnit.toFixed(2)}
-                    </strong>
-                  </div>
-
-                  <div className="simulator-stat-card">
-                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      6. Admin Comm / Base Unit
+                      5. Admin Comm / Base Unit
                     </span>
                     <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700 }}>
                       {info.isFlat ? `₹${info.adminCommissionPerBaseUnit.toFixed(2)} / ${info.productMeasurementUnit}` : `${info.adminCommissionPerBaseUnit}%`}
@@ -808,7 +794,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      7. Commission / Package
+                      6. Commission / Package
                     </span>
                     <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700 }}>
                       ₹{info.commissionPerProductUnit.toFixed(2)}
@@ -817,7 +803,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      8. Customer Base Price
+                      7. Customer Base Price
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
                       ₹{info.customerUnitBasePrice.toFixed(2)}
@@ -826,7 +812,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      9. GST %
+                      8. GST %
                     </span>
                     <strong style={{ fontSize: '14px', color: '#f59e0b', fontWeight: 700 }}>
                       {info.gstPercent}%
@@ -835,7 +821,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      10. GST Amount / Package
+                      9. GST Amount / Package
                     </span>
                     <strong style={{ fontSize: '14px', color: '#f59e0b', fontWeight: 700 }}>
                       ₹{info.gstAmountPerProductUnit.toFixed(2)}
@@ -844,7 +830,7 @@ const Products = () => {
 
                   <div className="simulator-stat-card highlight">
                     <span style={{ fontSize: '10px', color: '#10b981', display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      11. Customer Final Price
+                      10. Customer Final Price
                     </span>
                     <strong style={{ fontSize: '15px', color: '#10b981', fontWeight: 800 }}>
                       ₹{info.customerFinalPricePerProductUnit.toFixed(2)}
