@@ -1026,23 +1026,6 @@ const Payments = () => {
                               >
                                 <Wallet size={14} /> Manage
                               </button>
-
-                              <button
-                                onClick={() => openSellerInvoicesModal(item)}
-                                style={{
-                                  padding: '8px 10px',
-                                  borderRadius: '10px',
-                                  background: 'var(--glass-bg)',
-                                  color: 'var(--text-dim)',
-                                  border: '1px solid var(--glass-border)',
-                                  fontSize: '12px',
-                                  fontWeight: 600,
-                                  cursor: 'pointer'
-                                }}
-                                title="Seller Invoices"
-                              >
-                                <Receipt size={14} />
-                              </button>
                             </div>
                           </td>
                         </tr>
