@@ -537,30 +537,17 @@ const Products = () => {
                   <td style={{ padding: '16px 24px', minWidth: '140px' }}>{renderVariants(product.b2b, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit, info)}</td>
                   <td style={{ padding: '16px 24px' }}>{product.gstPercent || 0}%</td>
                   <td style={{ padding: '16px 24px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          background: info.availableStock <= 10 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
-                          color: info.availableStock <= 10 ? '#ef4444' : '#22c55e'
-                        }}>
-                          {info.availableStock} packs {info.unitSize > 1 ? `(${info.totalStockWeight} ${info.productMeasurementUnit})` : ''}
-                        </span>
-                      </div>
-                      {info.availableStock > 0 && info.commissionPerProductUnit > 0 && (
-                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span title="Total Commission for all available stock">
-                            Stock Comm: <strong style={{ color: '#6366f1' }}>₹{info.totalStockCommission.toFixed(2)}</strong>
-                          </span>
-                          <span title="Total Inventory Valuation">
-                            Stock Value: <strong style={{ color: '#10b981' }}>₹{info.totalStockValuation.toFixed(2)}</strong>
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                    <span style={{
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      display: 'inline-block',
+                      background: info.availableStock <= 10 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                      color: info.availableStock <= 10 ? '#ef4444' : '#22c55e'
+                    }}>
+                      {info.availableStock <= 0 ? 'Out of Stock (0)' : `${info.availableStock} packs`}
+                    </span>
                   </td>
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -691,7 +678,7 @@ const Products = () => {
                         1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit}
                       </span>
                       <span>•</span>
-                      <span>Available Stock: <strong style={{ color: info.availableStock <= 10 ? '#ef4444' : '#10b981' }}>{info.availableStock} {info.packagingType}s ({info.totalStockWeight} {info.productMeasurementUnit})</strong></span>
+                      <span>Available Stock: <strong style={{ color: info.availableStock <= 10 ? '#ef4444' : '#10b981' }}>{info.availableStock} packs</strong></span>
                       {simulatorProduct.categoryId?.name && (
                         <>
                           <span>•</span>
