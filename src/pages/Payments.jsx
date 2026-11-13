@@ -109,6 +109,11 @@ const Payments = () => {
   const [uploadingProof, setUploadingProof] = useState(false);
   const [settleLoading, setSettleLoading] = useState(false);
   const [settleSuccessData, setSettleSuccessData] = useState(null);
+  const [settleMode, setSettleMode] = useState('lump'); // 'lump' | 'orders'
+  const [sellerOrdersForSettle, setSellerOrdersForSettle] = useState([]);
+  const [selectedOrderIdsForSettle, setSelectedOrderIdsForSettle] = useState([]);
+  const [loadingSellerOrders, setLoadingSellerOrders] = useState(false);
+  const [generateSeparateInvoiceOption, setGenerateSeparateInvoiceOption] = useState(true);
 
   // Seller Details / Ledger Modal States
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -130,6 +135,7 @@ const Payments = () => {
   const [generateEndDate, setGenerateEndDate] = useState('');
   const [generateInvoiceNumber, setGenerateInvoiceNumber] = useState('');
   const [generateLoading, setGenerateLoading] = useState(false);
+  const [invoiceGenMode, setInvoiceGenMode] = useState('consolidated'); // 'consolidated' | 'separate'
 
   // Notification State
   const [notification, setNotification] = useState({ type: '', message: '' });
@@ -173,7 +179,7 @@ const Payments = () => {
   // --------------------------------------------------------------------------
   // Manual Settlement Handler
   // --------------------------------------------------------------------------
-  const openSettleModal = (merchantData) => {
+  const openSettleModal = async (merchantData) => {
     setSelectedMerchant(merchantData);
     const outstanding = merchantData.outstandingBalance || 0;
     setSettleAmount(outstanding > 0 ? outstanding.toFixed(2) : '');
@@ -183,7 +189,47 @@ const Payments = () => {
     setSettleRemarks('');
     setProofFile(null);
     setSettleSuccessData(null);
+    setSettleMode('lump');
+    setSelectedOrderIdsForSettle([]);
+    setGenerateSeparateInvoiceOption(true);
     setShowSettleModal(true);
+
+    // Fetch delivered orders for this merchant to allow selecting separate invoices/orders
+    setLoadingSellerOrders(true);
+    try {
+      const res = await api.get(`/payments/sellers/${merchantData.seller._id}/details`);
+      const deliveredOrders = (res.data?.orders || []).filter(o => o.orderStatus === 'Delivered');
+      setSellerOrdersForSettle(deliveredOrders);
+    } catch (e) {
+      setSellerOrdersForSettle([]);
+    } finally {
+      setLoadingSellerOrders(false);
+    }
+  };
+
+  const toggleSelectOrderForSettle = (orderId) => {
+    setSelectedOrderIdsForSettle(prev => {
+      const isSelected = prev.includes(orderId);
+      const next = isSelected ? prev.filter(id => id !== orderId) : [...prev, orderId];
+      const total = sellerOrdersForSettle
+        .filter(o => next.includes(o.orderId))
+        .reduce((sum, o) => sum + (Number(o.sellerNetPayable) || Number(o.sellerPayable) || 0), 0);
+      setSettleAmount(total > 0 ? total.toFixed(2) : '');
+      return next;
+    });
+  };
+
+  const selectAllUnsettledOrdersForSettle = () => {
+    const unsettled = sellerOrdersForSettle.filter(o => o.sellerSettlementStatus !== 'Settled');
+    const ids = unsettled.map(o => o.orderId);
+    setSelectedOrderIdsForSettle(ids);
+    const total = unsettled.reduce((sum, o) => sum + (Number(o.sellerNetPayable) || Number(o.sellerPayable) || 0), 0);
+    setSettleAmount(total > 0 ? total.toFixed(2) : '');
+  };
+
+  const deselectAllOrdersForSettle = () => {
+    setSelectedOrderIdsForSettle([]);
+    setSettleAmount('');
   };
 
   const handleDownloadReceipt = async (paymentId, receiptNumber) => {
@@ -272,7 +318,9 @@ const Payments = () => {
         utrReference: transactionRef,
         proofUrl: proofFile,
         remarks: settleRemarks,
-        paymentDate: settleDate
+        paymentDate: settleDate,
+        orderIds: settleMode === 'orders' ? selectedOrderIdsForSettle : [],
+        generateSeparateInvoices: generateSeparateInvoiceOption
       });
 
       toast.success(res.data.message || 'Settlement recorded successfully!');
@@ -280,7 +328,9 @@ const Payments = () => {
         payout: res.data.payout,
         seller: selectedMerchant.seller,
         remainingOutstanding: res.data.remainingOutstanding,
-        message: res.data.message
+        message: res.data.message,
+        generatedInvoicesCount: res.data.generatedInvoicesCount,
+        settledOrdersCount: res.data.settledOrdersCount
       });
       fetchAllData();
     } catch (err) {
@@ -421,7 +471,8 @@ const Payments = () => {
         sellerId: selectedMerchant.seller._id,
         startDate: generateStartDate,
         endDate: generateEndDate,
-        invoiceNumber: generateInvoiceNumber
+        invoiceNumber: generateInvoiceNumber,
+        generateSeparateInvoices: invoiceGenMode === 'separate'
       });
       toast.success('Invoice generated successfully!');
       const invoicesRes = await api.get('/seller-invoices/admin/all');
@@ -1690,12 +1741,13 @@ const Payments = () => {
         }}>
           <div className="glass-card" style={{
             width: '100%',
-            maxWidth: '560px',
+            maxWidth: settleMode === 'orders' ? '700px' : '560px',
             maxHeight: '90vh',
             overflowY: 'auto',
             borderRadius: '24px',
             padding: '28px',
-            position: 'relative'
+            position: 'relative',
+            transition: 'max-width 0.25s ease'
           }}>
             <button
               onClick={() => setShowSettleModal(false)}
@@ -1805,6 +1857,25 @@ const Payments = () => {
                   </div>
                 </div>
 
+                {settleSuccessData.generatedInvoicesCount > 0 && (
+                  <div style={{
+                    background: 'rgba(99, 102, 241, 0.12)',
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    color: 'var(--primary)',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}>
+                    <CheckCircle2 size={18} />
+                    <span>{settleSuccessData.generatedInvoicesCount} Separate Commercial Invoice(s) Generated & Linked</span>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <button
                     type="button"
@@ -1847,6 +1918,203 @@ const Payments = () => {
               </div>
             ) : (
             <form onSubmit={handleManualSettlementSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Settlement Mode Selection Tabs */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px' }}>
+                  SETTLEMENT MODE
+                </label>
+                <div style={{
+                  display: 'flex',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  padding: '4px',
+                  borderRadius: '12px',
+                  border: '1px solid var(--glass-border)'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setSettleMode('lump')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: settleMode === 'lump' ? 'var(--primary)' : 'transparent',
+                      color: settleMode === 'lump' ? '#fff' : 'var(--text-dim)',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Lump-sum Payout
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettleMode('orders')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: settleMode === 'orders' ? 'var(--primary)' : 'transparent',
+                      color: settleMode === 'orders' ? '#fff' : 'var(--text-dim)',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span>Settle by Separate Orders</span>
+                    {sellerOrdersForSettle.length > 0 && (
+                      <span style={{
+                        background: settleMode === 'orders' ? 'rgba(255,255,255,0.25)' : 'rgba(99, 102, 241, 0.2)',
+                        color: settleMode === 'orders' ? '#fff' : 'var(--primary)',
+                        padding: '2px 6px',
+                        borderRadius: '10px',
+                        fontSize: '10px',
+                        fontWeight: 800
+                      }}>
+                        {sellerOrdersForSettle.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Order Selection Panel (Active when settleMode === 'orders') */}
+              {settleMode === 'orders' && (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '14px',
+                  padding: '14px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>
+                        Select Orders for Settlement & Invoice
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                        Selected: <strong style={{ color: 'var(--primary)' }}>{selectedOrderIdsForSettle.length}</strong> of {sellerOrdersForSettle.length} delivered orders (₹{safeFormatCurrency(settleAmount || 0, 2)})
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={selectAllUnsettledOrdersForSettle}
+                        style={{
+                          background: 'rgba(99, 102, 241, 0.15)',
+                          color: 'var(--primary)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Select Unsettled
+                      </button>
+                      <button
+                        type="button"
+                        onClick={deselectAllOrdersForSettle}
+                        style={{
+                          background: 'transparent',
+                          color: 'var(--text-dim)',
+                          border: '1px solid var(--glass-border)',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  {loadingSellerOrders ? (
+                    <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)', fontSize: '13px' }}>
+                      <Loader2 className="animate-spin" size={20} style={{ margin: '0 auto 8px auto', display: 'block', color: 'var(--primary)' }} />
+                      Loading delivered orders for seller...
+                    </div>
+                  ) : sellerOrdersForSettle.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-dim)', fontSize: '12px', lineHeight: '1.5' }}>
+                      No delivered orders found for this merchant partner. You can still proceed with lump-sum settlement.
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
+                      {sellerOrdersForSettle.map((ord) => {
+                        const isSelected = selectedOrderIdsForSettle.includes(ord._id);
+                        const isSettled = ord.sellerSettlementStatus === 'Settled';
+                        const isPartial = ord.sellerSettlementStatus === 'Partially Settled';
+                        return (
+                          <div
+                            key={ord._id}
+                            onClick={() => toggleSelectOrderForSettle(ord._id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 12px',
+                              borderRadius: '10px',
+                              border: isSelected ? '1px solid var(--primary)' : '1px solid var(--glass-border)',
+                              background: isSelected ? 'rgba(99, 102, 241, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                style={{ cursor: 'pointer', accentColor: 'var(--primary)' }}
+                              />
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ fontSize: '12px', fontWeight: 800, fontFamily: 'monospace' }}>
+                                    {ord.orderNumber || ord._id.slice(-6).toUpperCase()}
+                                  </span>
+                                  <span style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    padding: '1px 6px',
+                                    borderRadius: '6px',
+                                    background: isSettled ? 'rgba(34, 197, 94, 0.15)' : isPartial ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                    color: isSettled ? '#22c55e' : isPartial ? '#f59e0b' : '#ef4444'
+                                  }}>
+                                    {ord.sellerSettlementStatus || 'Unsettled'}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                                  {new Date(ord.createdAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} • {ord.itemsCount || 1} Item(s)
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#6366f1' }}>
+                                ₹{safeFormatCurrency(ord.sellerNetPayable, 2)}
+                              </div>
+                              <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                                Gross: ₹{safeFormatCurrency(ord.sellerGrossSales, 2)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Settlement Amount */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>
@@ -1872,6 +2140,38 @@ const Payments = () => {
                   className="input-field"
                   style={{ height: '44px', fontSize: '15px', fontWeight: 700 }}
                 />
+              </div>
+
+              {/* Separate Invoices Option Checkbox */}
+              <div
+                onClick={() => setGenerateSeparateInvoiceOption(!generateSeparateInvoiceOption)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  background: generateSeparateInvoiceOption ? 'rgba(99, 102, 241, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                  border: generateSeparateInvoiceOption ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid var(--glass-border)',
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  id="genSepInv"
+                  checked={generateSeparateInvoiceOption}
+                  onChange={(e) => setGenerateSeparateInvoiceOption(e.target.checked)}
+                  style={{ marginTop: '3px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                />
+                <label htmlFor="genSepInv" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '2px', pointerEvents: 'none' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+                    Generate separate official invoice for each settled order
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: '1.4' }}>
+                    Creates and issues an individual commercial invoice for each delivered order in this settlement batch.
+                  </span>
+                </label>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
@@ -2541,9 +2841,69 @@ const Payments = () => {
             ) : null}
 
             <form onSubmit={handleGenerateInvoice} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Generation Mode: Consolidated vs Separate */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px' }}>
+                  INVOICE GENERATION TYPE
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                  <div
+                    onClick={() => setInvoiceGenMode('consolidated')}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: invoiceGenMode === 'consolidated' ? '2px solid var(--primary)' : '1px solid var(--glass-border)',
+                      background: invoiceGenMode === 'consolidated' ? 'rgba(99, 102, 241, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <input
+                        type="radio"
+                        name="invoiceGenMode"
+                        checked={invoiceGenMode === 'consolidated'}
+                        onChange={() => setInvoiceGenMode('consolidated')}
+                        style={{ accentColor: 'var(--primary)', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>Consolidated Statement</span>
+                    </div>
+                    <p style={{ fontSize: '11px', color: 'var(--text-dim)', margin: 0, paddingLeft: '22px', lineHeight: '1.4' }}>
+                      1 combined invoice for all delivered orders in range.
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => setInvoiceGenMode('separate')}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: invoiceGenMode === 'separate' ? '2px solid var(--primary)' : '1px solid var(--glass-border)',
+                      background: invoiceGenMode === 'separate' ? 'rgba(99, 102, 241, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <input
+                        type="radio"
+                        name="invoiceGenMode"
+                        checked={invoiceGenMode === 'separate'}
+                        onChange={() => setInvoiceGenMode('separate')}
+                        style={{ accentColor: 'var(--primary)', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>Separate Invoices</span>
+                    </div>
+                    <p style={{ fontSize: '11px', color: 'var(--text-dim)', margin: 0, paddingLeft: '22px', lineHeight: '1.4' }}>
+                      1 invoice per delivered order in range.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '6px' }}>
-                  INVOICE NUMBER *
+                  {invoiceGenMode === 'separate' ? 'STARTING INVOICE NUMBER *' : 'INVOICE NUMBER *'}
                 </label>
                 <input
                   type="text"
