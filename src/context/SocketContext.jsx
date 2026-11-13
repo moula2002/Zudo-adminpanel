@@ -29,7 +29,8 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     // Do not initiate socket connection on public unauthenticated views (e.g. Login page)
-    if (!authToken) {
+    const isLoginPage = typeof window !== 'undefined' && window.location.pathname.includes('/login');
+    if (!authToken || isLoginPage) {
       if (socket) {
         socket.close();
         setSocket(null);
@@ -39,12 +40,12 @@ export const SocketProvider = ({ children }) => {
 
     const socketUrl = SOCKET_URL || window.location.origin;
 
-    // Connect via WebSocket first for low latency and zero HTTP polling CORS overhead
+    // Connect via native WebSocket ONLY to eliminate HTTP polling CORS overhead entirely
     const newSocket = io(socketUrl, {
       withCredentials: true,
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: 5,
       reconnectionDelay: 3000,
       reconnectionDelayMax: 10000,
       timeout: 10000,
