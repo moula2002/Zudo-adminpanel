@@ -110,8 +110,8 @@ const AddProduct = () => {
       data.append('packagingType', (formData.packagingType || formData.unit || 'BAG').trim().toUpperCase());
       data.append('measurementBasis', (formData.measurementBasis || formData.measurementUnit || 'KG').trim().toUpperCase());
       data.append('measurementUnit', (formData.measurementBasis || formData.measurementUnit || 'KG').trim().toUpperCase());
-      data.append('priceBasis', formData.priceBasis || 'per_unit');
-      data.append('isPackagePrice', formData.priceBasis === 'per_package');
+      data.append('priceBasis', 'per_package');
+      data.append('isPackagePrice', true);
       data.append('unitSize', parseFloat(formData.unitSize) || 1);
 
       const formattedB2c = b2cVariants
@@ -130,10 +130,8 @@ const AddProduct = () => {
           const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
-          const vPriceBasis = v.priceBasis || formData.priceBasis || 'per_unit';
-          const isPkg = vPriceBasis === 'per_package';
-          const pkgPrice = isPkg ? rawPrice : Math.round(rawPrice * uSize * 100) / 100;
-          const basePrice = isPkg ? (uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice) : rawPrice;
+          const pkgPrice = rawPrice;
+          const basePrice = uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sizeValue: uSize,
@@ -141,8 +139,8 @@ const AddProduct = () => {
             measurementUnit: mUnit,
             measurementBasis: mUnit,
             packagingType: pType,
-            priceBasis: vPriceBasis,
-            isPackagePrice: isPkg,
+            priceBasis: 'per_package',
+            isPackagePrice: true,
             price: pkgPrice,
             sellerPrice: pkgPrice,
             sellerPricePerProductUnit: pkgPrice,
@@ -267,20 +265,7 @@ const AddProduct = () => {
               <input type="number" name="gstPercent" className="input-field" value={formData.gstPercent} onChange={handleInputChange} required min="0" step="0.1" />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 500 }}>Price Calculation Basis *</label>
-              <select 
-                name="priceBasis" 
-                className="input-field" 
-                value={formData.priceBasis || 'per_unit'} 
-                onChange={handleInputChange} 
-                required
-              >
-                <option value="per_unit">Method A – Base Measurement Unit Pricing (e.g. ₹50/KG)</option>
-                <option value="per_package">Method B – Complete Package Pricing (e.g. ₹1,500/Bag)</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 500 }}>Packaging / Unit Type *</label>
+              <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 500 }}>Packaging Type *</label>
               <select 
                 name="unit" 
                 className="input-field" 
@@ -302,7 +287,7 @@ const AddProduct = () => {
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 500 }}>
-                Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG for Bag of Rice)</span>
+                Unit Type / Measurement Unit *
               </label>
               <select 
                 name="measurementUnit" 
@@ -315,16 +300,17 @@ const AddProduct = () => {
                 required
               >
                 <option value="kg">KG</option>
+                <option value="ltr">LTR</option>
+                <option value="ton">TON</option>
+                <option value="tin">TIN</option>
+                <option value="pcs">PCS</option>
                 <option value="g">Gram (g)</option>
-                <option value="ton">Ton</option>
-                <option value="ltr">Litre</option>
                 <option value="ml">Millilitre (ml)</option>
-                <option value="pcs">Piece</option>
               </select>
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 500 }}>
-                Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 {(formData.measurementUnit || 'KG').toUpperCase()} per {formData.unit})</span>
+                Product Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 10 for 10 {(formData.measurementUnit || 'KG').toUpperCase()} per {formData.unit})</span>
               </label>
               <input 
                 type="number" 
@@ -335,7 +321,7 @@ const AddProduct = () => {
                 required 
                 min="0.01" 
                 step="any" 
-                placeholder="e.g. 30" 
+                placeholder="e.g. 10" 
               />
             </div>
           </div>
@@ -360,9 +346,9 @@ const AddProduct = () => {
               </div>
             </div>
             <div>
-              <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Price Calculation</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Pricing Rule</span>
               <div style={{ fontSize: '15px', fontWeight: 800, color: '#10b981' }}>
-                {formData.priceBasis === 'per_package' ? 'Method B: Complete Package Price' : 'Method A: Price × Unit Size'}
+                Seller Unit Price is configured per package. Total Commission = Product Unit Size × Admin Commission Per Unit
               </div>
             </div>
           </div>

@@ -482,52 +482,50 @@ const Products = () => {
                   </td>
                   <td style={{ padding: '16px 24px', minWidth: '260px' }}>
                     <div style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px',
-                      fontSize: '11.5px',
                       background: 'rgba(255, 255, 255, 0.02)',
-                      padding: '10px 12px',
+                      padding: '10px 14px',
                       borderRadius: '12px',
                       border: '1px solid var(--glass-border)'
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>1. Product Unit Size:</span>
-                        <strong style={{ color: 'var(--text-main)' }}>1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit}</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>2. Seller Unit Price:</span>
-                        <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerProductUnit.toFixed(2)}</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>3. Admin Commission / Unit:</span>
-                        <span style={{ color: '#6366f1', fontWeight: 600 }}>
-                          {info.isFlat ? `₹${info.adminCommissionPerBaseUnit.toFixed(2)} / ${info.productMeasurementUnit}` : `${info.adminCommissionPerBaseUnit}%`}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>4. Total Commission:</span>
-                        <strong style={{ color: '#6366f1' }}>₹{info.commissionPerProductUnit.toFixed(2)}</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px dashed var(--glass-border)', paddingTop: '4px' }}>
-                        <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>5. Customer Base Price:</span>
-                        <strong style={{ color: 'var(--text-main)' }}>₹{info.customerUnitBasePrice.toFixed(2)}</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>6. GST Percentage:</span>
-                        <span style={{ color: '#f59e0b', fontWeight: 600 }}>{info.gstPercent}%{info.isGstInclusive ? ' (incl)' : ''}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>7. GST Amount:</span>
-                        <span style={{ color: '#f59e0b' }}>₹{info.gstAmountPerProductUnit.toFixed(2)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '4px', marginTop: '2px' }}>
-                        <span style={{ fontWeight: 700, color: '#10b981' }}>8. Customer Final Price:</span>
-                        <strong style={{ color: '#10b981', fontSize: '13px' }}>₹{info.customerFinalPricePerProductUnit.toFixed(2)}</strong>
-                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+                        <tbody>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <td style={{ padding: '3px 0', color: 'var(--text-dim)' }}>Product Unit Size</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: 700, color: 'var(--text-main)' }}>{info.unitSize} {info.productMeasurementUnit}</td>
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <td style={{ padding: '3px 0', color: 'var(--text-dim)' }}>Seller Unit Price</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: 700, color: 'var(--text-main)' }}>₹{info.sellerPricePerProductUnit.toFixed(2)}</td>
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <td style={{ padding: '3px 0', color: 'var(--text-dim)' }}>Admin Commission / {info.productMeasurementUnit}</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: 700, color: '#6366f1' }}>₹{info.adminCommissionPerBaseUnit.toFixed(2)}</td>
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <td style={{ padding: '3px 0', color: 'var(--text-dim)' }}>Total Commission</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: 700, color: '#6366f1' }}>₹{info.commissionPerProductUnit.toFixed(2)}</td>
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <td style={{ padding: '3px 0', color: 'var(--text-dim)' }}>Customer Base Price</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: 700, color: 'var(--text-main)' }}>₹{info.customerUnitBasePrice.toFixed(2)}</td>
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <td style={{ padding: '3px 0', color: 'var(--text-dim)' }}>GST Percentage</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: 600, color: '#f59e0b' }}>{info.gstPercent}%</td>
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <td style={{ padding: '3px 0', color: 'var(--text-dim)' }}>GST Amount</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: 600, color: '#f59e0b' }}>₹{info.gstAmountPerProductUnit.toFixed(2)}</td>
+                          </tr>
+                          <tr>
+                            <td style={{ padding: '4px 0', fontWeight: 800, color: '#10b981' }}>Customer Final Price</td>
+                            <td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 800, color: '#10b981', fontSize: '13px' }}>₹{info.customerFinalPricePerProductUnit.toFixed(2)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
 
                       {!info.isCompatible && (
-                        <div style={{ marginTop: '4px', padding: '4px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontSize: '10.5px', fontWeight: 600, border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                        <div style={{ marginTop: '6px', padding: '4px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontSize: '10.5px', fontWeight: 600, border: '1px solid rgba(239, 68, 68, 0.25)' }}>
                           ⚠️ {info.validationMessage || 'Incompatible or missing measurement basis'}
                         </div>
                       )}
@@ -717,16 +715,16 @@ const Products = () => {
                 <div className="simulator-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))' }}>
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      1. Product Unit Size
+                      Product Unit Size
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
-                      1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit}
+                      {info.unitSize} {info.productMeasurementUnit}
                     </strong>
                   </div>
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      2. Seller Unit Price
+                      Seller Unit Price
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
                       ₹{info.sellerPricePerProductUnit.toFixed(2)}
@@ -735,10 +733,10 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      3. Admin Commission / Unit
+                      Admin Commission / {info.productMeasurementUnit}
                     </span>
                     <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700 }}>
-                      {info.isFlat ? `₹${info.adminCommissionPerBaseUnit.toFixed(2)} / ${info.productMeasurementUnit}` : `${info.adminCommissionPerBaseUnit}%`}
+                      ₹{info.adminCommissionPerBaseUnit.toFixed(2)}
                     </strong>
                   </div>
 
