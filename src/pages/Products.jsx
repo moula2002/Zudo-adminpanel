@@ -420,10 +420,10 @@ const Products = () => {
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Seller</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Category</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Pricing Breakdown</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2C Size Value</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2B Size Value</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>GST %</th>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Stock & Total Comm</th>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>B2C Size Value</th>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Stock</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontWeight: 600 }}>Action</th>
             </tr>
           </thead>
@@ -533,9 +533,9 @@ const Products = () => {
                       )}
                     </div>
                   </td>
-                  <td style={{ padding: '16px 24px', minWidth: '130px' }}>{renderVariants(product.b2c, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit, info)}</td>
                   <td style={{ padding: '16px 24px', minWidth: '140px' }}>{renderVariants(product.b2b, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit, info)}</td>
                   <td style={{ padding: '16px 24px' }}>{product.gstPercent || 0}%</td>
+                  <td style={{ padding: '16px 24px', minWidth: '130px' }}>{renderVariants(product.b2c, product.measurementUnit || product.unit, product.packagingType || product.unit, info.adminCommissionPerBaseUnit, info)}</td>
                   <td style={{ padding: '16px 24px' }}>
                     <span style={{
                       padding: '4px 10px',
