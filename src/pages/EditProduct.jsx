@@ -233,8 +233,9 @@ const EditProduct = () => {
             }
           }
 
-          const pkgPrice = rawPrice;
-          const basePrice = uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice;
+          const isPkg = vPriceBasis === 'per_package';
+          const pkgPrice = isPkg ? rawPrice : Math.round(rawPrice * uSize * 100) / 100;
+          const basePrice = isPkg ? (uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice) : rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sizeValue: uSize,
@@ -242,8 +243,8 @@ const EditProduct = () => {
             measurementUnit: mUnit,
             measurementBasis: mUnit,
             packagingType: pType,
-            priceBasis: 'per_package',
-            isPackagePrice: true,
+            priceBasis: vPriceBasis,
+            isPackagePrice: isPkg,
             price: pkgPrice,
             sellerPrice: pkgPrice,
             sellerPricePerProductUnit: pkgPrice,
@@ -459,7 +460,20 @@ const EditProduct = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Packaging Type *</label>
+                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Price Calculation Basis *</label>
+                  <select
+                    className="input-field"
+                    value={formData.priceBasis || 'per_unit'}
+                    onChange={e => setFormData({ ...formData, priceBasis: e.target.value })}
+                    required
+                    style={{ height: '50px', cursor: 'pointer' }}
+                  >
+                    <option value="per_unit">Method A – Base Measurement Unit Pricing (e.g. ₹50/KG)</option>
+                    <option value="per_package">Method B – Complete Package Pricing (e.g. ₹1,500/Bag)</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Packaging / Unit Type *</label>
                   <select
                     className="input-field"
                     value={formData.unit}
@@ -481,7 +495,7 @@ const EditProduct = () => {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                    Unit Type / Measurement Unit *
+                    Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG for Bag of Rice)</span>
                   </label>
                   <select
                     className="input-field"
@@ -494,17 +508,16 @@ const EditProduct = () => {
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
                     <option value="kg">KG</option>
-                    <option value="ltr">LTR</option>
-                    <option value="ton">TON</option>
-                    <option value="tin">TIN</option>
-                    <option value="pcs">PCS</option>
                     <option value="g">Gram (g)</option>
+                    <option value="ton">Ton</option>
+                    <option value="ltr">Litre</option>
                     <option value="ml">Millilitre (ml)</option>
+                    <option value="pcs">Piece</option>
                   </select>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                    Product Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 10 for 10 {(formData.measurementUnit || 'KG').toUpperCase()} per {formData.unit})</span>
+                    Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 {(formData.measurementUnit || 'KG').toUpperCase()} per {formData.unit})</span>
                   </label>
                   <input
                     type="number"

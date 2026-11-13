@@ -247,44 +247,6 @@ const Reports = () => {
       }))
     },
     {
-      id: 'stock_commission',
-      title: 'Stock Value & Commission Ledger',
-      description: 'Inventory valuation, stock measurement weights, separated platform commissions, and stock GST breakdown.',
-      endpoint: '/products',
-      icon: Coins,
-      color: '#059669',
-      mapFn: (data) => data.map(p => {
-        const uSize = Number(p.unitSize) || 1;
-        const stock = Math.max(0, Number(p.stock) || 0);
-        const sellerUnitPrice = Number(p.sellerUnitPrice || p.sellerPrice || 0);
-        const adminCommPerUnit = Number(p.adminCommissionPerBaseUnit || p.commissionRate || p.commissionValue || 0);
-        const totalStockWeight = Math.round(stock * uSize * 100) / 100;
-        const totalStockCommission = Math.round(totalStockWeight * adminCommPerUnit * 100) / 100;
-        const totalSellerValue = Math.round(stock * sellerUnitPrice * 100) / 100;
-        const stockSubtotal = Math.round((totalSellerValue + totalStockCommission) * 100) / 100;
-        const gstRate = Number(p.gstPercent) || 0;
-        const totalStockGst = Math.round(stockSubtotal * (gstRate / 100) * 100) / 100;
-        const totalStockValuation = Math.round((stockSubtotal + totalStockGst) * 100) / 100;
-        return {
-          'Product Name': p.name,
-          'Category': p.categoryId?.name || 'General',
-          'Seller': p.sellerName || 'Zudo Official',
-          'Packaging Type': p.packagingType || p.unit || 'BAG',
-          'Product Unit Size': `${uSize} ${(p.measurementUnit || p.measurementBasis || 'KG').toUpperCase()}`,
-          'Available Stock (Packs)': stock,
-          'Total Stock Weight / Size': `${totalStockWeight} ${(p.measurementUnit || p.measurementBasis || 'KG').toUpperCase()}`,
-          'Seller Unit Price (₹)': sellerUnitPrice,
-          'Admin Commission Per Unit (₹)': adminCommPerUnit,
-          'Total Stock Commission (₹)': totalStockCommission,
-          'Total Seller Stock Value (₹)': totalSellerValue,
-          'Stock Subtotal (₹)': stockSubtotal,
-          'GST Percentage (%)': gstRate,
-          'Total Stock GST (₹)': totalStockGst,
-          'Total Stock Valuation (₹)': totalStockValuation
-        };
-      })
-    },
-    {
       id: 'cash',
       title: 'B2B Manual Cash Register',
       endpoint: '/cash',
