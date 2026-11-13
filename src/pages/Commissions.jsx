@@ -257,7 +257,77 @@ const Commissions = () => {
   };
 
   const handleRemoveRule = (index) => {
-    setCommissionsList(commissionsList.filter((_, i) => i !== index));
+    const target = commissionsList[index];
+    if (window.confirm(`Are you sure you want to delete the commission rule for "${target?.unit || 'unit'}"?`)) {
+      setCommissionsList(commissionsList.filter((_, i) => i !== index));
+      toast.success(`Removed "${target?.unit}" rule. Click "Save Commission Settings" to apply.`);
+    }
+  };
+
+  const handleUpdateRule = () => {
+    const unitName = (newRule.unit === 'custom' ? customUnit : newRule.unit).trim();
+    const pincodeValue = newRule.pincode.trim() || 'All';
+    const val = parseFloat(newRule.commissionValue);
+    if (isNaN(val) || val < 0) {
+      toast.error('Please enter a valid commission value to update');
+      return;
+    }
+    setCommissionsList(prev => prev.map(r => {
+      if (String(r.unit || '').trim().toLowerCase() === unitName.toLowerCase() &&
+          String(r.pincode || 'All').trim().toLowerCase() === pincodeValue.toLowerCase()) {
+        return {
+          ...r,
+          commissionType: newRule.commissionType,
+          commissionValue: val
+        };
+      }
+      return r;
+    }));
+    toast.success(`Updated rate for "${unitName}". Click "Save Commission Settings" to apply.`);
+  };
+
+  const handleDeleteAllRules = async () => {
+    if (!selectedCategory) return;
+    if (!window.confirm(`Are you sure you want to delete ALL commission rules for "${selectedCategory.name}"? This cannot be undone.`)) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.put(`/commissions/category/${selectedCategory._id}`, {
+        commissions: []
+      });
+      clearApiCache('/commissions');
+      setCommissionsList([]);
+      setSelectedCategory(null);
+      toast.success(`All commission rules deleted for "${selectedCategory.name}".`);
+      await fetchCategories(true);
+    } catch (err) {
+      console.error('Delete all commissions error:', err);
+      toast.error('Failed to delete commissions.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteRuleFromCard = async (category, ruleToDelete) => {
+    if (!category || !ruleToDelete) return;
+    if (!window.confirm(`Delete "${ruleToDelete.unit}" commission rule from "${category.name}"?`)) {
+      return;
+    }
+    const updated = (category.commissions || []).filter(c => 
+      !(String(c.unit).toLowerCase() === String(ruleToDelete.unit).toLowerCase() && 
+        String(c.pincode || 'All').toLowerCase() === String(ruleToDelete.pincode || 'All').toLowerCase())
+    );
+    try {
+      toast.loading(`Deleting ${ruleToDelete.unit} commission...`, { id: 'del-comm' });
+      await api.put(`/commissions/category/${category._id}`, { commissions: updated });
+      clearApiCache('/commissions');
+      toast.success(`Commission rule for "${ruleToDelete.unit}" deleted.`, { id: 'del-comm' });
+      await fetchCategories(true);
+    } catch (err) {
+      console.error('Delete rule error:', err);
+      toast.error('Failed to delete commission rule.', { id: 'del-comm' });
+    }
   };
 
   const handleSaveCommissions = async () => {
@@ -559,6 +629,31 @@ const Commissions = () => {
                               : `₹${comm.commissionValue} / ${(comm.unit || 'unit').toUpperCase()}`
                             }
                           </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteRuleFromCard(cat, comm);
+                            }}
+                            title={`Delete ${comm.unit} commission rule`}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '2px 4px',
+                              borderRadius: '4px',
+                              marginLeft: '4px',
+                              opacity: 0.8
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+                          >
+                            <Trash2 size={12} />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -713,22 +808,105 @@ const Commissions = () => {
                   </div>
                 )}
 
-                <div style={{ marginTop: '4px' }}>
-                  <button 
-                    type="button" 
-                    className="btn-primary" 
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px 12px', borderRadius: '10px', width: '100%', fontSize: '13px' }}
-                    onClick={handleAddRule}
-                  >
-                    <Plus size={14} /> <span>Add Rule</span>
-                  </button>
-                </div>
+                {(() => {
+                  const selectedUnitName = (newRule.unit === 'custom' ? customUnit : newRule.unit).trim();
+                  const selectedPincode = newRule.pincode.trim() || 'All';
+                  const existingRuleForSelectedUnit = selectedUnitName 
+                    ? commissionsList.find(r => 
+                        String(r.unit || '').trim().toLowerCase() === selectedUnitName.toLowerCase() && 
+                        String(r.pincode || 'All').trim().toLowerCase() === selectedPincode.toLowerCase()
+                      ) 
+                    : null;
+
+                  if (existingRuleForSelectedUnit) {
+                    return (
+                      <div style={{
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        borderRadius: '12px',
+                        padding: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        marginTop: '4px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444' }}>
+                            Rule Already Exists for {existingRuleForSelectedUnit.unit.toUpperCase()} ({existingRuleForSelectedUnit.pincode})
+                          </span>
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-main)' }}>
+                            Current: {existingRuleForSelectedUnit.commissionType === 'percentage' 
+                              ? `${existingRuleForSelectedUnit.commissionValue}%` 
+                              : `₹${existingRuleForSelectedUnit.commissionValue} / ${existingRuleForSelectedUnit.unit.toUpperCase()}`}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '2px' }}>
+                          <button
+                            type="button"
+                            onClick={handleUpdateRule}
+                            style={{
+                              background: 'var(--primary)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '8px',
+                              padding: '8px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Update Rate
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const idx = commissionsList.findIndex(r => r === existingRuleForSelectedUnit);
+                              if (idx !== -1) handleRemoveRule(idx);
+                            }}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              color: '#ef4444',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              borderRadius: '8px',
+                              padding: '8px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                            <span>Delete Rule</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{ marginTop: '4px' }}>
+                      <button 
+                        type="button" 
+                        className="btn-primary" 
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px 12px', borderRadius: '10px', width: '100%', fontSize: '13px' }}
+                        onClick={handleAddRule}
+                      >
+                        <Plus size={14} /> <span>Add Rule</span>
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Existing Rules Table/List */}
               <div>
                 <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Configured Commission Rules
+                  Configured Commission Rules ({commissionsList.length})
                 </p>
 
                 {commissionsList.length > 0 ? (
@@ -764,21 +942,26 @@ const Commissions = () => {
                           </span>
                         </div>
                         <button 
+                          type="button"
                           onClick={() => handleRemoveRule(idx)} 
                           style={{ 
-                            background: 'transparent', 
-                            border: 'none', 
+                            background: 'rgba(239, 68, 68, 0.1)', 
+                            border: '1px solid rgba(239, 68, 68, 0.25)', 
                             color: '#ef4444', 
                             cursor: 'pointer',
                             display: 'flex',
-                            padding: '4px',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
                             borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: 700,
                             transition: 'all 0.2s'
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          title={`Delete ${comm.unit} rule`}
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={13} />
+                          <span>Delete</span>
                         </button>
                       </div>
                     ))}
@@ -801,23 +984,50 @@ const Commissions = () => {
             </div>
 
             {/* Action Buttons (Sticky Footer) */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--glass-border)', padding: '16px 20px', background: 'var(--card-bg)', flexShrink: 0 }}>
-              <button 
-                className="btn-secondary" 
-                onClick={() => setSelectedCategory(null)}
-                style={{ borderRadius: '12px', padding: '10px 20px' }}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn-primary" 
-                disabled={submitting} 
-                onClick={handleSaveCommissions}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', padding: '10px 20px' }}
-              >
-                {submitting ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                <span>Save Commission Settings</span>
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--glass-border)', padding: '16px 20px', background: 'var(--card-bg)', flexShrink: 0 }}>
+              {commissionsList.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleDeleteAllRules}
+                  disabled={submitting}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#ef4444',
+                    borderRadius: '12px',
+                    padding: '10px 16px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                  title="Delete all commission rules for this category"
+                >
+                  <Trash2 size={14} />
+                  <span>Delete All Rules</span>
+                </button>
+              ) : <div />}
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  className="btn-secondary" 
+                  onClick={() => setSelectedCategory(null)}
+                  style={{ borderRadius: '12px', padding: '10px 20px' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn-primary" 
+                  disabled={submitting} 
+                  onClick={handleSaveCommissions}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', padding: '10px 20px' }}
+                >
+                  {submitting ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                  <span>Save Commission Settings</span>
+                </button>
+              </div>
             </div>
 
           </div>
