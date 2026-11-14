@@ -146,11 +146,21 @@ const Products = () => {
       }
     }
 
-    // New simplified pricing calculation:
-    // Seller Unit Price is strictly the configured price for 1 purchasable package/unit.
-    // Do NOT multiply it by product unit size again.
+    // Retrieve original seller-entered Base Price (e.g. ₹100 / LTR)
+    let sellerBasePrice = 0;
+    if (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0) {
+      sellerBasePrice = Number(product.sellerPricePerBaseUnit);
+    } else if (Array.isArray(product.b2b) && product.b2b.length > 0 && product.b2b[0].sellerPricePerBaseUnit > 0) {
+      sellerBasePrice = Number(product.b2b[0].sellerPricePerBaseUnit);
+    } else if (unitSize > 1 && (product.priceBasis === 'per_package' || product.isPackagePrice)) {
+      sellerBasePrice = Math.round((rawSellerPrice / unitSize) * 100) / 100;
+    } else {
+      sellerBasePrice = rawSellerPrice > 0 ? rawSellerPrice : 0;
+    }
+
+    // Package Price (1 purchasable package, e.g. 1 BAG = ₹1,000)
     const sellerPricePerProductUnit = rawSellerPrice > 0 ? rawSellerPrice : 0;
-    const sellerPricePerBaseUnit = unitSize > 0 ? Math.round((sellerPricePerProductUnit / unitSize) * 100) / 100 : sellerPricePerProductUnit;
+    const sellerPricePerBaseUnit = sellerBasePrice;
 
     // 3. Admin Commission Per Base Unit (e.g. ₹5 / KG)
     const isFlat = (product.commissionType || 'flat') === 'flat';
@@ -497,7 +507,11 @@ const Products = () => {
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                         <span style={{ color: 'var(--text-dim)' }}>2. Seller Unit Price:</span>
-                        <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerProductUnit.toFixed(2)}</strong>
+                        <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ color: 'var(--text-dim)' }}>Package Price:</span>
+                        <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerProductUnit.toFixed(2)} / {info.packagingType}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                         <span style={{ color: 'var(--text-dim)' }}>3. Admin Commission / Unit:</span>
@@ -729,7 +743,16 @@ const Products = () => {
                       2. Seller Unit Price
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
-                      ₹{info.sellerPricePerProductUnit.toFixed(2)}
+                      ₹{info.sellerPricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}
+                    </strong>
+                  </div>
+
+                  <div className="simulator-stat-card">
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Package Price
+                    </span>
+                    <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
+                      ₹{info.sellerPricePerProductUnit.toFixed(2)} / {info.packagingType}
                     </strong>
                   </div>
 
