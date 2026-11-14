@@ -126,19 +126,78 @@ const Invoices = () => {
   const [customOrderNumbers, setCustomOrderNumbers] = useState({});
 
   const [sellerInvoices, setSellerInvoices] = useState([]);
+  const [filteredSellerInvoices, setFilteredSellerInvoices] = useState([]);
   const [sellerInvoicePreviewUrl, setSellerInvoicePreviewUrl] = useState('');
   const [previewingSellerInvoiceId, setPreviewingSellerInvoiceId] = useState(null);
+  const [selectedSellerInvoice, setSelectedSellerInvoice] = useState(null);
+  const [showSellerInvoiceModal, setShowSellerInvoiceModal] = useState(false);
+  const [sellerImageBlobs, setSellerImageBlobs] = useState({});
+  const [sellerImageLoading, setSellerImageLoading] = useState({});
+  const [imageModalUrl, setImageModalUrl] = useState('');
 
   useEffect(() => {
     if (!sellerInvoicePreviewUrl) return undefined;
     return () => URL.revokeObjectURL(sellerInvoicePreviewUrl);
   }, [sellerInvoicePreviewUrl]);
 
+  useEffect(() => {
+    return () => {
+      Object.values(sellerImageBlobs).forEach(obj => {
+        if (typeof obj === 'object' && obj !== null) {
+          Object.values(obj).forEach(url => {
+            if (url && typeof url === 'string' && url.startsWith('blob:')) {
+              URL.revokeObjectURL(url);
+            }
+          });
+        }
+      });
+    };
+  }, []);
+
+  const loadAuthenticatedImageById = async (invoiceId, imageId) => {
+    const key = `${invoiceId}_${imageId}`;
+    if (!invoiceId || !imageId || sellerImageBlobs[invoiceId]?.[imageId] || sellerImageLoading[key]) return;
+
+    setSellerImageLoading(prev => ({ ...prev, [key]: true }));
+    try {
+      const res = await api.get(`/seller-invoices/${invoiceId}/images/${imageId}`, {
+        responseType: 'blob'
+      });
+      const blobUrl = URL.createObjectURL(res.data);
+      setSellerImageBlobs(prev => ({
+        ...prev,
+        [invoiceId]: { ...(prev[invoiceId] || {}), [imageId]: blobUrl }
+      }));
+    } catch (err) {
+      console.warn(`Could not load image ${imageId} for invoice ${invoiceId}:`, err.message);
+    } finally {
+      setSellerImageLoading(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const openSellerInvoiceModal = async (inv) => {
+    setSelectedSellerInvoice(inv);
+    setShowSellerInvoiceModal(true);
+
+    try {
+      const { data } = await api.get(`/seller-invoices/${inv._id}/images`);
+      if (Array.isArray(data)) {
+        setSelectedSellerInvoice(prev => ({ ...prev, detailedImages: data }));
+        data.forEach(img => {
+          loadAuthenticatedImageById(inv._id, img._id);
+        });
+      }
+    } catch (e) {
+      console.warn('Could not fetch detailed images for modal:', e.message);
+    }
+  };
+
   const fetchSellerInvoices = async () => {
     setLoading(true);
     try {
       const { data } = await api.get('/seller-invoices/admin/all', { skipCache: true });
-      setSellerInvoices(data);
+      setSellerInvoices(data || []);
+      setFilteredSellerInvoices(data || []);
     } catch (err) {
       console.error('Failed to fetch seller invoices:', err);
     } finally {
@@ -218,9 +277,10 @@ const Invoices = () => {
 
   useEffect(() => {
     applyFilters();
-  }, [invoiceType, segmentType, searchTerm, dateFilter, customDate, collation, cityFilter, orders]);
+  }, [invoiceType, segmentType, searchTerm, dateFilter, customDate, collation, cityFilter, orders, sellerInvoices]);
 
   const applyFilters = () => {
+    // 1. Filter Orders (for 'order' and 'purchase' modes)
     let result = [...orders];
 
     // Invoice Type Filter
@@ -271,14 +331,62 @@ const Invoices = () => {
       });
     }
 
-    // Collation is UI only for now unless specified
-    if (collation === 'Collated') {
-      // Mock logic or actual logic if exists
-    } else if (collation === 'Uncollated') {
-      // Mock logic
+    setFilteredOrders(result);
+
+    // 2. Filter Seller Invoices (for 'seller_generated' mode)
+    let sellerResult = [...sellerInvoices];
+
+    // Segment Filter for Seller Invoices
+    if (segmentType !== 'All') {
+      sellerResult = sellerResult.filter(inv => {
+        const primaryOrder = inv.orderId || (inv.orders && inv.orders[0]);
+        const userRole = (primaryOrder?.userId?.role || '').toUpperCase() || 'B2C';
+        return userRole === segmentType;
+      });
     }
 
-    setFilteredOrders(result);
+    // Search Filter for Seller Invoices
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      sellerResult = sellerResult.filter(inv => {
+        const primaryOrder = inv.orderId || (inv.orders && inv.orders[0]);
+        const buyerName = (
+          primaryOrder?.userId?.businessName ||
+          primaryOrder?.userId?.companyName ||
+          primaryOrder?.userId?.name ||
+          primaryOrder?.shippingAddress?.name ||
+          ''
+        ).toLowerCase();
+        const sellerName = (
+          inv.sellerName ||
+          inv.sellerId?.businessName ||
+          inv.sellerId?.storeName ||
+          inv.sellerId?.name ||
+          ''
+        ).toLowerCase();
+        const invoiceNum = (inv.invoiceNumber || '').toLowerCase();
+        const orderNum = String(inv.orderNumber || primaryOrder?.orderNumber || primaryOrder?.orderId || '').toLowerCase();
+        return buyerName.includes(term) || sellerName.includes(term) || invoiceNum.includes(term) || orderNum.includes(term);
+      });
+    }
+
+    // Date Filter for Seller Invoices
+    const now = new Date();
+    if (dateFilter === 'Today') {
+      sellerResult = sellerResult.filter(inv => new Date(inv.createdAt).toDateString() === now.toDateString());
+    } else if (dateFilter === 'This Week') {
+      const firstDay = new Date(now.setDate(now.getDate() - now.getDay()));
+      sellerResult = sellerResult.filter(inv => new Date(inv.createdAt) >= firstDay);
+    } else if (dateFilter === 'This Month') {
+      sellerResult = sellerResult.filter(inv => new Date(inv.createdAt).getMonth() === new Date().getMonth() && new Date(inv.createdAt).getFullYear() === new Date().getFullYear());
+    } else if (dateFilter === 'Custom' && customDate.start && customDate.end) {
+      sellerResult = sellerResult.filter(inv => {
+        const invDate = new Date(inv.createdAt);
+        return invDate >= new Date(customDate.start) && invDate <= new Date(customDate.end);
+      });
+    }
+
+    setFilteredSellerInvoices(sellerResult);
   };
 
   const handlePriceChange = (orderId, itemIndex, newPrice) => {
@@ -360,6 +468,38 @@ const Invoices = () => {
   };
 
   const handleBulkExcelDownload = () => {
+    if (invoiceType === 'seller_generated') {
+      if (filteredSellerInvoices.length === 0) return;
+      const excelData = filteredSellerInvoices.map(inv => {
+        const primaryOrder = inv.orderId || (inv.orders && inv.orders[0]);
+        const orderIdVal = inv.orderNumber 
+          ? `#${String(inv.orderNumber).padStart(5, '0')}`
+          : (primaryOrder?.orderNumber ? `#${String(primaryOrder.orderNumber).padStart(5, '0')}` : (inv.invoiceNumber || '—'));
+        const customerName = primaryOrder?.userId?.businessName || primaryOrder?.userId?.companyName || primaryOrder?.shippingAddress?.name || primaryOrder?.userId?.name || 'Customer';
+        const sellerName = inv.sellerName || inv.sellerId?.businessName || inv.sellerId?.storeName || inv.sellerId?.name || 'Seller';
+
+        return {
+          'Invoice ID': inv.invoiceNumber || orderIdVal,
+          'Seller': sellerName,
+          'Customer / Buyer': customerName,
+          'Invoice Date': new Date(inv.createdAt).toLocaleDateString(),
+          'Start Date': new Date(inv.startDate).toLocaleDateString(),
+          'End Date': new Date(inv.endDate).toLocaleDateString(),
+          'Order ID': orderIdVal,
+          'Amount': `₹${inv.totalAmount || 0}`,
+          'Invoice Type': 'Seller Generated Invoice',
+          'Status': inv.status || 'Pending',
+          'Attached Images': inv.imageCount || (inv.hasInvoiceImage ? 1 : 0)
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Seller Invoices");
+      XLSX.writeFile(wb, `Seller_Invoices_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      return;
+    }
+
     if (filteredOrders.length === 0) return;
     const excelData = filteredOrders.map(order => ({
       'Invoice No': getInvoiceNumber(order),
@@ -774,14 +914,14 @@ const Invoices = () => {
 
         <div className="flex justify-between items-center border-t border-[var(--glass-border)] pt-6 mt-2">
           <div className="text-sm font-semibold text-[var(--text-main)]">
-            Found {filteredOrders.length} matching records
+            Found {invoiceType === 'seller_generated' ? filteredSellerInvoices.length : filteredOrders.length} matching records
           </div>
           <div className="flex gap-4">
             <button 
               className="btn-primary flex items-center gap-2"
               onClick={handleBulkExcelDownload}
-              disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
-              style={{ background: 'linear-gradient(135deg, #10b981, #059669)', opacity: (filteredOrders.length === 0 || invoiceType === 'seller_generated') ? 0.5 : 1 }}
+              disabled={(invoiceType === 'seller_generated' ? filteredSellerInvoices.length === 0 : filteredOrders.length === 0)}
+              style={{ background: 'linear-gradient(135deg, #10b981, #059669)', opacity: (invoiceType === 'seller_generated' ? (filteredSellerInvoices.length === 0 ? 0.5 : 1) : (filteredOrders.length === 0 ? 0.5 : 1)) }}
             >
               <Table size={18} />
               <span>Bulk Excel Export</span>
@@ -830,91 +970,126 @@ const Invoices = () => {
                       <div className="animate-spin" style={{ display: 'inline-block' }}><Receipt size={24} /></div>
                     </td>
                   </tr>
-                ) : sellerInvoices.length === 0 ? (
+                ) : filteredSellerInvoices.length === 0 ? (
                   <tr>
                     <td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-                      No seller invoices generated yet.
+                      No seller invoices found matching your filters.
                     </td>
                   </tr>
-                ) : sellerInvoices.map((inv) => (
-                  <tr key={inv._id} style={{ borderBottom: '1px solid var(--glass-border)' }} className="table-row-hover hover-row">
-                    <td style={{ padding: '16px 24px' }}>
-                      <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--primary)' }}>
-                        #{String(inv.orderId?.orderNumber || inv.orderNumber || inv.orderId?.orderId || inv.orderRef || inv.invoiceNumber || '—').padStart(
-                          inv.orderId?.orderNumber || inv.orderNumber ? 5 : 0,
-                          '0'
+                ) : filteredSellerInvoices.map((inv) => {
+                  const primaryOrder = inv.orderId || (inv.orders && inv.orders[0]);
+                  const customerName = primaryOrder?.userId?.businessName || 
+                    primaryOrder?.userId?.companyName || 
+                    primaryOrder?.shippingAddress?.name || 
+                    primaryOrder?.userId?.name || 
+                    'Customer';
+                  const sellerName = inv.sellerName || 
+                    inv.sellerId?.businessName || 
+                    inv.sellerId?.storeName || 
+                    inv.sellerId?.name || 
+                    'Unknown Seller';
+                  const orderDisplayId = inv.orderNumber 
+                    ? `#${String(inv.orderNumber).padStart(5, '0')}`
+                    : (primaryOrder?.orderNumber ? `#${String(primaryOrder.orderNumber).padStart(5, '0')}` : (inv.invoiceNumber ? `#${inv.invoiceNumber}` : '—'));
+                  const imageCount = inv.detailedImages?.length || inv.images?.length || inv.imageCount || (inv.hasInvoiceImage ? 1 : 0);
+
+                  return (
+                    <tr key={inv._id} style={{ borderBottom: '1px solid var(--glass-border)' }} className="table-row-hover hover-row">
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--primary)', fontFamily: 'monospace' }}>
+                          {orderDisplayId}
+                        </div>
+                        {inv.invoiceNumber && inv.invoiceNumber !== orderDisplayId.replace('#', '') && (
+                          <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                            Inv: {inv.invoiceNumber}
+                          </div>
                         )}
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 24px' }}>
-                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-main)' }}>
-                        {inv.orderId?.userId?.businessName || inv.orderId?.userId?.companyName || inv.orderId?.shippingAddress?.name || inv.orderId?.userId?.name || 'Customer'}
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                        Seller: {inv.sellerName || inv.sellerId?.businessName || inv.sellerId?.storeName || inv.sellerId?.name || 'Unknown Seller'}
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 24px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-dim)' }}>
-                        <Calendar size={14} />
-                        {new Date(inv.createdAt).toLocaleDateString()}
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
-                        {new Date(inv.startDate).toLocaleDateString()} - {new Date(inv.endDate).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 24px' }}>
-                      <div style={{ fontWeight: 700, color: '#22c55e', fontSize: '15px' }}>₹{inv.totalAmount}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Seller-generated invoice</div>
-                    </td>
-                    <td style={{ padding: '16px 24px' }}>
-                      <span style={{ 
-                        padding: '6px 12px', 
-                        borderRadius: '20px', 
-                        fontSize: '11px', 
-                        fontWeight: 700,
-                        background: inv.status === 'Cleared' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
-                        color: inv.status === 'Cleared' ? '#22c55e' : '#eab308'
-                      }}>
-                        {inv.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '16px 24px' }}>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          onClick={() => handlePreviewSellerInvoice(inv._id)}
-                          className="btn-primary"
-                          style={{ padding: '8px 12px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none' }}
-                          title="Preview Single"
-                          disabled={previewingSellerInvoiceId === inv._id}
-                        >
-                          <Eye size={16} />
-                          <span style={{ marginLeft: '6px' }}>
-                            {previewingSellerInvoiceId === inv._id ? 'Loading...' : 'Preview Single'}
+                        {imageCount > 0 && (
+                          <span style={{ 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '4px', 
+                            marginTop: '4px',
+                            fontSize: '10px', 
+                            padding: '2px 6px', 
+                            borderRadius: '4px', 
+                            background: 'rgba(59, 130, 246, 0.1)', 
+                            color: '#3b82f6',
+                            fontWeight: 700
+                          }}>
+                            {imageCount} {imageCount === 1 ? 'image' : 'images'}
                           </span>
-                        </button>
-                        <button 
-                          onClick={() => handleDownloadInvoice(inv._id)}
-                          className="btn-primary"
-                          style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none' }}
-                          title="Download PDF"
-                        >
-                          <Download size={16} />
-                        </button>
-                        {inv.status !== 'Cleared' && (
-                          <button 
-                            onClick={() => handleClearInvoice(inv._id)}
-                            className="btn-primary"
-                            style={{ padding: '8px', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: 'none' }}
-                            title="Mark as Cleared"
-                          >
-                            <CheckCircle2 size={16} />
-                          </button>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-main)' }}>
+                          {customerName}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                          Seller: {sellerName}
+                        </div>
+                      </td>
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-dim)' }}>
+                          <Calendar size={14} />
+                          {new Date(inv.createdAt).toLocaleDateString()}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                          {new Date(inv.startDate).toLocaleDateString()} - {new Date(inv.endDate).toLocaleDateString()}
+                        </div>
+                      </td>
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ fontWeight: 700, color: '#22c55e', fontSize: '15px' }}>
+                          ₹{Number(inv.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Seller Generated Invoice</div>
+                      </td>
+                      <td style={{ padding: '16px 24px' }}>
+                        <span style={{ 
+                          padding: '6px 12px', 
+                          borderRadius: '20px', 
+                          fontSize: '11px', 
+                          fontWeight: 700,
+                          background: inv.status === 'Cleared' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                          color: inv.status === 'Cleared' ? '#22c55e' : '#eab308'
+                        }}>
+                          {inv.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={() => openSellerInvoiceModal(inv)}
+                            className="btn-primary"
+                            style={{ padding: '8px 12px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none' }}
+                            title="Preview Single"
+                          >
+                            <Eye size={16} />
+                            <span style={{ marginLeft: '6px' }}>Preview Single</span>
+                          </button>
+                          <button 
+                            onClick={() => handleDownloadInvoice(inv._id)}
+                            className="btn-primary"
+                            style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none' }}
+                            title="Download PDF"
+                          >
+                            <Download size={16} />
+                          </button>
+                          {inv.status !== 'Cleared' && (
+                            <button 
+                              onClick={() => handleClearInvoice(inv._id)}
+                              className="btn-primary"
+                              style={{ padding: '8px', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: 'none' }}
+                              title="Mark as Cleared"
+                            >
+                              <CheckCircle2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           ) : (
@@ -1134,6 +1309,318 @@ const Invoices = () => {
 
       {/* Hidden Iframe for actual printing */}
       <iframe ref={iframeRef} style={{ display: 'none' }} title="Print Frame" />
+
+      {/* Seller Invoice Details & Uploaded Images Modal */}
+      {showSellerInvoiceModal && selectedSellerInvoice && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(8px)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--card-bg, #18181b)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '24px',
+            width: '100%',
+            maxWidth: '820px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#6366f1', fontWeight: 800, letterSpacing: '0.5px' }}>
+                  SELLER GENERATED INVOICE
+                </span>
+                <h3 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
+                  Invoice #{selectedSellerInvoice.invoiceNumber || selectedSellerInvoice._id?.slice(-6)?.toUpperCase()}
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSellerInvoiceModal(false);
+                  setSelectedSellerInvoice(null);
+                }}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '8px',
+                  color: 'var(--text-dim)',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Info Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+              <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Seller Details</span>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                  {selectedSellerInvoice.sellerName || selectedSellerInvoice.sellerId?.businessName || selectedSellerInvoice.sellerId?.storeName || selectedSellerInvoice.sellerId?.name || 'Seller'}
+                </div>
+                {selectedSellerInvoice.sellerId?.phone && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                    Phone: {selectedSellerInvoice.sellerId.phone}
+                  </div>
+                )}
+                {selectedSellerInvoice.sellerId?.email && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+                    Email: {selectedSellerInvoice.sellerId.email}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Customer / Buyer</span>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                  {(selectedSellerInvoice.orderId?.userId?.businessName ||
+                    selectedSellerInvoice.orderId?.userId?.companyName ||
+                    selectedSellerInvoice.orderId?.shippingAddress?.name ||
+                    selectedSellerInvoice.orderId?.userId?.name ||
+                    (selectedSellerInvoice.orders && selectedSellerInvoice.orders[0]?.userId?.businessName) ||
+                    (selectedSellerInvoice.orders && selectedSellerInvoice.orders[0]?.userId?.name) ||
+                    'Customer')}
+                </div>
+                {(selectedSellerInvoice.orderId?.userId?.email || (selectedSellerInvoice.orders && selectedSellerInvoice.orders[0]?.userId?.email)) && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                    Email: {selectedSellerInvoice.orderId?.userId?.email || selectedSellerInvoice.orders[0]?.userId?.email}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Date Range & Order</span>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                  {new Date(selectedSellerInvoice.startDate).toLocaleDateString()} - {new Date(selectedSellerInvoice.endDate).toLocaleDateString()}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--primary)', marginTop: '2px', fontWeight: 600 }}>
+                  Order #{String(selectedSellerInvoice.orderNumber || selectedSellerInvoice.orderId?.orderNumber || selectedSellerInvoice.orders?.[0]?.orderNumber || selectedSellerInvoice.orderId?.orderId || selectedSellerInvoice.invoiceNumber || '—').padStart(5, '0')}
+                </div>
+              </div>
+
+              <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Total Amount & Status</span>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#22c55e', marginTop: '4px' }}>
+                  ₹{Number(selectedSellerInvoice.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <span style={{ 
+                  display: 'inline-block',
+                  marginTop: '6px',
+                  padding: '3px 10px', 
+                  borderRadius: '12px', 
+                  fontSize: '11px', 
+                  fontWeight: 800,
+                  background: selectedSellerInvoice.status === 'Cleared' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                  color: selectedSellerInvoice.status === 'Cleared' ? '#22c55e' : '#eab308'
+                }}>
+                  {selectedSellerInvoice.status || 'Pending'}
+                </span>
+              </div>
+            </div>
+
+            {/* Uploaded Documents & Images Section */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Uploaded Invoice Images ({selectedSellerInvoice.detailedImages?.length || selectedSellerInvoice.images?.length || (selectedSellerInvoice.hasInvoiceImage ? 1 : 0)})
+                </span>
+                <span style={{ fontSize: '11px', color: '#6366f1', fontWeight: 600 }}>
+                  Stored in MongoDB
+                </span>
+              </div>
+
+              {((selectedSellerInvoice.detailedImages && selectedSellerInvoice.detailedImages.length > 0) || 
+                (selectedSellerInvoice.images && selectedSellerInvoice.images.length > 0)) ? (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                  gap: '16px'
+                }}>
+                  {(selectedSellerInvoice.detailedImages || selectedSellerInvoice.images).map((imgDoc, idx) => {
+                    const imgBlobUrl = sellerImageBlobs[selectedSellerInvoice._id]?.[imgDoc._id];
+                    const isLoading = sellerImageLoading[`${selectedSellerInvoice._id}_${imgDoc._id}`];
+
+                    return (
+                      <div 
+                        key={imgDoc._id || idx}
+                        style={{
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '16px',
+                          overflow: 'hidden',
+                          background: '#09090b',
+                          display: 'flex',
+                          flexDirection: 'column'
+                        }}
+                      >
+                        <div 
+                          onClick={() => imgBlobUrl && setImageModalUrl(imgBlobUrl)}
+                          style={{
+                            height: '180px',
+                            background: '#000',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: imgBlobUrl ? 'pointer' : 'default',
+                            position: 'relative'
+                          }}
+                        >
+                          {imgBlobUrl ? (
+                            <>
+                              <img 
+                                src={imgBlobUrl} 
+                                alt={imgDoc.originalName || `Document ${idx + 1}`} 
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                inset: 0,
+                                background: 'rgba(0,0,0,0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                opacity: 0,
+                                transition: 'opacity 0.2s'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                              onMouseLeave={e => e.currentTarget.style.opacity = 0}
+                              >
+                                <Eye size={20} color="#fff" />
+                              </div>
+                            </>
+                          ) : isLoading ? (
+                            <Receipt size={24} className="animate-spin" style={{ color: '#6366f1' }} />
+                          ) : (
+                            <FileText size={28} style={{ color: 'var(--text-dim)' }} />
+                          )}
+                        </div>
+
+                        <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ overflow: 'hidden', paddingRight: '8px' }}>
+                            <p style={{
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              color: 'var(--text-main)',
+                              margin: 0,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }} title={imgDoc.originalName || imgDoc.filename}>
+                              Doc #{idx + 1}: {imgDoc.originalName || imgDoc.filename || 'Invoice Image'}
+                            </p>
+                            {imgDoc.size > 0 && (
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                                {(imgDoc.size / 1024).toFixed(1)} KB
+                              </span>
+                            )}
+                          </div>
+
+                          {imgBlobUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setImageModalUrl(imgBlobUrl)}
+                              className="btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '11px', height: 'auto' }}
+                            >
+                              View
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : selectedSellerInvoice.hasInvoiceImage ? (
+                <div style={{ padding: '30px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
+                  <FileText size={32} style={{ color: 'var(--text-dim)', margin: '0 auto 8px', display: 'block' }} />
+                  <p style={{ fontSize: '13px', color: 'var(--text-main)', fontWeight: 600, margin: '0 0 6px 0' }}>
+                    1 Invoice Image Attached
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: 0 }}>
+                    Image is embedded directly in the invoice PDF download.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ padding: '30px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
+                  <FileText size={32} style={{ color: 'var(--text-dim)', margin: '0 auto 8px', display: 'block' }} />
+                  <p style={{ fontSize: '13px', color: 'var(--text-dim)', margin: 0 }}>
+                    No invoice images were uploaded for this seller record.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+              <button 
+                onClick={() => {
+                  setShowSellerInvoiceModal(false);
+                  setSelectedSellerInvoice(null);
+                }}
+                className="btn-secondary"
+                style={{ padding: '10px 20px' }}
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => handlePreviewSellerInvoice(selectedSellerInvoice._id)}
+                className="btn-primary"
+                style={{ padding: '10px 20px', background: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', border: 'none' }}
+                disabled={previewingSellerInvoiceId === selectedSellerInvoice._id}
+              >
+                <Eye size={16} />
+                <span style={{ marginLeft: '6px' }}>
+                  {previewingSellerInvoiceId === selectedSellerInvoice._id ? 'Generating Preview...' : 'Preview PDF'}
+                </span>
+              </button>
+              <button 
+                onClick={() => handleDownloadInvoice(selectedSellerInvoice._id)}
+                className="btn-primary"
+                style={{ padding: '10px 20px' }}
+              >
+                <Download size={16} />
+                <span style={{ marginLeft: '6px' }}>Download PDF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox for Full-Size Image Preview */}
+      {imageModalUrl && (
+        <div 
+          onClick={() => setImageModalUrl('')}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.9)',
+            zIndex: 11000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            cursor: 'zoom-out'
+          }}
+        >
+          <div style={{ position: 'relative', maxWidth: '92vw', maxHeight: '92vh' }}>
+            <img 
+              src={imageModalUrl} 
+              alt="Seller Invoice Upload" 
+              style={{ maxWidth: '100%', maxHeight: '92vh', objectFit: 'contain', borderRadius: '12px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7)' }} 
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
