@@ -2,7 +2,7 @@ import toast from 'react-hot-toast';
 import React, { useState, useEffect, useRef } from 'react';
 import api, { getImageUrl } from '../utils/api';
 import { 
-  Receipt, Printer, Search, Filter, Calendar, CheckCircle2, FileText, X, ChevronDown, Edit2, Download, Table
+  Receipt, Printer, Search, Filter, Calendar, CheckCircle2, FileText, X, ChevronDown, Edit2, Download, Table, Eye
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -126,19 +126,18 @@ const Invoices = () => {
   const [customOrderNumbers, setCustomOrderNumbers] = useState({});
 
   const [sellerInvoices, setSellerInvoices] = useState([]);
+  const [sellerInvoicePreviewUrl, setSellerInvoicePreviewUrl] = useState('');
+  const [previewingSellerInvoiceId, setPreviewingSellerInvoiceId] = useState(null);
 
   useEffect(() => {
-    if (invoiceType === 'seller_generated') {
-      if (sellerInvoices.length === 0) fetchSellerInvoices();
-    } else {
-      if (orders.length === 0) fetchOrders();
-    }
-  }, [invoiceType]);
+    if (!sellerInvoicePreviewUrl) return undefined;
+    return () => URL.revokeObjectURL(sellerInvoicePreviewUrl);
+  }, [sellerInvoicePreviewUrl]);
 
   const fetchSellerInvoices = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/seller-invoices/admin/all');
+      const { data } = await api.get('/seller-invoices/admin/all', { skipCache: true });
       setSellerInvoices(data);
     } catch (err) {
       console.error('Failed to fetch seller invoices:', err);
@@ -172,6 +171,20 @@ const Invoices = () => {
     }
   };
 
+  const handlePreviewSellerInvoice = async (id) => {
+    setPreviewingSellerInvoiceId(id);
+    try {
+      const response = await api.get(`/seller-invoices/${id}/download`, { responseType: 'blob' });
+      setSellerInvoicePreviewUrl(URL.createObjectURL(
+        new Blob([response.data], { type: 'application/pdf' })
+      ));
+    } catch {
+      toast.error('Failed to preview invoice');
+    } finally {
+      setPreviewingSellerInvoiceId(null);
+    }
+  };
+
   const fetchOrders = async () => {
     setLoading(true);
     try {
@@ -194,6 +207,14 @@ const Invoices = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (invoiceType === 'seller_generated') {
+      fetchSellerInvoices();
+    } else if (orders.length === 0) {
+      fetchOrders();
+    }
+  }, [invoiceType]);
 
   useEffect(() => {
     applyFilters();
@@ -794,9 +815,10 @@ const Invoices = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'var(--card-bg)' }}>
-                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>SELLER</th>
-                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>PERIOD</th>
-                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>AMOUNT / ORDERS</th>
+                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>ORDER ID</th>
+                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>CUSTOMER / SELLER</th>
+                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>DATE</th>
+                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>AMOUNT / TYPE</th>
                   <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>STATUS</th>
                   <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>ACTIONS</th>
                 </tr>
@@ -804,38 +826,46 @@ const Invoices = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="5" style={{ padding: '40px', textAlign: 'center' }}>
+                    <td colSpan="6" style={{ padding: '40px', textAlign: 'center' }}>
                       <div className="animate-spin" style={{ display: 'inline-block' }}><Receipt size={24} /></div>
                     </td>
                   </tr>
                 ) : sellerInvoices.length === 0 ? (
                   <tr>
-                    <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
                       No seller invoices generated yet.
                     </td>
                   </tr>
                 ) : sellerInvoices.map((inv) => (
                   <tr key={inv._id} style={{ borderBottom: '1px solid var(--glass-border)' }} className="table-row-hover hover-row">
                     <td style={{ padding: '16px 24px' }}>
+                      <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--primary)' }}>
+                        #{String(inv.orderId?.orderNumber || inv.orderNumber || inv.orderId?.orderId || inv.orderRef || inv.invoiceNumber || '—').padStart(
+                          inv.orderId?.orderNumber || inv.orderNumber ? 5 : 0,
+                          '0'
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px 24px' }}>
                       <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-main)' }}>
-                        {inv.sellerId?.businessName || inv.sellerId?.name || 'Unknown Seller'}
+                        {inv.orderId?.userId?.businessName || inv.orderId?.userId?.companyName || inv.orderId?.shippingAddress?.name || inv.orderId?.userId?.name || 'Customer'}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                        {inv.sellerId?.email || ''}
+                        Seller: {inv.sellerName || inv.sellerId?.businessName || inv.sellerId?.storeName || inv.sellerId?.name || 'Unknown Seller'}
                       </div>
                     </td>
                     <td style={{ padding: '16px 24px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-dim)' }}>
                         <Calendar size={14} />
-                        {new Date(inv.startDate).toLocaleDateString()} - {new Date(inv.endDate).toLocaleDateString()}
+                        {new Date(inv.createdAt).toLocaleDateString()}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
-                        Generated: {new Date(inv.createdAt).toLocaleDateString()}
+                        {new Date(inv.startDate).toLocaleDateString()} - {new Date(inv.endDate).toLocaleDateString()}
                       </div>
                     </td>
                     <td style={{ padding: '16px 24px' }}>
                       <div style={{ fontWeight: 700, color: '#22c55e', fontSize: '15px' }}>₹{inv.totalAmount}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{inv.orderCount} Orders</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Seller-generated invoice</div>
                     </td>
                     <td style={{ padding: '16px 24px' }}>
                       <span style={{ 
@@ -851,6 +881,18 @@ const Invoices = () => {
                     </td>
                     <td style={{ padding: '16px 24px' }}>
                       <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => handlePreviewSellerInvoice(inv._id)}
+                          className="btn-primary"
+                          style={{ padding: '8px 12px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none' }}
+                          title="Preview Single"
+                          disabled={previewingSellerInvoiceId === inv._id}
+                        >
+                          <Eye size={16} />
+                          <span style={{ marginLeft: '6px' }}>
+                            {previewingSellerInvoiceId === inv._id ? 'Loading...' : 'Preview Single'}
+                          </span>
+                        </button>
                         <button 
                           onClick={() => handleDownloadInvoice(inv._id)}
                           className="btn-primary"
@@ -931,6 +973,22 @@ const Invoices = () => {
           )}
         </div>
       </div>
+
+      {sellerInvoicePreviewUrl && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', zIndex: 10000 }}>
+          <div style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)' }}>
+            <h2 style={{ margin: 0, color: 'var(--text-main)', fontSize: '18px' }}>Seller Invoice Preview</h2>
+            <button onClick={() => setSellerInvoicePreviewUrl('')} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }} aria-label="Close invoice preview">
+              <X size={24} />
+            </button>
+          </div>
+          <iframe
+            src={sellerInvoicePreviewUrl}
+            title="Seller invoice preview"
+            style={{ flex: 1, width: '100%', border: 0, background: '#fff' }}
+          />
+        </div>
+      )}
 
       {/* Print Preview Modal */}
       {showPreview && (
