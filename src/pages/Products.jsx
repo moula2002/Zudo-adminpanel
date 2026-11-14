@@ -162,7 +162,7 @@ const Products = () => {
     const sellerPricePerProductUnit = rawSellerPrice > 0 ? rawSellerPrice : 0;
     const sellerPricePerBaseUnit = sellerBasePrice;
 
-    // 3. Admin Commission Per Base Unit (e.g. ₹5 / KG)
+    // 2. Admin Commission Per Base Unit (e.g. ₹2 / KG)
     const isFlat = (product.commissionType || 'flat') === 'flat';
     const adminCommissionPerBaseUnit = product.adminCommissionPerBaseUnit !== undefined && product.adminCommissionPerBaseUnit !== null
       ? Number(product.adminCommissionPerBaseUnit)
@@ -170,7 +170,37 @@ const Products = () => {
           ? Number(product.commissionRate)
           : Number(product.commissionValue ?? 0));
 
-    // 4. Total Commission = Product Unit Size * Admin Commission Per Unit (e.g. 10 * 5 = ₹50)
+    // Calculate Per-Unit Commission (e.g. ₹2 / KG)
+    const commissionPerBaseUnit = isFlat
+      ? adminCommissionPerBaseUnit
+      : Math.round((sellerPricePerBaseUnit * adminCommissionPerBaseUnit / 100) * 100) / 100;
+
+    // 3. Customer Base Price Per Unit = Seller Base Price + Admin Commission Per Unit (e.g. 100 + 2 = ₹102 / KG)
+    const customerBasePricePerBaseUnit = Math.round((sellerPricePerBaseUnit + commissionPerBaseUnit) * 100) / 100;
+
+    // 4. GST Percentage
+    const gstPercent = product.gstPercent !== undefined && product.gstPercent !== null
+      ? Number(product.gstPercent)
+      : 0;
+    const isGstInclusive = Boolean(product.isGstInclusive);
+
+    // 5. GST Amount & Customer Final Price Per Unit (e.g. ₹102 * 2% = ₹2.04, Final = ₹104.04 / KG)
+    let gstAmountPerBaseUnit = 0;
+    let customerFinalPricePerBaseUnit = customerBasePricePerBaseUnit;
+
+    if (gstPercent > 0) {
+      if (isGstInclusive) {
+        const baseBeforeTax = customerBasePricePerBaseUnit / (1 + gstPercent / 100);
+        gstAmountPerBaseUnit = Math.round((customerBasePricePerBaseUnit - baseBeforeTax) * 100) / 100;
+        customerFinalPricePerBaseUnit = customerBasePricePerBaseUnit;
+      } else {
+        gstAmountPerBaseUnit = Math.round((customerBasePricePerBaseUnit * (gstPercent / 100)) * 100) / 100;
+        customerFinalPricePerBaseUnit = Math.round((customerBasePricePerBaseUnit + gstAmountPerBaseUnit) * 100) / 100;
+      }
+    }
+
+    // --- Package Level Calculations (Separate) ---
+    // Total Commission = Product Unit Size * Admin Commission Per Unit (e.g. 10 * 2 = ₹20 / BAG)
     let commissionPerProductUnit = 0;
     if (isFlat) {
       commissionPerProductUnit = Math.round(adminCommissionPerBaseUnit * unitSize * 100) / 100;
@@ -178,16 +208,10 @@ const Products = () => {
       commissionPerProductUnit = Math.round((sellerPricePerProductUnit * adminCommissionPerBaseUnit / 100) * 100) / 100;
     }
 
-    // 5. Customer Base Price = Seller Unit Price + Total Commission (e.g. 100 + 50 = ₹150)
+    // Customer Base Price Per Package = Seller Package Price + Total Commission (e.g. 1000 + 20 = ₹1,020 / BAG)
     const customerUnitBasePrice = Math.round((sellerPricePerProductUnit + commissionPerProductUnit) * 100) / 100;
 
-    // 6. GST Percentage
-    const gstPercent = product.gstPercent !== undefined && product.gstPercent !== null
-      ? Number(product.gstPercent)
-      : 0;
-    const isGstInclusive = Boolean(product.isGstInclusive);
-
-    // 7. GST Amount & 8. Customer Final Price
+    // GST Amount & Customer Final Price Per Package (e.g. ₹1,020 * 2% = ₹20.40, Final = ₹1,040.40 / BAG)
     let gstAmountPerProductUnit = 0;
     let customerFinalPricePerProductUnit = customerUnitBasePrice;
 
@@ -201,8 +225,6 @@ const Products = () => {
         customerFinalPricePerProductUnit = Math.round((customerUnitBasePrice + gstAmountPerProductUnit) * 100) / 100;
       }
     }
-
-    // 10. Customer Final Price Per Product Unit = customerFinalPricePerProductUnit
 
     // Compatibility & Custom Unit Validation (Section 6)
     const isCompatible = product.isCompatible !== false;
@@ -218,8 +240,14 @@ const Products = () => {
     const totalStockValuation = isGstInclusive ? totalStockSubtotal : Math.round((totalStockSubtotal + totalStockGst) * 100) / 100;
 
     return {
-      // 11-Step Breakdown (Section 5)
+      // Per-Unit Breakdown (Primary Main Calculation)
       sellerPricePerBaseUnit,
+      commissionPerBaseUnit,
+      customerBasePricePerBaseUnit,
+      gstAmountPerBaseUnit,
+      customerFinalPricePerBaseUnit,
+
+      // Package Level Breakdown (Separate)
       productMeasurementUnit,
       packagingType,
       unitSize,
@@ -267,12 +295,16 @@ const Products = () => {
         Subcategory: product.subCategoryId?.name || 'No Subcategory',
         '1. Seller Price / Base Unit (₹)': info.sellerPricePerBaseUnit,
         '2. Product Unit Size': `${info.unitSize} ${info.productMeasurementUnit} / ${info.packagingType}`,
-        '3. Admin Commission / Base Unit (₹)': info.adminCommissionPerBaseUnit,
-        '4. Commission / Product Unit (₹)': info.commissionPerProductUnit,
-        '5. Customer Unit Base Price (₹)': info.customerUnitBasePrice,
-        '6. GST %': info.gstPercent,
-        '7. GST Amount / Product Unit (₹)': info.gstAmountPerProductUnit,
-        '8. Customer Final Price / Product Unit (₹)': info.customerFinalPricePerProductUnit,
+        '3. Admin Commission / Base Unit (₹)': info.commissionPerBaseUnit,
+        '4. Customer Base Price / Base Unit (₹)': info.customerBasePricePerBaseUnit,
+        '5. GST Amount / Base Unit (₹)': info.gstAmountPerBaseUnit,
+        '6. Customer Final Price / Base Unit (₹)': info.customerFinalPricePerBaseUnit,
+        '7. Seller Package Price (₹)': info.sellerPricePerProductUnit,
+        '8. Total Package Commission (₹)': info.commissionPerProductUnit,
+        '9. Customer Package Base Price (₹)': info.customerUnitBasePrice,
+        '10. GST %': info.gstPercent,
+        '11. GST Amount / Package (₹)': info.gstAmountPerProductUnit,
+        '12. Customer Final Price / Package (₹)': info.customerFinalPricePerProductUnit,
         'Available Stock (Packs)': info.availableStock,
         'Total Stock Weight': `${info.totalStockWeight} ${info.productMeasurementUnit}`,
         'Total Stock Commission (₹)': info.totalStockCommission,
@@ -501,43 +533,66 @@ const Products = () => {
                       borderRadius: '12px',
                       border: '1px solid var(--glass-border)'
                     }}>
+                      {/* Main Calculation: Per-Unit Flow */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>1. Product Unit Size:</span>
-                        <strong style={{ color: 'var(--text-main)' }}>1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit}</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>2. Seller Unit Price:</span>
+                        <span style={{ color: 'var(--text-dim)' }}>Seller Base Price:</span>
                         <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>Package Price:</span>
-                        <strong style={{ color: 'var(--text-main)' }}>₹{info.sellerPricePerProductUnit.toFixed(2)} / {info.packagingType}</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>3. Admin Commission / Unit:</span>
+                        <span style={{ color: 'var(--text-dim)' }}>Admin Commission:</span>
                         <span style={{ color: '#6366f1', fontWeight: 600 }}>
-                          {info.isFlat ? `₹${info.adminCommissionPerBaseUnit.toFixed(2)} / ${info.productMeasurementUnit}` : `${info.adminCommissionPerBaseUnit}%`}
+                          ₹{info.commissionPerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}
+                          {!info.isFlat && ` (${info.adminCommissionPerBaseUnit}%)`}
                         </span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>4. Total Commission:</span>
-                        <strong style={{ color: '#6366f1' }}>₹{info.commissionPerProductUnit.toFixed(2)}</strong>
-                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px dashed var(--glass-border)', paddingTop: '4px' }}>
-                        <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>5. Customer Base Price:</span>
-                        <strong style={{ color: 'var(--text-main)' }}>₹{info.customerUnitBasePrice.toFixed(2)}</strong>
+                        <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Customer Base Price:</span>
+                        <strong style={{ color: 'var(--text-main)' }}>₹{info.customerBasePricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}</strong>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>6. GST Percentage:</span>
-                        <span style={{ color: '#f59e0b', fontWeight: 600 }}>{info.gstPercent}%{info.isGstInclusive ? ' (incl)' : ''}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ color: 'var(--text-dim)' }}>7. GST Amount:</span>
-                        <span style={{ color: '#f59e0b' }}>₹{info.gstAmountPerProductUnit.toFixed(2)}</span>
+                        <span style={{ color: 'var(--text-dim)' }}>GST ({info.gstPercent}%):</span>
+                        <span style={{ color: '#f59e0b' }}>₹{info.gstAmountPerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '4px', marginTop: '2px' }}>
-                        <span style={{ fontWeight: 700, color: '#10b981' }}>8. Customer Final Price:</span>
-                        <strong style={{ color: '#10b981', fontSize: '13px' }}>₹{info.customerFinalPricePerProductUnit.toFixed(2)}</strong>
+                        <span style={{ fontWeight: 700, color: '#10b981' }}>Customer Final Price:</span>
+                        <strong style={{ color: '#10b981', fontSize: '13px' }}>₹{info.customerFinalPricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}</strong>
+                      </div>
+
+                      {/* Package Level Breakdown (Separate) */}
+                      <div style={{
+                        marginTop: '8px',
+                        paddingTop: '8px',
+                        borderTop: '1px dashed var(--glass-border)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '3px',
+                        background: 'rgba(99, 102, 241, 0.05)',
+                        padding: '8px 10px',
+                        borderRadius: '8px'
+                      }}>
+                        <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '2px' }}>
+                          Package Breakdown (1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit})
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+                          <span style={{ color: 'var(--text-dim)' }}>Seller Package Price:</span>
+                          <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>₹{info.sellerPricePerProductUnit.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+                          <span style={{ color: 'var(--text-dim)' }}>Total Commission:</span>
+                          <span style={{ color: '#6366f1', fontWeight: 600 }}>₹{info.commissionPerProductUnit.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+                          <span style={{ color: 'var(--text-dim)' }}>Customer Base Price:</span>
+                          <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>₹{info.customerUnitBasePrice.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+                          <span style={{ color: 'var(--text-dim)' }}>GST Amount:</span>
+                          <span style={{ color: '#f59e0b', fontWeight: 600 }}>₹{info.gstAmountPerProductUnit.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px', borderTop: '1px solid rgba(16, 185, 129, 0.2)', paddingTop: '3px', marginTop: '2px' }}>
+                          <span style={{ color: '#10b981', fontWeight: 700 }}>Package Final Price:</span>
+                          <strong style={{ color: '#10b981' }}>₹{info.customerFinalPricePerProductUnit.toFixed(2)} / {info.packagingType}</strong>
+                        </div>
                       </div>
 
                       {!info.isCompatible && (
@@ -731,16 +786,7 @@ const Products = () => {
                 <div className="simulator-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))' }}>
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      1. Product Unit Size
-                    </span>
-                    <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
-                      1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit}
-                    </strong>
-                  </div>
-
-                  <div className="simulator-stat-card">
-                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      2. Seller Unit Price
+                      Seller Base Price
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
                       ₹{info.sellerPricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}
@@ -749,64 +795,46 @@ const Products = () => {
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      Package Price
-                    </span>
-                    <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
-                      ₹{info.sellerPricePerProductUnit.toFixed(2)} / {info.packagingType}
-                    </strong>
-                  </div>
-
-                  <div className="simulator-stat-card">
-                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      3. Admin Commission / Unit
+                      Admin Commission
                     </span>
                     <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700 }}>
-                      {info.isFlat ? `₹${info.adminCommissionPerBaseUnit.toFixed(2)} / ${info.productMeasurementUnit}` : `${info.adminCommissionPerBaseUnit}%`}
+                      ₹{info.commissionPerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}
                     </strong>
                   </div>
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      4. Total Commission
-                    </span>
-                    <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700 }}>
-                      ₹{info.commissionPerProductUnit.toFixed(2)}
-                    </strong>
-                  </div>
-
-                  <div className="simulator-stat-card">
-                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      5. Customer Base Price
+                      Customer Base Price
                     </span>
                     <strong style={{ fontSize: '14px', color: 'var(--text-main)', fontWeight: 700 }}>
-                      ₹{info.customerUnitBasePrice.toFixed(2)}
+                      ₹{info.customerBasePricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}
                     </strong>
                   </div>
 
                   <div className="simulator-stat-card">
                     <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      6. GST %
+                      GST ({info.gstPercent}%)
                     </span>
                     <strong style={{ fontSize: '14px', color: '#f59e0b', fontWeight: 700 }}>
-                      {info.gstPercent}%
-                    </strong>
-                  </div>
-
-                  <div className="simulator-stat-card">
-                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      7. GST Amount
-                    </span>
-                    <strong style={{ fontSize: '14px', color: '#f59e0b', fontWeight: 700 }}>
-                      ₹{info.gstAmountPerProductUnit.toFixed(2)}
+                      ₹{info.gstAmountPerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}
                     </strong>
                   </div>
 
                   <div className="simulator-stat-card highlight">
                     <span style={{ fontSize: '10px', color: '#10b981', display: 'block', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>
-                      8. Customer Final Price
+                      Customer Final Price
                     </span>
                     <strong style={{ fontSize: '15px', color: '#10b981', fontWeight: 800 }}>
-                      ₹{info.customerFinalPricePerProductUnit.toFixed(2)}
+                      ₹{info.customerFinalPricePerBaseUnit.toFixed(2)} / {info.productMeasurementUnit}
+                    </strong>
+                  </div>
+
+                  <div className="simulator-stat-card" style={{ background: 'rgba(99, 102, 241, 0.05)', borderColor: 'rgba(99, 102, 241, 0.2)' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'block', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Package Final Price (1 {info.packagingType} = {info.unitSize} {info.productMeasurementUnit})
+                    </span>
+                    <strong style={{ fontSize: '14px', color: '#6366f1', fontWeight: 700 }}>
+                      ₹{info.customerFinalPricePerProductUnit.toFixed(2)} / {info.packagingType}
                     </strong>
                   </div>
                 </div>
