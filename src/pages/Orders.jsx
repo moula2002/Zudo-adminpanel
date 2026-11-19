@@ -16,7 +16,16 @@ const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [allDrivers, setAllDrivers] = useState([]);
-  const [viewMode, setViewMode] = useState('table');
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
+  const [viewMode, setViewMode] = useState(() => (typeof window !== 'undefined' && window.innerWidth <= 768 ? 'cards' : 'table'));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [orderRoutes, setOrderRoutes] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('zudo_order_routes') || '{}');
@@ -1921,31 +1930,87 @@ const Orders = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
       {/* Header & Main Filters */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'flex-start', flexWrap: 'wrap', gap: '16px', width: '100%' }}>
         <div>
-          <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Order Command Center</h1>
-          <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginTop: '4px' }}>Unified B2B & B2C fulfillment management</p>
+          <h1 style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Order Command Center</h1>
+          <p style={{ fontSize: isMobile ? '12px' : '14px', color: 'var(--text-dim)', marginTop: '4px' }}>Unified B2B & B2C fulfillment management</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button onClick={exportOrders} className="btn-primary" style={{ background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Download size={18} /> Export
-          </button>
-          <button onClick={handleRefresh} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <RefreshCcw size={18} /> Refresh
-          </button>
+        
+        <div style={{ 
+          display: 'flex', 
+          gap: '10px', 
+          flexWrap: 'wrap', 
+          alignItems: 'center',
+          width: isMobile ? '100%' : 'auto' 
+        }}>
           <button 
             onClick={() => setShowCreateModal(true)} 
             className="btn-primary" 
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', border: 'none', color: 'var(--text-main)' }}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              gap: '8px', 
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
+              border: 'none', 
+              color: '#ffffff',
+              flex: isMobile ? '1 1 100%' : 'none',
+              padding: isMobile ? '12px 16px' : '10px 18px',
+              fontSize: '13px'
+            }}
           >
             <Plus size={18} /> Create Order
           </button>
 
-          <div style={{ display: 'flex', gap: '4px', background: 'var(--glass-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+          <button 
+            onClick={handleRefresh} 
+            className="btn-primary" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              gap: '8px',
+              flex: isMobile ? '1 1 calc(50% - 6px)' : 'none',
+              padding: '9px 14px',
+              fontSize: '13px'
+            }}
+          >
+            <RefreshCcw size={16} /> Refresh
+          </button>
+
+          <button 
+            onClick={exportOrders} 
+            className="btn-primary" 
+            style={{ 
+              background: 'var(--glass-bg)', 
+              color: 'var(--text-main)', 
+              border: '1px solid var(--glass-border)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              gap: '8px',
+              flex: isMobile ? '1 1 calc(50% - 6px)' : 'none',
+              padding: '9px 14px',
+              fontSize: '13px'
+            }}
+          >
+            <Download size={16} /> Export
+          </button>
+
+          <div style={{ 
+            display: 'flex', 
+            gap: '4px', 
+            background: 'var(--glass-bg)', 
+            padding: '4px', 
+            borderRadius: '12px', 
+            border: '1px solid var(--glass-border)',
+            width: isMobile ? '100%' : 'auto'
+          }}>
             <button
               type="button"
               onClick={() => setViewMode('table')}
               style={{
+                flex: isMobile ? 1 : 'none',
                 padding: '8px 12px',
                 borderRadius: '8px',
                 fontSize: '12px',
@@ -1954,6 +2019,7 @@ const Orders = () => {
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '6px',
                 background: viewMode === 'table' ? 'var(--primary)' : 'transparent',
                 color: viewMode === 'table' ? '#fff' : 'var(--text-dim)',
@@ -1967,6 +2033,7 @@ const Orders = () => {
               type="button"
               onClick={() => setViewMode('cards')}
               style={{
+                flex: isMobile ? 1 : 'none',
                 padding: '8px 12px',
                 borderRadius: '8px',
                 fontSize: '12px',
@@ -1975,6 +2042,7 @@ const Orders = () => {
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '6px',
                 background: viewMode === 'cards' ? 'var(--primary)' : 'transparent',
                 color: viewMode === 'cards' ? '#fff' : 'var(--text-dim)',
@@ -1989,16 +2057,37 @@ const Orders = () => {
       </div>
 
       {/* Status Tabs */}
-      <div style={{ display: 'flex', gap: '12px', background: 'var(--glass-bg)', padding: '6px', borderRadius: '16px', border: '1px solid var(--glass-border)', overflowX: 'auto' }}>
+      <div 
+        className="custom-scrollbar"
+        style={{ 
+          display: 'flex', 
+          gap: '8px', 
+          background: 'var(--glass-bg)', 
+          padding: '6px', 
+          borderRadius: '16px', 
+          border: '1px solid var(--glass-border)', 
+          overflowX: 'auto',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
+          WebkitOverflowScrolling: 'touch'
+        }}
+      >
         {statuses.map(status => (
           <button
             key={status}
             onClick={() => setActiveTab(status)}
             style={{
-              padding: '10px 20px', borderRadius: '12px', fontSize: '13px', fontWeight: 700, border: 'none', cursor: 'pointer',
+              padding: isMobile ? '8px 14px' : '10px 20px', 
+              borderRadius: '10px', 
+              fontSize: isMobile ? '12px' : '13px', 
+              fontWeight: 700, 
+              border: 'none', 
+              cursor: 'pointer',
               background: activeTab === status ? 'var(--primary)' : 'transparent',
               color: activeTab === status ? 'white' : 'var(--text-dim)',
-              whiteSpace: 'nowrap', transition: '0.2s'
+              whiteSpace: 'nowrap', 
+              transition: '0.2s',
+              flexShrink: 0
             }}
           >
             {status}
@@ -2007,19 +2096,31 @@ const Orders = () => {
       </div>
 
       {/* Secondary Filters: Type & Split Stats */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', width: '100%' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
           {(!user.targetSegment || user.targetSegment === 'Both') && (
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ 
+              display: 'flex', 
+              gap: '6px', 
+              width: isMobile ? '100%' : 'auto',
+              overflowX: isMobile ? 'auto' : 'visible'
+            }}>
               {['All', 'B2C', 'B2B'].map(type => (
                 <button
                   key={type}
                   onClick={() => setActiveType(type)}
                   style={{
-                    padding: '8px 20px', borderRadius: '10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                    background: activeType === type ? 'rgba(99, 102, 241, 0.1)' : 'var(--glass-bg)',
+                    flex: isMobile ? 1 : 'none',
+                    padding: isMobile ? '8px 10px' : '8px 20px', 
+                    borderRadius: '10px', 
+                    fontSize: '12px', 
+                    fontWeight: 700, 
+                    cursor: 'pointer',
+                    background: activeType === type ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
                     color: activeType === type ? 'var(--primary)' : 'var(--text-dim)',
-                    border: `1px solid ${activeType === type ? 'var(--primary)' : 'var(--glass-border)'}`
+                    border: `1px solid ${activeType === type ? 'var(--primary)' : 'var(--glass-border)'}`,
+                    whiteSpace: 'nowrap',
+                    textAlign: 'center'
                   }}
                 >
                   {type === 'All' ? 'Combined View' : `${type} Segment`}
@@ -2028,33 +2129,50 @@ const Orders = () => {
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date:</span>
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              style={{
-                padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                background: 'var(--glass-bg)', color: 'var(--text-main)',
-                border: '1px solid var(--glass-border)', outline: 'none'
-              }}
-            />
-            {dateFilter && (
-              <button 
-                onClick={() => setDateFilter('')}
-                style={{ 
-                  background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', 
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            width: isMobile ? '100%' : 'auto',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: isMobile ? '1 1 auto' : 'none' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date:</span>
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                style={{
+                  padding: '8px 12px', 
+                  borderRadius: '10px', 
+                  fontSize: '12px', 
+                  fontWeight: 700, 
+                  cursor: 'pointer',
+                  background: 'var(--glass-bg)', 
+                  color: 'var(--text-main)',
+                  border: '1px solid var(--glass-border)', 
+                  outline: 'none',
+                  flex: isMobile ? 1 : 'none'
                 }}
-                title="Clear Date"
-              >
-                <XCircle size={16} />
-              </button>
-            )}
+              />
+              {dateFilter && (
+                <button 
+                  onClick={() => setDateFilter('')}
+                  style={{ 
+                    background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}
+                  title="Clear Date"
+                >
+                  <XCircle size={16} />
+                </button>
+              )}
+            </div>
+            
             <button
               onClick={printTodayManifest}
               style={{
+                flex: isMobile ? '1 1 auto' : 'none',
                 padding: '8px 16px',
                 borderRadius: '10px',
                 fontSize: '12px',
@@ -2065,6 +2183,7 @@ const Orders = () => {
                 border: '1px solid var(--glass-border)',
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '6px',
                 transition: 'all 0.2s',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
@@ -2087,14 +2206,28 @@ const Orders = () => {
 
       {/* Orders List */}
       {viewMode === 'table' ? (
-        <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
+        <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden', maxWidth: '100%', boxSizing: 'border-box' }}>
+          {isMobile && (
+            <div style={{ 
+              padding: '8px 16px', 
+              background: 'rgba(99, 102, 241, 0.08)', 
+              color: 'var(--primary)', 
+              fontSize: '11px', 
+              fontWeight: 600, 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px' 
+            }}>
+              💡 Swipe horizontally on the table to see full order routes and driver details
+            </div>
+          )}
           {filteredOrders.length === 0 ? (
             <div style={{ padding: '80px', textAlign: 'center' }}>
               <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.2 }} />
               <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)' }}>No orders match the selected criteria</h3>
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }} className="custom-scrollbar">
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1180px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'var(--card-bg)' }}>
@@ -2525,7 +2658,7 @@ const Orders = () => {
           ) : filteredOrders.map((order, index) => (
           <div key={order._id} className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--glass-border)', maxWidth: '100%', boxSizing: 'border-box' }}>
             {/* Order Header */}
-            <div style={{ padding: '16px 24px', background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ padding: isMobile ? '12px 14px' : '16px 24px', background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                 <div>
                   <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Order Ref</span>
@@ -2683,7 +2816,7 @@ const Orders = () => {
             </div>
 
             {/* Order Content */}
-            <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px', boxSizing: 'border-box' }}>
+            <div style={{ padding: isMobile ? '16px 14px' : '24px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: isMobile ? '16px' : '24px', boxSizing: 'border-box' }}>
               {/* Customer Intel */}
               <div>
                 <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>

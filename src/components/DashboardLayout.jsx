@@ -87,6 +87,18 @@ const DashboardLayout = ({ children }) => {
     }
   }, [location.pathname, isMobile]);
 
+  // Lock body scroll when mobile sidebar is open
+  React.useEffect(() => {
+    if (isMobile && sidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobile, sidebarOpen]);
+
   React.useEffect(() => {
     if (admin.role === 'super_admin') {
       fetchLocations();
@@ -289,22 +301,26 @@ const DashboardLayout = ({ children }) => {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', flexDirection: 'row', position: 'relative' }}>
       {/* Mobile Backdrop */}
-      {isMobile && sidebarOpen && (
+      {isMobile && (
         <div
           onClick={() => setSidebarOpen(false)}
+          aria-hidden={!sidebarOpen}
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 23, 42, 0.4)',
+            background: 'rgba(15, 23, 42, 0.6)',
             backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
             zIndex: 998,
+            opacity: sidebarOpen ? 1 : 0,
+            pointerEvents: sidebarOpen ? 'auto' : 'none',
             transition: 'opacity 0.3s ease'
           }}
         />
       )}
 
       {/* Sidebar */}
-      <aside className="glass animate-slide" style={{
+      <aside className="animate-slide" style={{
         width: '280px',
         padding: '24px 14px',
         margin: isMobile ? '0' : '16px',
@@ -319,7 +335,12 @@ const DashboardLayout = ({ children }) => {
         borderRadius: isMobile ? '0 24px 24px 0' : '16px',
         transform: isMobile ? (sidebarOpen ? 'translateX(0)' : 'translateX(-110%)') : 'none',
         transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin 0.3s, height 0.3s, border-radius 0.3s',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        background: isMobile ? (theme === 'dark' ? '#0f172a' : '#ffffff') : 'var(--glass-bg)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        border: '1px solid var(--glass-border)',
+        boxShadow: isMobile && sidebarOpen ? '0 20px 40px rgba(0,0,0,0.35)' : 'none'
       }}>
         <div style={{ padding: '4px 12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <div>
@@ -568,28 +589,59 @@ const DashboardLayout = ({ children }) => {
               <p style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'capitalize', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{admin.role?.replace('_', ' ') || 'Super Admin'}</p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              borderRadius: '9px',
-              border: 'none',
-              background: 'var(--glass-bg)',
-              color: 'var(--text-main)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: 500,
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <LogOut size={16} />
-            <span>Logout</span>
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              style={{
+                flex: 1,
+                padding: '8px 10px',
+                borderRadius: '9px',
+                border: '1px solid var(--glass-border)',
+                background: 'var(--glass-bg)',
+                color: 'var(--text-main)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 600,
+                transition: 'all 0.2s ease'
+              }}
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun size={15} style={{ color: '#f59e0b', strokeWidth: 2.2 }} />
+              ) : (
+                <Moon size={15} style={{ color: '#6366f1', strokeWidth: 2.2 }} />
+              )}
+              <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              style={{
+                flex: 1,
+                padding: '8px 10px',
+                borderRadius: '9px',
+                border: '1px solid var(--glass-border)',
+                background: 'var(--glass-bg)',
+                color: '#ef4444',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 600,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <LogOut size={15} />
+              <span>Logout</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -597,42 +649,90 @@ const DashboardLayout = ({ children }) => {
       <main style={{
         flex: 1,
         marginLeft: isMobile ? '0' : '312px',
-        padding: isMobile ? '16px' : '32px',
+        padding: isMobile ? '14px' : '32px',
         minWidth: 0,
+        maxWidth: '100%',
+        overflowX: 'hidden',
+        boxSizing: 'border-box',
         transition: 'margin-left 0.3s, padding 0.3s'
       }}>
         <header style={{
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
-          gap: isMobile ? '16px' : '24px',
+          gap: isMobile ? '12px' : '24px',
           justifyContent: 'space-between',
           alignItems: isMobile ? 'stretch' : 'center',
-          marginBottom: '32px'
+          marginBottom: isMobile ? '20px' : '32px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Top Row on Mobile / Left on Desktop */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            width: isMobile ? '100%' : 'auto'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+              {isMobile && (
+                <button
+                  type="button"
+                  aria-label="Open navigation menu"
+                  onClick={() => setSidebarOpen(true)}
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    minWidth: '42px',
+                    minHeight: '42px',
+                    padding: 0,
+                    borderRadius: '12px',
+                    border: '1px solid var(--glass-border)',
+                    background: 'var(--card-bg)',
+                    color: 'var(--text-main)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                    flexShrink: 0
+                  }}
+                >
+                  <Menu size={22} />
+                </button>
+              )}
+              <h2 style={{
+                fontSize: isMobile ? '20px' : '24px',
+                fontWeight: 700,
+                margin: 0,
+                color: 'var(--text-main)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}>
+                {getPageTitle()}
+              </h2>
+            </div>
+
+            {/* Mobile-visible Theme Toggle Button */}
             {isMobile && (
               <button
-                onClick={() => setSidebarOpen(true)}
+                type="button"
+                className="theme-toggle-btn"
+                aria-label="Toggle dark/light mode"
+                onClick={toggleTheme}
                 style={{
-                  background: 'var(--card-bg)',
-                  border: 'none',
-                  color: 'var(--text-main)',
-                  padding: '10px',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 15px rgba(0,0,0,0.05)'
+                  background: theme === 'dark' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(99, 102, 241, 0.12)',
+                  border: theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid rgba(99, 102, 241, 0.35)',
+                  boxShadow: theme === 'dark' ? '0 0 14px rgba(245, 158, 11, 0.3)' : '0 2px 10px rgba(99, 102, 241, 0.2)'
                 }}
-                className="glass-card"
+                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               >
-                <Menu size={20} />
+                {theme === 'dark' ? (
+                  <Sun size={20} style={{ color: '#f59e0b', strokeWidth: 2.3 }} />
+                ) : (
+                  <Moon size={20} style={{ color: '#6366f1', strokeWidth: 2.3 }} />
+                )}
               </button>
             )}
-            <h2 style={{ fontSize: '24px', fontWeight: 700 }}>
-              {getPageTitle()}
-            </h2>
           </div>
 
           <div style={{
@@ -808,27 +908,33 @@ const DashboardLayout = ({ children }) => {
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <button
-                onClick={toggleTheme}
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: 'var(--card-bg)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: '0.3s'
-                }}
-                className="glass-card"
-              >
-                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-              </button>
-              <div style={{ fontSize: '14px', color: 'var(--text-dim)' }}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              {!isMobile && (
+                <button
+                  type="button"
+                  className="theme-toggle-btn"
+                  aria-label="Toggle dark/light mode"
+                  onClick={toggleTheme}
+                  style={{
+                    background: theme === 'dark' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(99, 102, 241, 0.12)',
+                    border: theme === 'dark' ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid rgba(99, 102, 241, 0.35)',
+                    boxShadow: theme === 'dark' ? '0 0 14px rgba(245, 158, 11, 0.3)' : '0 2px 10px rgba(99, 102, 241, 0.2)'
+                  }}
+                  title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                >
+                  {theme === 'dark' ? (
+                    <Sun size={20} style={{ color: '#f59e0b', strokeWidth: 2.3 }} />
+                  ) : (
+                    <Moon size={20} style={{ color: '#6366f1', strokeWidth: 2.3 }} />
+                  )}
+                </button>
+              )}
+              <div style={{ fontSize: isMobile ? '12px' : '14px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: isMobile ? 'short' : 'long',
+                  year: 'numeric',
+                  month: isMobile ? 'short' : 'long',
+                  day: 'numeric'
+                })}
               </div>
             </div>
           </div>

@@ -295,7 +295,7 @@ const Dashboard = () => {
       )}
 
       {/* Visual Analytics */}
-      <div style={{ display: 'grid', gridTemplateColumns: hasPerm('manage_products') ? '2fr 1fr' : '1fr', gap: '24px' }}>
+      <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: hasPerm('manage_products') ? '2fr 1fr' : '1fr', gap: '24px' }}>
         {hasPerm('manage_orders') && (
           <div className="glass-card" style={{ padding: '32px', borderRadius: '24px' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '32px' }}>Revenue Trajectory</h3>
