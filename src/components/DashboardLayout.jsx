@@ -754,15 +754,15 @@ const DashboardLayout = ({ children }) => {
                     gap: '10px',
                     padding: '8px 16px',
                     borderRadius: '14px',
-                    border: '1px solid rgba(99, 102, 241, 0.25)',
-                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03))',
+                    border: theme === 'dark' ? '1px solid rgba(129, 140, 248, 0.35)' : '1px solid rgba(99, 102, 241, 0.25)',
+                    background: theme === 'dark' ? '#1e293b' : 'rgba(255, 255, 255, 0.85)',
                     backdropFilter: 'blur(10px)',
                     WebkitBackdropFilter: 'blur(10px)',
                     color: 'var(--text-main)',
                     cursor: isSwitchingLocation ? 'not-allowed' : 'pointer',
                     opacity: isSwitchingLocation ? 0.6 : 1,
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: '0 4px 15px rgba(99, 102, 241, 0.1)',
+                    boxShadow: theme === 'dark' ? '0 4px 15px rgba(0, 0, 0, 0.3)' : '0 4px 15px rgba(99, 102, 241, 0.1)',
                   }}
                   onMouseEnter={(e) => {
                     if (isSwitchingLocation) return;
@@ -772,8 +772,8 @@ const DashboardLayout = ({ children }) => {
                   }}
                   onMouseLeave={(e) => {
                     if (isSwitchingLocation) return;
-                    e.currentTarget.style.border = '1px solid rgba(99, 102, 241, 0.25)';
-                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(99, 102, 241, 0.1)';
+                    e.currentTarget.style.border = theme === 'dark' ? '1px solid rgba(129, 140, 248, 0.35)' : '1px solid rgba(99, 102, 241, 0.25)';
+                    e.currentTarget.style.boxShadow = theme === 'dark' ? '0 4px 15px rgba(0, 0, 0, 0.3)' : '0 4px 15px rgba(99, 102, 241, 0.1)';
                     e.currentTarget.style.transform = 'none';
                   }}
                 >
@@ -800,15 +800,15 @@ const DashboardLayout = ({ children }) => {
                     position: 'absolute',
                     top: 'calc(100% + 8px)',
                     ...(isMobile ? { left: 0 } : { right: 0 }),
-                    background: 'var(--glass-bg)',
-                    backdropFilter: 'blur(20px)',
-                    WebkitBackdropFilter: 'blur(20px)',
-                    border: '1px solid var(--glass-border)',
+                    background: theme === 'dark' ? '#1e293b' : '#ffffff',
+                    border: theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid var(--glass-border)',
                     borderRadius: '16px',
                     width: '240px',
                     zIndex: 1000,
                     padding: '8px',
-                    boxShadow: '0 15px 35px rgba(0,0,0,0.12), 0 5px 15px rgba(99, 102, 241, 0.05)',
+                    boxShadow: theme === 'dark'
+                      ? '0 20px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.1)'
+                      : '0 15px 35px rgba(0,0,0,0.12), 0 5px 15px rgba(99, 102, 241, 0.05)',
                     maxHeight: '300px',
                     overflowY: 'auto'
                   }}>
@@ -831,20 +831,25 @@ const DashboardLayout = ({ children }) => {
                         width: '100%',
                         textAlign: 'left',
                         padding: '10px 12px',
-                        background: (!currentLocId || currentLocId === 'global') ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                        background: (!currentLocId || currentLocId === 'global')
+                          ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                          : 'transparent',
                         border: 'none',
                         borderRadius: '10px',
-                        color: (!currentLocId || currentLocId === 'global') ? 'var(--primary)' : 'var(--text-main)',
+                        color: (!currentLocId || currentLocId === 'global') ? '#ffffff' : 'var(--text-main)',
                         fontWeight: (!currentLocId || currentLocId === 'global') ? 700 : 500,
                         cursor: 'pointer',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         marginBottom: '6px',
+                        boxShadow: (!currentLocId || currentLocId === 'global') ? '0 3px 10px rgba(99, 102, 241, 0.35)' : 'none',
                         transition: 'all 0.2s ease',
                       }}
                       onMouseEnter={(e) => {
-                        if (currentLocId && currentLocId !== 'global') e.currentTarget.style.background = 'var(--card-hover)';
+                        if (currentLocId && currentLocId !== 'global') {
+                          e.currentTarget.style.background = theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
+                        }
                       }}
                       onMouseLeave={(e) => {
                         if (currentLocId && currentLocId !== 'global') e.currentTarget.style.background = 'transparent';
@@ -853,7 +858,7 @@ const DashboardLayout = ({ children }) => {
                       <span style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         🌐 Global Access
                       </span>
-                      {(!currentLocId || currentLocId === 'global') && <CheckCircle2 size={15} style={{ color: '#6366f1' }} />}
+                      {(!currentLocId || currentLocId === 'global') && <CheckCircle2 size={15} style={{ color: '#ffffff' }} />}
                     </button>
 
                     {locations.map(loc => {
@@ -866,20 +871,25 @@ const DashboardLayout = ({ children }) => {
                             width: '100%',
                             textAlign: 'left',
                             padding: '10px 12px',
-                            background: isActive ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                            background: isActive
+                              ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                              : 'transparent',
                             border: 'none',
                             borderRadius: '10px',
-                            color: isActive ? 'var(--primary)' : 'var(--text-main)',
+                            color: isActive ? '#ffffff' : 'var(--text-main)',
                             fontWeight: isActive ? 700 : 500,
                             cursor: 'pointer',
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
                             marginBottom: '4px',
+                            boxShadow: isActive ? '0 3px 10px rgba(99, 102, 241, 0.35)' : 'none',
                             transition: 'all 0.2s ease'
                           }}
                           onMouseEnter={(e) => {
-                            if (!isActive) e.currentTarget.style.background = 'var(--card-hover)';
+                            if (!isActive) {
+                              e.currentTarget.style.background = theme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
+                            }
                           }}
                           onMouseLeave={(e) => {
                             if (!isActive) e.currentTarget.style.background = 'transparent';
@@ -888,7 +898,7 @@ const DashboardLayout = ({ children }) => {
                           <span style={{ fontSize: '13px' }}>
                             📍 {loc.city}
                           </span>
-                          {isActive && <CheckCircle2 size={15} style={{ color: '#6366f1' }} />}
+                          {isActive && <CheckCircle2 size={15} style={{ color: '#ffffff' }} />}
                         </button>
                       );
                     })}

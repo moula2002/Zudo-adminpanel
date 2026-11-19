@@ -1982,7 +1982,7 @@ const Orders = () => {
             onClick={exportOrders} 
             className="btn-primary" 
             style={{ 
-              background: 'var(--glass-bg)', 
+              background: 'var(--card-bg)', 
               color: 'var(--text-main)', 
               border: '1px solid var(--glass-border)', 
               display: 'flex', 
@@ -2021,8 +2021,9 @@ const Orders = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '6px',
-                background: viewMode === 'table' ? 'var(--primary)' : 'transparent',
-                color: viewMode === 'table' ? '#fff' : 'var(--text-dim)',
+                background: viewMode === 'table' ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
+                color: viewMode === 'table' ? '#ffffff' : 'var(--text-dim)',
+                boxShadow: viewMode === 'table' ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none',
                 transition: 'all 0.2s'
               }}
               title="Table View (with Drivers & Route Columns)"
@@ -2044,8 +2045,9 @@ const Orders = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '6px',
-                background: viewMode === 'cards' ? 'var(--primary)' : 'transparent',
-                color: viewMode === 'cards' ? '#fff' : 'var(--text-dim)',
+                background: viewMode === 'cards' ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
+                color: viewMode === 'cards' ? '#ffffff' : 'var(--text-dim)',
+                boxShadow: viewMode === 'cards' ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none',
                 transition: 'all 0.2s'
               }}
               title="Card View"
@@ -2083,8 +2085,9 @@ const Orders = () => {
               fontWeight: 700, 
               border: 'none', 
               cursor: 'pointer',
-              background: activeTab === status ? 'var(--primary)' : 'transparent',
-              color: activeTab === status ? 'white' : 'var(--text-dim)',
+              background: activeTab === status ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
+              color: activeTab === status ? '#ffffff' : 'var(--text-dim)',
+              boxShadow: activeTab === status ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none',
               whiteSpace: 'nowrap', 
               transition: '0.2s',
               flexShrink: 0
@@ -2116,9 +2119,10 @@ const Orders = () => {
                     fontSize: '12px', 
                     fontWeight: 700, 
                     cursor: 'pointer',
-                    background: activeType === type ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
-                    color: activeType === type ? 'var(--primary)' : 'var(--text-dim)',
-                    border: `1px solid ${activeType === type ? 'var(--primary)' : 'var(--glass-border)'}`,
+                    background: activeType === type ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'var(--glass-bg)',
+                    color: activeType === type ? '#ffffff' : 'var(--text-dim)',
+                    border: activeType === type ? '1px solid transparent' : '1px solid var(--glass-border)',
+                    boxShadow: activeType === type ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none',
                     whiteSpace: 'nowrap',
                     textAlign: 'center'
                   }}
@@ -2923,7 +2927,7 @@ const Orders = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(34, 197, 94, 0.05)', borderRadius: '12px', border: '1px solid rgba(34, 197, 94, 0.1)' }}>
                       <img src={getImageUrl(qrCodeDoc)} alt="QR" style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'contain', background: '#fff' }} />
                       <div>
-                        <div style={{ fontSize: '11px', color: '#666', fontWeight: 600 }}>Seller QR Option</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Seller QR Option</div>
                         <div style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: 700 }}>{qrOption || 'N/A'}</div>
                       </div>
                     </div>
@@ -2947,7 +2951,7 @@ const Orders = () => {
                       const returnedItemWithBank = order.items?.find(i => i.refundAccountNumber);
                       if (returnedItemWithBank) {
                         return (
-                          <div style={{ marginBottom: '12px', padding: '8px', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
+                          <div style={{ marginBottom: '12px', padding: '8px', background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: '8px' }}>
                             <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>Bank Details for Refund:</p>
                             <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Name: {returnedItemWithBank.refundAccountName}</p>
                             <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Bank: {returnedItemWithBank.refundBankName}</p>
@@ -2957,7 +2961,7 @@ const Orders = () => {
                         );
                       } else if (order.userId?.bankDetails && order.userId.bankDetails.accountNumber) {
                         return (
-                          <div style={{ marginBottom: '12px', padding: '8px', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
+                          <div style={{ marginBottom: '12px', padding: '8px', background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: '8px' }}>
                             <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>Bank Details for Refund (From Profile):</p>
                             <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Name: {order.userId.bankDetails.accountName}</p>
                             <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>A/C: {order.userId.bankDetails.accountNumber}</p>
