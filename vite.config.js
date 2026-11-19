@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const proxyTarget = env.VITE_BACKEND_URL || 'http://localhost:5000';
+  const proxyTarget = env.VITE_BACKEND_URL || env.VITE_PRODUCTION_DOMAIN || 'http://localhost:5000';
 
   return {
     plugins: [
