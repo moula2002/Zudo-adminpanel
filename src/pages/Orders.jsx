@@ -1,16 +1,17 @@
 import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import axios, { getImageUrl, clearApiCache } from '../utils/api';
-import { 
+import {
   Package, Truck, CheckCircle, XCircle, Clock, MapPin, MapPinOff, RefreshCw,
-  Phone, User, Send, Loader2, Search, Filter, IndianRupee, 
+  Phone, User, Send, Loader2, Search, Filter, IndianRupee,
   Download, RefreshCcw, ShieldCheck, AlertTriangle, Printer,
   Edit, Plus, Trash2, X, QrCode, Table, LayoutGrid, Navigation, Car, Building2,
   Eye, Copy, Check, FileText, CreditCard, Calendar, Mail, ExternalLink,
-  Tag, Layers, Info, ChevronDown, ChevronUp, Boxes
+  Tag, Layers, Info, ChevronDown, ChevronUp, Boxes, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useSocket } from '../context/SocketContext';
+import { getOrderStatusStyle, StatusPill } from '../utils/statusColors';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
@@ -26,6 +27,7 @@ const Orders = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
   const [orderRoutes, setOrderRoutes] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('zudo_order_routes') || '{}');
@@ -65,10 +67,10 @@ const Orders = () => {
 
   const getOrderCompanyName = (order) => {
     if (!order) return 'Guest';
-    const company = order.userId?.businessName || 
-                    order.userId?.companyName || 
-                    order.shippingAddress?.companyName || 
-                    order.shippingAddress?.businessName;
+    const company = order.userId?.businessName ||
+      order.userId?.companyName ||
+      order.shippingAddress?.companyName ||
+      order.shippingAddress?.businessName;
     if (company && typeof company === 'string' && company.trim()) {
       return company.trim();
     }
@@ -104,6 +106,23 @@ const Orders = () => {
   const [otp, setOtp] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
+  const statusTabsRef = React.useRef(null);
+
+  useEffect(() => {
+    if (statusTabsRef.current) {
+      const activeBtn = statusTabsRef.current.querySelector('[data-active-tab="true"]');
+      if (activeBtn) {
+        activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [activeTab]);
+
+  const scrollStatusTabs = (direction) => {
+    if (statusTabsRef.current) {
+      const scrollAmount = direction === 'left' ? -240 : 240;
+      statusTabsRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
   const user = JSON.parse(localStorage.getItem('zudo_admin_user') || '{}');
   const isDriver = (user.role || '').toLowerCase() === 'driver';
   const isAdmin = !user.role || ['super_admin', 'normal_admin', 'manager', 'logistics', 'sales', 'accounting', 'b2b_admin', 'b2c_admin'].includes(user.role);
@@ -479,9 +498,9 @@ const Orders = () => {
   const hasPendingReturn = (order) => {
     if (!order) return false;
     const status = (order.returnStatus || '').toLowerCase();
-    const isPendingOrder = ['pending', 'requested', 'return requested'].includes(status) || 
+    const isPendingOrder = ['pending', 'requested', 'return requested'].includes(status) ||
       (order.orderStatus || '').toLowerCase() === 'return requested';
-    const hasItemPending = Array.isArray(order.items) && order.items.some(i => 
+    const hasItemPending = Array.isArray(order.items) && order.items.some(i =>
       ['pending', 'requested', 'return requested'].includes((i.returnStatus || '').toLowerCase())
     );
     return isPendingOrder || hasItemPending;
@@ -819,7 +838,7 @@ const Orders = () => {
   const exportOrders = () => {
     const exportData = filteredOrders.map(o => {
       const itemsList = o.items ? o.items.map(item => `${item.name} (Qty: ${item.quantity} | ₹${item.price})`).join('; ') : 'No items';
-      
+
       return {
         'Order ID': o._id,
         'Date & Time': new Date(o.createdAt).toLocaleString(),
@@ -995,8 +1014,8 @@ const Orders = () => {
       subtotalCalc += pInfo.totalPrice;
       const gstText = pInfo.gstPercent ? `${pInfo.gstPercent}%` : '-';
       const variant = pInfo.unit ? ` (${pInfo.unit})` : '';
-      const weightInfo = pInfo.unitSize && pInfo.unitSize !== 1 
-        ? ` &bull; <span>Size: <strong>${pInfo.unitSize} ${pInfo.unit}</strong> (Total: <strong>${pInfo.totalProductWeight} ${pInfo.unit}</strong>)</span>` 
+      const weightInfo = pInfo.unitSize && pInfo.unitSize !== 1
+        ? ` &bull; <span>Size: <strong>${pInfo.unitSize} ${pInfo.unit}</strong> (Total: <strong>${pInfo.totalProductWeight} ${pInfo.unit}</strong>)</span>`
         : '';
 
       return `
@@ -1539,10 +1558,10 @@ const Orders = () => {
           
           <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 10px;">
             ${(() => {
-              const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
-              const qrCodeDoc = orderSeller?.qrCodeDoc;
-              const qrOption = orderSeller?.qrOption;
-              return qrCodeDoc ? `
+        const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
+        const qrCodeDoc = orderSeller?.qrCodeDoc;
+        const qrOption = orderSeller?.qrOption;
+        return qrCodeDoc ? `
                 <div style="display: flex; gap: 8px; align-items: center; border: 1px solid #e2e8f0; padding: 4px; border-radius: 6px;">
                   <img src="${getImageUrl(qrCodeDoc)}" alt="QR" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: #fff;" />
                   <div style="display: flex; flex-direction: column;">
@@ -1553,7 +1572,7 @@ const Orders = () => {
               ` : `
                 <div style="font-size: 9px; color: #64748b; font-weight: 600; padding-bottom: 4px;">QR Code Not Available</div>
               `;
-            })()}
+      })()}
             <div class="signatures" style="margin-top: 0; width: auto; flex: 1; display: flex; justify-content: flex-end; gap: 10px;">
               <div class="signature-box" style="margin-top: 0; min-width: 80px;">Security Verification</div>
               <div class="signature-box" style="margin-top: 0; min-width: 80px;">Logistics Handover</div>
@@ -1577,7 +1596,7 @@ const Orders = () => {
 
   const printTodayManifest = () => {
     const today = new Date();
-    
+
     // Filter orders created today (local calendar date)
     let todayOrders = orders.filter(order => {
       const orderDate = new Date(order.createdAt);
@@ -1613,7 +1632,7 @@ const Orders = () => {
     // Map each order to its own separate A5 sheet
     const pagesHtml = todayOrders.map((order, index) => {
       const pageBreakClass = index > 0 ? 'page-break' : '';
-      
+
       const itemsHtml = order.items.map(item => `
         <tr>
           <td style="border: 1px solid #e2e8f0; padding: 4px 6px; font-size: 9.5px; font-weight: 600; color: #0f172a;">${item.name}</td>
@@ -1863,51 +1882,30 @@ const Orders = () => {
 
   const getStatusBadge = (status, returnStatus) => {
     if (returnStatus && returnStatus !== 'None') {
-      const returnStyles = {
-        'Pending': { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', text: 'Return Pending Approval' },
-        'Requested': { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', text: 'Return Requested' },
-        'Return Requested': { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', text: 'Return Requested' },
-        'Approved': { bg: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', text: 'Return Approved' },
-        'Return Approved': { bg: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', text: 'Return Approved' },
-        'Rejected': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', text: 'Return Rejected' },
-        'Return Rejected': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', text: 'Return Rejected' },
-        'Return Picked Up': { bg: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', text: 'Return Picked Up' },
-        'Picked Up from Customer': { bg: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', text: 'Return Picked Up' },
-        'Return Completed': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', text: 'Return Completed' },
-        'Returned to Seller': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', text: 'Return Completed' },
-        'Completed': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', text: 'Return Completed' }
-      };
-      const style = returnStyles[returnStatus] || { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', text: `Return: ${returnStatus}` };
+      const style = getOrderStatusStyle(returnStatus);
+      const text = style.label || (String(returnStatus).toLowerCase().startsWith('return') ? returnStatus : `Return ${returnStatus}`);
       return (
-        <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: style.bg, color: style.color }}>
-          {style.text}
+        <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: style.bg, color: style.color, border: `1px solid ${style.border}` }}>
+          {text}
         </span>
       );
     }
 
-    const styles = {
-      'Pending': { bg: 'rgba(234, 179, 8, 0.1)', color: '#eab308' },
-      'Packed': { bg: 'rgba(16, 185, 129, 0.1)', color: '#10b981' },
-      'Shipped': { bg: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' },
-      'Out for Delivery': { bg: 'rgba(168, 85, 247, 0.1)', color: '#a855f7' },
-      'Delivered': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e' },
-      'Cancelled': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }
-    };
-    const style = styles[status] || { bg: 'rgba(148, 163, 184, 0.1)', color: 'var(--text-dim)' };
+    const style = getOrderStatusStyle(status);
     return (
-      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: style.bg, color: style.color, textTransform: 'uppercase' }}>
+      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: style.bg, color: style.color, border: `1px solid ${style.border}`, textTransform: 'uppercase' }}>
         {status}
       </span>
     );
   };
 
   const filteredOrders = orders.filter(order => {
-    const statusMatch = activeTab === 'All' 
-      ? true 
-      : activeTab === 'Returns' 
+    const statusMatch = activeTab === 'All'
+      ? true
+      : activeTab === 'Returns'
         ? (order.returnStatus && order.returnStatus !== 'None') || (order.items && order.items.some(i => i.returnStatus && i.returnStatus !== 'None')) || hasPendingReturn(order) || (order.orderStatus || '').toLowerCase().includes('return')
         : order.orderStatus === activeTab;
-    
+
     const typeMatch = activeType === 'All' || (order.userId?.role || 'b2c').toUpperCase() === activeType;
 
     let dateMatch = true;
@@ -1928,31 +1926,31 @@ const Orders = () => {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '20px' : '32px', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
       {/* Header & Main Filters */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'flex-start', flexWrap: 'wrap', gap: '16px', width: '100%' }}>
         <div>
           <h1 style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Order Command Center</h1>
           <p style={{ fontSize: isMobile ? '12px' : '14px', color: 'var(--text-dim)', marginTop: '4px' }}>Unified B2B & B2C fulfillment management</p>
         </div>
-        
-        <div style={{ 
-          display: 'flex', 
-          gap: '10px', 
-          flexWrap: 'wrap', 
+
+        <div style={{
+          display: 'flex',
+          gap: '10px',
+          flexWrap: 'wrap',
           alignItems: 'center',
-          width: isMobile ? '100%' : 'auto' 
+          width: isMobile ? '100%' : 'auto'
         }}>
-          <button 
-            onClick={() => setShowCreateModal(true)} 
-            className="btn-primary" 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
               justifyContent: 'center',
-              gap: '8px', 
-              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
-              border: 'none', 
+              gap: '8px',
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              border: 'none',
               color: '#ffffff',
               flex: isMobile ? '1 1 100%' : 'none',
               padding: isMobile ? '12px 16px' : '10px 18px',
@@ -1962,12 +1960,12 @@ const Orders = () => {
             <Plus size={18} /> Create Order
           </button>
 
-          <button 
-            onClick={handleRefresh} 
-            className="btn-primary" 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+          <button
+            onClick={handleRefresh}
+            className="btn-primary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
               flex: isMobile ? '1 1 calc(50% - 6px)' : 'none',
@@ -1978,15 +1976,15 @@ const Orders = () => {
             <RefreshCcw size={16} /> Refresh
           </button>
 
-          <button 
-            onClick={exportOrders} 
-            className="btn-primary" 
-            style={{ 
-              background: 'var(--card-bg)', 
-              color: 'var(--text-main)', 
-              border: '1px solid var(--glass-border)', 
-              display: 'flex', 
-              alignItems: 'center', 
+          <button
+            onClick={exportOrders}
+            className="btn-primary"
+            style={{
+              background: 'var(--card-bg)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--glass-border)',
+              display: 'flex',
+              alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
               flex: isMobile ? '1 1 calc(50% - 6px)' : 'none',
@@ -1997,12 +1995,12 @@ const Orders = () => {
             <Download size={16} /> Export
           </button>
 
-          <div style={{ 
-            display: 'flex', 
-            gap: '4px', 
-            background: 'var(--glass-bg)', 
-            padding: '4px', 
-            borderRadius: '12px', 
+          <div style={{
+            display: 'flex',
+            gap: '4px',
+            background: 'var(--glass-bg)',
+            padding: '4px',
+            borderRadius: '12px',
             border: '1px solid var(--glass-border)',
             width: isMobile ? '100%' : 'auto'
           }}>
@@ -2058,53 +2056,109 @@ const Orders = () => {
         </div>
       </div>
 
-      {/* Status Tabs */}
-      <div 
-        className="custom-scrollbar"
-        style={{ 
-          display: 'flex', 
-          gap: '8px', 
-          background: 'var(--glass-bg)', 
-          padding: '6px', 
-          borderRadius: '16px', 
-          border: '1px solid var(--glass-border)', 
-          overflowX: 'auto',
-          maxWidth: '100%',
-          boxSizing: 'border-box',
-          WebkitOverflowScrolling: 'touch'
-        }}
-      >
-        {statuses.map(status => (
-          <button
-            key={status}
-            onClick={() => setActiveTab(status)}
-            style={{
-              padding: isMobile ? '8px 14px' : '10px 20px', 
-              borderRadius: '10px', 
-              fontSize: isMobile ? '12px' : '13px', 
-              fontWeight: 700, 
-              border: 'none', 
-              cursor: 'pointer',
-              background: activeTab === status ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
-              color: activeTab === status ? '#ffffff' : 'var(--text-dim)',
-              boxShadow: activeTab === status ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none',
-              whiteSpace: 'nowrap', 
-              transition: '0.2s',
-              flexShrink: 0
-            }}
-          >
-            {status}
-          </button>
-        ))}
+      {/* Status Tabs Slider */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+        <button
+          type="button"
+          onClick={() => scrollStatusTabs('left')}
+          aria-label="Scroll statuses left"
+          style={{
+            width: '32px',
+            height: '32px',
+            minWidth: '32px',
+            borderRadius: '10px',
+            border: '1px solid var(--glass-border)',
+            background: 'var(--card-bg)',
+            color: 'var(--text-main)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+          }}
+          title="Slide left"
+        >
+          <ChevronLeft size={16} />
+        </button>
+
+        <div
+          ref={statusTabsRef}
+          className="custom-scrollbar"
+          style={{
+            display: 'flex',
+            gap: '8px',
+            background: 'var(--glass-bg)',
+            padding: '6px',
+            borderRadius: '16px',
+            border: '1px solid var(--glass-border)',
+            overflowX: 'auto',
+            flex: 1,
+            minWidth: 0,
+            boxSizing: 'border-box',
+            WebkitOverflowScrolling: 'touch',
+            scrollBehavior: 'smooth'
+          }}
+        >
+          {statuses.map(status => (
+            <button
+              key={status}
+              data-active-tab={activeTab === status ? 'true' : 'false'}
+              onClick={() => {
+                setActiveTab(status);
+              }}
+              style={{
+                padding: isMobile ? '8px 14px' : '10px 20px',
+                borderRadius: '10px',
+                fontSize: isMobile ? '12px' : '13px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                background: activeTab === status ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
+                color: activeTab === status ? '#ffffff' : 'var(--text-dim)',
+                boxShadow: activeTab === status ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none',
+                whiteSpace: 'nowrap',
+                transition: '0.2s',
+                flexShrink: 0
+              }}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => scrollStatusTabs('right')}
+          aria-label="Scroll statuses right"
+          style={{
+            width: '32px',
+            height: '32px',
+            minWidth: '32px',
+            borderRadius: '10px',
+            border: '1px solid var(--glass-border)',
+            background: 'var(--card-bg)',
+            color: 'var(--text-main)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+          }}
+          title="Slide right"
+        >
+          <ChevronRight size={16} />
+        </button>
       </div>
 
       {/* Secondary Filters: Type & Split Stats */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', width: '100%' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
           {(!user.targetSegment || user.targetSegment === 'Both') && (
-            <div style={{ 
-              display: 'flex', 
-              gap: '6px', 
+            <div style={{
+              display: 'flex',
+              gap: '6px',
               width: isMobile ? '100%' : 'auto',
               overflowX: isMobile ? 'auto' : 'visible'
             }}>
@@ -2114,10 +2168,10 @@ const Orders = () => {
                   onClick={() => setActiveType(type)}
                   style={{
                     flex: isMobile ? 1 : 'none',
-                    padding: isMobile ? '8px 10px' : '8px 20px', 
-                    borderRadius: '10px', 
-                    fontSize: '12px', 
-                    fontWeight: 700, 
+                    padding: isMobile ? '8px 10px' : '8px 20px',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    fontWeight: 700,
                     cursor: 'pointer',
                     background: activeType === type ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'var(--glass-bg)',
                     color: activeType === type ? '#ffffff' : 'var(--text-dim)',
@@ -2133,10 +2187,10 @@ const Orders = () => {
             </div>
           )}
 
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
             width: isMobile ? '100%' : 'auto',
             flexWrap: 'wrap'
           }}>
@@ -2147,23 +2201,23 @@ const Orders = () => {
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
                 style={{
-                  padding: '8px 12px', 
-                  borderRadius: '10px', 
-                  fontSize: '12px', 
-                  fontWeight: 700, 
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
                   cursor: 'pointer',
-                  background: 'var(--glass-bg)', 
+                  background: 'var(--glass-bg)',
                   color: 'var(--text-main)',
-                  border: '1px solid var(--glass-border)', 
+                  border: '1px solid var(--glass-border)',
                   outline: 'none',
                   flex: isMobile ? 1 : 'none'
                 }}
               />
               {dateFilter && (
-                <button 
+                <button
                   onClick={() => setDateFilter('')}
-                  style={{ 
-                    background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', 
+                  style={{
+                    background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center'
                   }}
                   title="Clear Date"
@@ -2172,7 +2226,7 @@ const Orders = () => {
                 </button>
               )}
             </div>
-            
+
             <button
               onClick={printTodayManifest}
               style={{
@@ -2212,15 +2266,15 @@ const Orders = () => {
       {viewMode === 'table' ? (
         <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden', maxWidth: '100%', boxSizing: 'border-box' }}>
           {isMobile && (
-            <div style={{ 
-              padding: '8px 16px', 
-              background: 'rgba(99, 102, 241, 0.08)', 
-              color: 'var(--primary)', 
-              fontSize: '11px', 
-              fontWeight: 600, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '6px' 
+            <div style={{
+              padding: '8px 16px',
+              background: 'rgba(99, 102, 241, 0.08)',
+              color: 'var(--primary)',
+              fontSize: '11px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
             }}>
               💡 Swipe horizontally on the table to see full order routes and driver details
             </div>
@@ -2254,7 +2308,7 @@ const Orders = () => {
                     const r3Val = orderRoutes[order._id]?.route3 ?? (order.route3 || (order.shippingAddress?.pincode ? `Pin ${order.shippingAddress.pincode}` : 'Route 3 - Final Drop'));
 
                     return (
-                      <tr 
+                      <tr
                         key={order._id}
                         style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s' }}
                         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
@@ -2264,7 +2318,7 @@ const Orders = () => {
                         <td style={{ padding: '16px 20px', verticalAlign: 'top' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span 
+                              <span
                                 title={`Order ID: ${order._id}`}
                                 style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-main)', fontFamily: 'monospace' }}
                               >
@@ -2660,496 +2714,496 @@ const Orders = () => {
               <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)' }}>No orders match the selected criteria</h3>
             </div>
           ) : filteredOrders.map((order, index) => (
-          <div key={order._id} className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--glass-border)', maxWidth: '100%', boxSizing: 'border-box' }}>
-            {/* Order Header */}
-            <div style={{ padding: isMobile ? '12px 14px' : '16px 24px', background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                <div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Order Ref</span>
-                  <span title={`Order ID: ${order._id}`} style={{ fontWeight: 700, fontSize: '14px' }}>#{index + 1}</span>
+            <div key={order._id} className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--glass-border)', maxWidth: '100%', boxSizing: 'border-box' }}>
+              {/* Order Header */}
+              <div style={{ padding: isMobile ? '12px 14px' : '16px 24px', background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  <div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Order Ref</span>
+                    <span title={`Order ID: ${order._id}`} style={{ fontWeight: 700, fontSize: '14px' }}>#{index + 1}</span>
+                  </div>
+                  <div style={{ width: '1px', height: '20px', background: 'var(--glass-border)' }}></div>
+                  <div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Category</span>
+                    <span style={{
+                      fontSize: '10px', fontWeight: 800, color: (order.userId?.role || 'b2c') === 'b2b' ? 'var(--primary)' : '#ec4899',
+                      background: (order.userId?.role || 'b2c') === 'b2b' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
+                      padding: '2px 8px', borderRadius: '6px'
+                    }}>{(order.userId?.role || 'b2c').toUpperCase()}</span>
+                  </div>
+                  {order.deliverySlot && order.deliverySlot.startTime && (
+                    <>
+                      <div style={{ width: '1px', height: '20px', background: 'var(--glass-border)' }}></div>
+                      <div>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Delivery Slot</span>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>
+                          {order.deliverySlot.startTime}{order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? ` - ${order.deliverySlot.endTime}` : ''}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div style={{ width: '1px', height: '20px', background: 'var(--glass-border)' }}></div>
-                <div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Category</span>
-                  <span style={{ 
-                    fontSize: '10px', fontWeight: 800, color: (order.userId?.role || 'b2c') === 'b2b' ? 'var(--primary)' : '#ec4899',
-                    background: (order.userId?.role || 'b2c') === 'b2b' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
-                    padding: '2px 8px', borderRadius: '6px'
-                  }}>{(order.userId?.role || 'b2c').toUpperCase()}</span>
-                </div>
-                {order.deliverySlot && order.deliverySlot.startTime && (
-                  <>
-                    <div style={{ width: '1px', height: '20px', background: 'var(--glass-border)' }}></div>
-                    <div>
-                      <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Delivery Slot</span>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>
-                        {order.deliverySlot.startTime}{order.deliverySlot.endTime && order.deliverySlot.endTime !== '*' ? ` - ${order.deliverySlot.endTime}` : ''}
-                      </span>
+
+                {/* Right Side: Total, Status & Order-Level Actions */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Grand Total</span>
+                    <span style={{ fontWeight: 800, fontSize: '16px', color: 'var(--primary)' }}>₹{order.totalAmount.toLocaleString()}</span>
+                  </div>
+
+                  {getStatusBadge(order.orderStatus, order.returnStatus)}
+
+                  {/* Return Request Approve & Reject Buttons */}
+                  {hasPendingReturn(order) && !isDriver && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        onClick={() => handleApproveReturn(order._id)}
+                        disabled={approveLoadingId === order._id}
+                        style={{
+                          background: '#10b981',
+                          border: 'none',
+                          color: '#fff',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title="Approve Customer Return Request"
+                      >
+                        {approveLoadingId === order._id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleOpenRejectReturnModal(order)}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#ef4444',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title="Reject Customer Return Request"
+                      >
+                        <X size={12} /> Reject
+                      </button>
                     </div>
-                  </>
-                )}
-              </div>
+                  )}
 
-              {/* Right Side: Total, Status & Order-Level Actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Grand Total</span>
-                  <span style={{ fontWeight: 800, fontSize: '16px', color: 'var(--primary)' }}>₹{order.totalAmount.toLocaleString()}</span>
-                </div>
-
-                {getStatusBadge(order.orderStatus, order.returnStatus)}
-
-                {/* Return Request Approve & Reject Buttons */}
-                {hasPendingReturn(order) && !isDriver && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                    <button
-                      onClick={() => handleApproveReturn(order._id)}
-                      disabled={approveLoadingId === order._id}
-                      style={{
-                        background: '#10b981',
-                        border: 'none',
-                        color: '#fff',
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
-                        whiteSpace: 'nowrap'
-                      }}
-                      title="Approve Customer Return Request"
-                    >
-                      {approveLoadingId === order._id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleOpenRejectReturnModal(order)}
-                      style={{
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        color: '#ef4444',
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        whiteSpace: 'nowrap'
-                      }}
-                      title="Reject Customer Return Request"
-                    >
-                      <X size={12} /> Reject
-                    </button>
-                  </div>
-                )}
-
-                {/* View Details Button */}
-                <button
-                  onClick={() => handleViewOrder(order)}
-                  style={{
-                    background: 'rgba(99, 102, 241, 0.12)',
-                    border: '1px solid rgba(99, 102, 241, 0.35)',
-                    color: 'var(--primary)',
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.22)'}
-                  onMouseOut={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)'}
-                  title="View Complete Order Details"
-                >
-                  <Eye size={12} /> View Details
-                </button>
-
-                {/* Quick Print Manifest */}
-                <button
-                  onClick={() => printManifest(order)}
-                  style={{
-                    background: 'var(--glass-bg)',
-                    border: '1px solid var(--glass-border)',
-                    color: 'var(--text-main)',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Print Shipping Manifest"
-                >
-                  <Printer size={12} /> Manifest
-                </button>
-
-                {/* Quick Print Invoice */}
-                <button
-                  onClick={() => printInvoice(order)}
-                  style={{
-                    background: 'var(--glass-bg)',
-                    border: '1px solid var(--glass-border)',
-                    color: 'var(--text-main)',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Print Tax Invoice"
-                >
-                  <FileText size={12} /> Invoice
-                </button>
-              </div>
-            </div>
-
-            {/* Order Content */}
-            <div style={{ padding: isMobile ? '16px 14px' : '24px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: isMobile ? '16px' : '24px', boxSizing: 'border-box' }}>
-              {/* Customer Intel */}
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Building2 size={12} /> Company Intel
-                </p>
-                <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
-                  <p style={{ fontWeight: 700, marginBottom: '4px' }}>{getOrderCompanyName(order)}</p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={12} /> {order.shippingAddress.phone}</p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '12px', lineHeight: '1.4' }}>{order.shippingAddress.address}, {order.shippingAddress.city}</p>
-                </div>
-              </div>
-
-              {/* Delivery Routes */}
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Navigation size={12} /> Delivery Routes
-                </p>
-                <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div>
-                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 1 (Hub)</span>
-                    <input
-                      type="text"
-                      value={orderRoutes[order._id]?.route1 ?? (order.shippingAddress?.city ? `${order.shippingAddress.city} Central Hub` : 'Route 1 - Hub')}
-                      onChange={(e) => updateOrderRoute(order._id, 'route1', e.target.value)}
-                      style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
-                    />
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 2 (Transit)</span>
-                    <input
-                      type="text"
-                      value={orderRoutes[order._id]?.route2 ?? (order.deliverySlot?.startTime ? `Slot ${order.deliverySlot.startTime}` : 'Route 2 - Transit')}
-                      onChange={(e) => updateOrderRoute(order._id, 'route2', e.target.value)}
-                      style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
-                    />
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 3 (Final Drop)</span>
-                    <input
-                      type="text"
-                      value={orderRoutes[order._id]?.route3 ?? (order.shippingAddress?.pincode ? `Pin ${order.shippingAddress.pincode}` : 'Route 3 - Final Drop')}
-                      onChange={(e) => updateOrderRoute(order._id, 'route3', e.target.value)}
-                      style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Items Manifest */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-                    <Package size={12} /> Items Manifest
-                  </p>
+                  {/* View Details Button */}
                   <button
-                    onClick={() => {
-                      setEditingOrder(order);
-                      setShowEditItemsModal(true);
-                    }}
+                    onClick={() => handleViewOrder(order)}
                     style={{
-                      background: 'rgba(99, 102, 241, 0.1)',
-                      border: '1px solid rgba(99, 102, 241, 0.25)',
+                      background: 'rgba(99, 102, 241, 0.12)',
+                      border: '1px solid rgba(99, 102, 241, 0.35)',
                       color: 'var(--primary)',
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      fontWeight: 700,
                       cursor: 'pointer',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.22)'}
+                    onMouseOut={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)'}
+                    title="View Complete Order Details"
+                  >
+                    <Eye size={12} /> View Details
+                  </button>
+
+                  {/* Quick Print Manifest */}
+                  <button
+                    onClick={() => printManifest(order)}
+                    style={{
+                      background: 'var(--glass-bg)',
+                      border: '1px solid var(--glass-border)',
+                      color: 'var(--text-main)',
+                      padding: '6px 10px',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '4px',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Print Shipping Manifest"
+                  >
+                    <Printer size={12} /> Manifest
+                  </button>
+
+                  {/* Quick Print Invoice */}
+                  <button
+                    onClick={() => printInvoice(order)}
+                    style={{
+                      background: 'var(--glass-bg)',
+                      border: '1px solid var(--glass-border)',
+                      color: 'var(--text-main)',
+                      padding: '6px 10px',
+                      borderRadius: '8px',
                       fontSize: '11px',
                       fontWeight: 600,
-                      transition: '0.2s'
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      whiteSpace: 'nowrap'
                     }}
-                    title="Edit products and quantities in this order"
-                    onMouseOver={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)'}
-                    onMouseOut={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'}
+                    title="Print Tax Invoice"
                   >
-                    <Edit size={11} /> Edit Items
+                    <FileText size={12} /> Invoice
                   </button>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {order.items.map((item, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'var(--card-bg)', borderRadius: '12px' }}>
-                      <img src={item.image} style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }} alt="" />
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: '12px', fontWeight: 600 }}>{item.name}</p>
-                        <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: '2px 0' }}>By: <strong style={{ color: 'var(--primary)' }}>{getSellerCompanyName(item.seller)}</strong></p>
-                        <p style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{item.quantity} units</p>
-                      </div>
-                    </div>
-                  ))}
+              </div>
+
+              {/* Order Content */}
+              <div style={{ padding: isMobile ? '16px 14px' : '24px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap: isMobile ? '16px' : '24px', boxSizing: 'border-box' }}>
+                {/* Customer Intel */}
+                <div>
+                  <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Building2 size={12} /> Company Intel
+                  </p>
+                  <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+                    <p style={{ fontWeight: 700, marginBottom: '4px' }}>{getOrderCompanyName(order)}</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={12} /> {order.shippingAddress.phone}</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '12px', lineHeight: '1.4' }}>{order.shippingAddress.address}, {order.shippingAddress.city}</p>
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
-                <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <QrCode size={12} /> Payment QR
-                </p>
-                {(() => {
-                  const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
-                  const qrCodeDoc = orderSeller?.qrCodeDoc;
-                  const qrOption = orderSeller?.qrOption;
-                  return qrCodeDoc ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(34, 197, 94, 0.05)', borderRadius: '12px', border: '1px solid rgba(34, 197, 94, 0.1)' }}>
-                      <img src={getImageUrl(qrCodeDoc)} alt="QR" style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'contain', background: '#fff' }} />
-                      <div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Seller QR Option</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: 700 }}>{qrOption || 'N/A'}</div>
-                      </div>
+                {/* Delivery Routes */}
+                <div>
+                  <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Navigation size={12} /> Delivery Routes
+                  </p>
+                  <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div>
+                      <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 1 (Hub)</span>
+                      <input
+                        type="text"
+                        value={orderRoutes[order._id]?.route1 ?? (order.shippingAddress?.city ? `${order.shippingAddress.city} Central Hub` : 'Route 1 - Hub')}
+                        onChange={(e) => updateOrderRoute(order._id, 'route1', e.target.value)}
+                        style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                      />
                     </div>
-                  ) : (
-                    <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>QR Code Not Available</div>
-                  );
-                })()}
-              </div>
-
-              {/* Logistics & Controls */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Truck size={12} /> Fulfillment
-                </p>
-                
-                {(order.returnStatus === 'Requested') || (order.items && order.items.some(i => i.returnStatus === 'Return Requested')) ? (
-                  <div style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px dashed #f59e0b', padding: '16px', borderRadius: '16px' }}>
-                    <p style={{ fontSize: '12px', fontWeight: 700, color: '#f59e0b', marginBottom: '8px' }}>Return Requested</p>
-                    
-                    {(() => {
-                      const returnedItemWithBank = order.items?.find(i => i.refundAccountNumber);
-                      if (returnedItemWithBank) {
-                        return (
-                          <div style={{ marginBottom: '12px', padding: '8px', background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: '8px' }}>
-                            <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>Bank Details for Refund:</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Name: {returnedItemWithBank.refundAccountName}</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Bank: {returnedItemWithBank.refundBankName}</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>A/C: {returnedItemWithBank.refundAccountNumber}</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>IFSC: {returnedItemWithBank.refundIfscCode}</p>
-                          </div>
-                        );
-                      } else if (order.userId?.bankDetails && order.userId.bankDetails.accountNumber) {
-                        return (
-                          <div style={{ marginBottom: '12px', padding: '8px', background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: '8px' }}>
-                            <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>Bank Details for Refund (From Profile):</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Name: {order.userId.bankDetails.accountName}</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>A/C: {order.userId.bankDetails.accountNumber}</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>IFSC: {order.userId.bankDetails.ifscCode}</p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-
-                    {order.items?.filter(i => i.returnStatus === 'Return Requested').map((item, idx) => (
-                      <div key={idx} style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                        <p style={{ fontSize: '11px', fontWeight: 700 }}>{item.name}</p>
-                        <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Reason: "{item.returnReason || 'No reason provided'}"</p>
-                        {item.returnComment && <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Comment: "{item.returnComment}"</p>}
-                        
-                        {item.refundBankName && (
-                          <div style={{ marginTop: '8px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                            <p style={{ fontSize: '11px', fontWeight: 700 }}>Refund Bank Details (From App):</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Bank: {item.refundBankName}</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>A/C Name: {item.refundAccountName}</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>A/C No: {item.refundAccountNumber}</p>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>IFSC: {item.refundIfscCode}</p>
-                          </div>
-                        )}
-                        
-                        {item.returnImage && (
-                          <a href={getImageUrl(item.returnImage)} target="_blank" rel="noopener noreferrer">
-                            <img src={getImageUrl(item.returnImage)} alt="Return proof" style={{ width: '60px', height: '60px', borderRadius: '8px', marginTop: '4px', objectFit: 'cover' }} />
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                    
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={() => handleReturnAction(order._id, 'approve')} className="btn-primary" style={{ flex: 1, padding: '8px', fontSize: '11px', background: '#10b981' }}>Approve</button>
-                      <button onClick={() => handleReturnAction(order._id, 'reject')} className="btn-primary" style={{ flex: 1, padding: '8px', fontSize: '11px', background: '#ef4444' }}>Reject</button>
+                    <div>
+                      <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 2 (Transit)</span>
+                      <input
+                        type="text"
+                        value={orderRoutes[order._id]?.route2 ?? (order.deliverySlot?.startTime ? `Slot ${order.deliverySlot.startTime}` : 'Route 2 - Transit')}
+                        onChange={(e) => updateOrderRoute(order._id, 'route2', e.target.value)}
+                        style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                      />
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Route 3 (Final Drop)</span>
+                      <input
+                        type="text"
+                        value={orderRoutes[order._id]?.route3 ?? (order.shippingAddress?.pincode ? `Pin ${order.shippingAddress.pincode}` : 'Route 3 - Final Drop')}
+                        onChange={(e) => updateOrderRoute(order._id, 'route3', e.target.value)}
+                        style={{ width: '100%', fontSize: '12px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 600 }}
+                      />
                     </div>
                   </div>
-                ) : (order.returnStatus === 'Approved') || (order.items && order.items.some(i => ['Return Approved', 'Picked Up from Customer', 'Returned to Seller'].includes(i.returnStatus))) ? (
-                  <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px dashed #10b981', padding: '16px', borderRadius: '16px' }}>
-                    <p style={{ fontSize: '12px', fontWeight: 700, color: '#10b981', marginBottom: '12px' }}>Return Approved</p>
-                    <button 
-                      onClick={() => { setSelectedOrderId(order._id); setDriverModalType('return'); setShowDriverModal(true); }} 
-                      className="btn-primary" 
-                      style={{ width: '100%', padding: '10px', background: order.returnDriverId ? 'rgba(99, 102, 241, 0.1)' : '#10b981', color: order.returnDriverId ? 'var(--primary)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                </div>
+
+                {/* Items Manifest */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                      <Package size={12} /> Items Manifest
+                    </p>
+                    <button
+                      onClick={() => {
+                        setEditingOrder(order);
+                        setShowEditItemsModal(true);
+                      }}
+                      style={{
+                        background: 'rgba(99, 102, 241, 0.1)',
+                        border: '1px solid rgba(99, 102, 241, 0.25)',
+                        color: 'var(--primary)',
+                        cursor: 'pointer',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        transition: '0.2s'
+                      }}
+                      title="Edit products and quantities in this order"
+                      onMouseOver={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)'}
+                      onMouseOut={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'}
                     >
-                      <Truck size={14} /> {(() => {
-                        const retDInfo = getDriverDetails(order.returnDriverId);
-                        return retDInfo ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                            Return Driver: <strong>{retDInfo.name}</strong> {retDInfo.vehicle ? `🚗 ${retDInfo.vehicle}` : ''}
-                          </span>
-                        ) : 'Assign Return Driver';
-                      })()}
+                      <Edit size={11} /> Edit Items
                     </button>
                   </div>
-                ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {/* Dynamic Status Dropdown - Admins Only (Pending and Packed only; locked for Out for Delivery, Delivered, Cancelled) */}
-                    {!isDriver && ['Pending', 'Packed'].includes(order.orderStatus) && (
-                      <div style={{ position: 'relative' }}>
-                        <select 
-                          value={order.orderStatus}
-                          onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
-                          style={{
-                            width: '100%', padding: '10px 12px', borderRadius: '12px', background: 'var(--glass-bg)', 
-                            border: '1px solid var(--glass-border)', color: 'var(--text-main)', fontSize: '12px', fontWeight: 600, cursor: 'pointer'
-                          }}
-                        >
-                          <option value="Pending" style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>Pending</option>
-                          <option value="Packed" style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>Packed</option>
-                        </select>
+                    {order.items.map((item, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'var(--card-bg)', borderRadius: '12px' }}>
+                        <img src={item.image} style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }} alt="" />
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: '12px', fontWeight: 600 }}>{item.name}</p>
+                          <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: '2px 0' }}>By: <strong style={{ color: 'var(--primary)' }}>{getSellerCompanyName(item.seller)}</strong></p>
+                          <p style={{ fontSize: '10px', color: 'var(--text-dim)' }}>{item.quantity} units</p>
+                        </div>
                       </div>
-                    )}
+                    ))}
+                  </div>
+                </div>
 
-                    {/* Authorized Driver Delivery Workflow with Customer 6-Digit OTP */}
-                    {isDriver && ['Packed', 'Out for Delivery'].includes(order.orderStatus) && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <button 
-                          onClick={() => handleUpdateStatus(order._id, 'Delivered')}
-                          className="btn-primary" 
-                          style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 8px 16px -4px rgba(16, 185, 129, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                        >
-                          <ShieldCheck size={16} /> Complete Delivery (Customer OTP)
-                        </button>
-                        <button
-                          onClick={() => handleResendOtp(order._id)}
-                          type="button"
-                          style={{
-                            background: 'rgba(99, 102, 241, 0.1)',
-                            border: '1px solid rgba(99, 102, 241, 0.25)',
-                            color: 'var(--primary)',
-                            padding: '8px',
-                            borderRadius: '10px',
-                            cursor: 'pointer',
-                            fontSize: '11px',
-                            fontWeight: 700
-                          }}
-                        >
-                          Resend Customer Delivery OTP
-                        </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+                  <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <QrCode size={12} /> Payment QR
+                  </p>
+                  {(() => {
+                    const orderSeller = order.sellerId || (order.items && order.items[0] && order.items[0].seller && order.items[0].seller.sellerId);
+                    const qrCodeDoc = orderSeller?.qrCodeDoc;
+                    const qrOption = orderSeller?.qrOption;
+                    return qrCodeDoc ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(34, 197, 94, 0.05)', borderRadius: '12px', border: '1px solid rgba(34, 197, 94, 0.1)' }}>
+                        <img src={getImageUrl(qrCodeDoc)} alt="QR" style={{ width: '60px', height: '60px', borderRadius: '8px', border: '1px solid #e2e8f0', objectFit: 'contain', background: '#fff' }} />
+                        <div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Seller QR Option</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: 700 }}>{qrOption || 'N/A'}</div>
+                        </div>
                       </div>
-                    )}
+                    ) : (
+                      <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>QR Code Not Available</div>
+                    );
+                  })()}
+                </div>
 
-                    {!isDriver && order.orderStatus === 'Pending' && (
-                      <button onClick={() => handleUpdateStatus(order._id, 'Packed')} className="btn-primary" style={{ width: '100%', padding: '12px' }}>Mark as Packed</button>
-                    )}
-                    
-                    {!isDriver && ['Packed', 'Out for Delivery'].includes(order.orderStatus) && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
-                          <button 
-                            onClick={() => { setSelectedOrderId(order._id); setDriverModalType('delivery'); setShowDriverModal(true); }} 
-                            className="btn-primary" 
-                            style={{ flex: 1, padding: '10px', background: order.driverId ? 'rgba(99, 102, 241, 0.1)' : 'var(--primary)', color: order.driverId ? 'var(--primary)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                          >
-                            <Truck size={14} /> {(() => {
-                              const dInfo = getDriverDetails(order.driverId);
-                              return dInfo ? (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                                  Driver: <strong>{dInfo.name}</strong> {dInfo.vehicle ? `🚗 ${dInfo.vehicle}` : ''}
-                                </span>
-                              ) : 'Assign Driver';
-                            })()}
-                          </button>
-                          
-                          {order.driverId && (
-                            <button
-                              onClick={() => handleTrackDriver(order.driverId)}
-                              style={{
-                                background: 'rgba(34, 197, 94, 0.1)',
-                                border: '1px solid rgba(34, 197, 94, 0.3)',
-                                color: '#22c55e',
-                                padding: '10px 14px',
-                                borderRadius: '12px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                fontWeight: 700,
-                                fontSize: '12px',
-                                transition: 'all 0.2s'
-                              }}
-                              title="Track driver live coordinates"
-                              onMouseOver={(e) => {
-                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
-                                e.currentTarget.style.transform = 'translateY(-1px)';
-                              }}
-                              onMouseOut={(e) => {
-                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
-                                e.currentTarget.style.transform = 'translateY(0)';
-                              }}
-                            >
-                              <MapPin size={14} style={{ filter: 'drop-shadow(0 0 4px #22c55e)' }} />
-                              Track Live
-                            </button>
+                {/* Logistics & Controls */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Truck size={12} /> Fulfillment
+                  </p>
+
+                  {(order.returnStatus === 'Requested') || (order.items && order.items.some(i => i.returnStatus === 'Return Requested')) ? (
+                    <div style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px dashed #f59e0b', padding: '16px', borderRadius: '16px' }}>
+                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#f59e0b', marginBottom: '8px' }}>Return Requested</p>
+
+                      {(() => {
+                        const returnedItemWithBank = order.items?.find(i => i.refundAccountNumber);
+                        if (returnedItemWithBank) {
+                          return (
+                            <div style={{ marginBottom: '12px', padding: '8px', background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: '8px' }}>
+                              <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>Bank Details for Refund:</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Name: {returnedItemWithBank.refundAccountName}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Bank: {returnedItemWithBank.refundBankName}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>A/C: {returnedItemWithBank.refundAccountNumber}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>IFSC: {returnedItemWithBank.refundIfscCode}</p>
+                            </div>
+                          );
+                        } else if (order.userId?.bankDetails && order.userId.bankDetails.accountNumber) {
+                          return (
+                            <div style={{ marginBottom: '12px', padding: '8px', background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: '8px' }}>
+                              <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>Bank Details for Refund (From Profile):</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Name: {order.userId.bankDetails.accountName}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>A/C: {order.userId.bankDetails.accountNumber}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>IFSC: {order.userId.bankDetails.ifscCode}</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+
+                      {order.items?.filter(i => i.returnStatus === 'Return Requested').map((item, idx) => (
+                        <div key={idx} style={{ marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                          <p style={{ fontSize: '11px', fontWeight: 700 }}>{item.name}</p>
+                          <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Reason: "{item.returnReason || 'No reason provided'}"</p>
+                          {item.returnComment && <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Comment: "{item.returnComment}"</p>}
+
+                          {item.refundBankName && (
+                            <div style={{ marginTop: '8px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                              <p style={{ fontSize: '11px', fontWeight: 700 }}>Refund Bank Details (From App):</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Bank: {item.refundBankName}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>A/C Name: {item.refundAccountName}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>A/C No: {item.refundAccountNumber}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>IFSC: {item.refundIfscCode}</p>
+                            </div>
+                          )}
+
+                          {item.returnImage && (
+                            <a href={getImageUrl(item.returnImage)} target="_blank" rel="noopener noreferrer">
+                              <img src={getImageUrl(item.returnImage)} alt="Return proof" style={{ width: '60px', height: '60px', borderRadius: '8px', marginTop: '4px', objectFit: 'cover' }} />
+                            </a>
                           )}
                         </div>
+                      ))}
 
-                        <button 
-                          onClick={() => { setSelectedOrderId(order._id); setShowCashModal(true); }} 
-                          className="btn-primary" 
-                          style={{ width: '100%', padding: '10px', background: order.cashPersonId ? 'rgba(16, 185, 129, 0.1)' : 'var(--primary)', color: order.cashPersonId ? '#10b981' : 'white' }}
-                        >
-                          <IndianRupee size={14} /> {order.cashPersonId ? `Cash: ${order.cashPersonId.name}` : 'Assign Cash Collector'}
-                        </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => handleReturnAction(order._id, 'approve')} className="btn-primary" style={{ flex: 1, padding: '8px', fontSize: '11px', background: '#10b981' }}>Approve</button>
+                        <button onClick={() => handleReturnAction(order._id, 'reject')} className="btn-primary" style={{ flex: 1, padding: '8px', fontSize: '11px', background: '#ef4444' }}>Reject</button>
                       </div>
-                    )}
-
-                    {order.orderStatus === 'Delivered' && order.paymentMethod === 'COD' && order.paymentStatus !== 'Completed' && (
-                      <button onClick={() => { setSelectedOrderId(order._id); setShowOtpModal(true); }} className="btn-primary" style={{ width: '100%', padding: '12px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid #10b981' }}>
-                        <ShieldCheck size={16} /> Collect Payment (OTP)
+                    </div>
+                  ) : (order.returnStatus === 'Approved') || (order.items && order.items.some(i => ['Return Approved', 'Picked Up from Customer', 'Returned to Seller'].includes(i.returnStatus))) ? (
+                    <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px dashed #10b981', padding: '16px', borderRadius: '16px' }}>
+                      <p style={{ fontSize: '12px', fontWeight: 700, color: '#10b981', marginBottom: '12px' }}>Return Approved</p>
+                      <button
+                        onClick={() => { setSelectedOrderId(order._id); setDriverModalType('return'); setShowDriverModal(true); }}
+                        className="btn-primary"
+                        style={{ width: '100%', padding: '10px', background: order.returnDriverId ? 'rgba(99, 102, 241, 0.1)' : '#10b981', color: order.returnDriverId ? 'var(--primary)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      >
+                        <Truck size={14} /> {(() => {
+                          const retDInfo = getDriverDetails(order.returnDriverId);
+                          return retDInfo ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              Return Driver: <strong>{retDInfo.name}</strong> {retDInfo.vehicle ? `🚗 ${retDInfo.vehicle}` : ''}
+                            </span>
+                          ) : 'Assign Return Driver';
+                        })()}
                       </button>
-                    )}
-                    {!isDriver && ['Pending', 'Packed'].includes(order.orderStatus) && (
-                      <button onClick={() => handleCancelOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Cancel Order</button>
-                    )}
-                    {!isDriver && (
-                      <button onClick={() => handleDeleteOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Delete Order</button>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {/* Dynamic Status Dropdown - Admins Only (Pending and Packed only; locked for Out for Delivery, Delivered, Cancelled) */}
+                      {!isDriver && ['Pending', 'Packed'].includes(order.orderStatus) && (
+                        <div style={{ position: 'relative' }}>
+                          <select
+                            value={order.orderStatus}
+                            onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
+                            style={{
+                              width: '100%', padding: '10px 12px', borderRadius: '12px', background: 'var(--glass-bg)',
+                              border: '1px solid var(--glass-border)', color: 'var(--text-main)', fontSize: '12px', fontWeight: 600, cursor: 'pointer'
+                            }}
+                          >
+                            <option value="Pending" style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>Pending</option>
+                            <option value="Packed" style={{ background: 'var(--bg-sidebar)', color: 'var(--text-main)' }}>Packed</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Authorized Driver Delivery Workflow with Customer 6-Digit OTP */}
+                      {isDriver && ['Packed', 'Out for Delivery'].includes(order.orderStatus) && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <button
+                            onClick={() => handleUpdateStatus(order._id, 'Delivered')}
+                            className="btn-primary"
+                            style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 8px 16px -4px rgba(16, 185, 129, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                          >
+                            <ShieldCheck size={16} /> Complete Delivery (Customer OTP)
+                          </button>
+                          <button
+                            onClick={() => handleResendOtp(order._id)}
+                            type="button"
+                            style={{
+                              background: 'rgba(99, 102, 241, 0.1)',
+                              border: '1px solid rgba(99, 102, 241, 0.25)',
+                              color: 'var(--primary)',
+                              padding: '8px',
+                              borderRadius: '10px',
+                              cursor: 'pointer',
+                              fontSize: '11px',
+                              fontWeight: 700
+                            }}
+                          >
+                            Resend Customer Delivery OTP
+                          </button>
+                        </div>
+                      )}
+
+                      {!isDriver && order.orderStatus === 'Pending' && (
+                        <button onClick={() => handleUpdateStatus(order._id, 'Packed')} className="btn-primary" style={{ width: '100%', padding: '12px' }}>Mark as Packed</button>
+                      )}
+
+                      {!isDriver && ['Packed', 'Out for Delivery'].includes(order.orderStatus) && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                            <button
+                              onClick={() => { setSelectedOrderId(order._id); setDriverModalType('delivery'); setShowDriverModal(true); }}
+                              className="btn-primary"
+                              style={{ flex: 1, padding: '10px', background: order.driverId ? 'rgba(99, 102, 241, 0.1)' : 'var(--primary)', color: order.driverId ? 'var(--primary)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                            >
+                              <Truck size={14} /> {(() => {
+                                const dInfo = getDriverDetails(order.driverId);
+                                return dInfo ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    Driver: <strong>{dInfo.name}</strong> {dInfo.vehicle ? `🚗 ${dInfo.vehicle}` : ''}
+                                  </span>
+                                ) : 'Assign Driver';
+                              })()}
+                            </button>
+
+                            {order.driverId && (
+                              <button
+                                onClick={() => handleTrackDriver(order.driverId)}
+                                style={{
+                                  background: 'rgba(34, 197, 94, 0.1)',
+                                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                                  color: '#22c55e',
+                                  padding: '10px 14px',
+                                  borderRadius: '12px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  fontWeight: 700,
+                                  fontSize: '12px',
+                                  transition: 'all 0.2s'
+                                }}
+                                title="Track driver live coordinates"
+                                onMouseOver={(e) => {
+                                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
+                                  e.currentTarget.style.transform = 'translateY(-1px)';
+                                }}
+                                onMouseOut={(e) => {
+                                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                }}
+                              >
+                                <MapPin size={14} style={{ filter: 'drop-shadow(0 0 4px #22c55e)' }} />
+                                Track Live
+                              </button>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => { setSelectedOrderId(order._id); setShowCashModal(true); }}
+                            className="btn-primary"
+                            style={{ width: '100%', padding: '10px', background: order.cashPersonId ? 'rgba(16, 185, 129, 0.1)' : 'var(--primary)', color: order.cashPersonId ? '#10b981' : 'white' }}
+                          >
+                            <IndianRupee size={14} /> {order.cashPersonId ? `Cash: ${order.cashPersonId.name}` : 'Assign Cash Collector'}
+                          </button>
+                        </div>
+                      )}
+
+                      {order.orderStatus === 'Delivered' && order.paymentMethod === 'COD' && order.paymentStatus !== 'Completed' && (
+                        <button onClick={() => { setSelectedOrderId(order._id); setShowOtpModal(true); }} className="btn-primary" style={{ width: '100%', padding: '12px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid #10b981' }}>
+                          <ShieldCheck size={16} /> Collect Payment (OTP)
+                        </button>
+                      )}
+                      {!isDriver && ['Pending', 'Packed'].includes(order.orderStatus) && (
+                        <button onClick={() => handleCancelOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#f59e0b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Cancel Order</button>
+                      )}
+                      {!isDriver && (
+                        <button onClick={() => handleDeleteOrder(order._id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' }}>Delete Order</button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
         </div>
       )}
 
@@ -3159,11 +3213,11 @@ const Orders = () => {
           <div className="glass-card" style={{ padding: '32px', borderRadius: '24px', width: '360px', textAlign: 'center' }}>
             <h3 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '8px' }}>Verify Collection</h3>
             <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '24px' }}>Enter the 6-digit Delivery OTP from the customer to verify delivery and cash collection.</p>
-            <input 
-              type="text" 
-              maxLength="6" 
-              placeholder="000000" 
-              value={otp} 
+            <input
+              type="text"
+              maxLength="6"
+              placeholder="000000"
+              value={otp}
               onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
               style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', textAlign: 'center', fontSize: '26px', fontWeight: 800, letterSpacing: '4px', marginBottom: '20px', fontFamily: 'monospace' }}
             />
@@ -3194,25 +3248,25 @@ const Orders = () => {
                     setShowCashModal(false);
                     fetchOrders();
                   }}
-                  style={{ 
-                    display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', borderRadius: '20px', 
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', borderRadius: '20px',
                     background: 'var(--card-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer',
                     transition: '0.2s'
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary)'}
                   onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--glass-border)'}
                 >
-                  <div style={{ 
-                    width: '40px', height: '40px', borderRadius: '10px', 
-                    background: collector.role ? 'var(--primary)' : '#10b981', 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' 
+                  <div style={{
+                    width: '40px', height: '40px', borderRadius: '10px',
+                    background: collector.role ? 'var(--primary)' : '#10b981',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold'
                   }}>
                     {collector.name[0]}
                   </div>
                   <div style={{ flex: 1, textAlign: 'left' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <p style={{ fontWeight: 700, fontSize: '15px', margin: 0 }}>{collector.name}</p>
-                      <span style={{ 
+                      <span style={{
                         fontSize: '9px', fontWeight: 800, padding: '2px 6px', borderRadius: '4px',
                         background: collector.isDriver ? 'rgba(168, 85, 247, 0.1)' : collector.role ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)',
                         color: collector.isDriver ? '#a855f7' : collector.role ? 'var(--primary)' : '#10b981'
@@ -3254,9 +3308,9 @@ const Orders = () => {
                       toast.error('Failed to assign driver');
                     }
                   }}
-                  style={{ 
-                    display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', borderRadius: '20px', 
-                    background: 'var(--card-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer' 
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', borderRadius: '20px',
+                    background: 'var(--card-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer'
                   }}
                 >
                   <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{driver.name[0]}</div>
@@ -3264,13 +3318,13 @@ const Orders = () => {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                       <p style={{ fontWeight: 700, fontSize: '15px', margin: 0 }}>{driver.name}</p>
                       {(driver.vehicleNo || driver.vehicleDetails) && (
-                        <span style={{ 
-                          fontSize: '11px', 
-                          fontWeight: 700, 
-                          color: 'var(--primary)', 
-                          background: 'rgba(99, 102, 241, 0.15)', 
-                          border: '1px solid rgba(99, 102, 241, 0.3)', 
-                          padding: '2px 8px', 
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: 'var(--primary)',
+                          background: 'rgba(99, 102, 241, 0.15)',
+                          border: '1px solid rgba(99, 102, 241, 0.3)',
+                          padding: '2px 8px',
                           borderRadius: '6px',
                           fontFamily: 'monospace',
                           letterSpacing: '0.5px'
@@ -3307,14 +3361,14 @@ const Orders = () => {
               </div>
               <button onClick={() => setShowTrackingModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}><XCircle size={24} /></button>
             </div>
-            
+
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Telemetry Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>GPS Telemetry Feed</span>
                 </div>
-                <button 
+                <button
                   onClick={() => fetchDriverLocation(trackingDriver._id)}
                   disabled={loadingLocation}
                   style={{
@@ -3361,15 +3415,15 @@ const Orders = () => {
                   boxShadow: 'inset 0 0 12px rgba(255,255,255,0.02)'
                 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px' }}>
-                    <div style={{ 
-                      width: '56px', 
-                      height: '56px', 
-                      borderRadius: '16px', 
-                      background: 'rgba(239, 68, 68, 0.08)', 
+                    <div style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '16px',
+                      background: 'rgba(239, 68, 68, 0.08)',
                       border: '1.5px dashed rgba(239, 68, 68, 0.3)',
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                       color: '#ef4444',
                       boxShadow: '0 0 20px rgba(239, 68, 68, 0.15)',
                       animation: 'pulse 2s infinite'
@@ -3378,8 +3432,8 @@ const Orders = () => {
                     </div>
                     <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>TELEMETRY BEACON OFFLINE</div>
                     <p style={{ fontSize: '12px', color: 'var(--text-dim)', maxWidth: '280px', lineHeight: 1.5, margin: 0 }}>
-                      {locationError.includes('disabled') 
-                        ? 'The driver has no active picked-up shipments. Location streams only when a package is out for delivery.' 
+                      {locationError.includes('disabled')
+                        ? 'The driver has no active picked-up shipments. Location streams only when a package is out for delivery.'
                         : locationError}
                     </p>
                   </div>
@@ -3390,14 +3444,14 @@ const Orders = () => {
                       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#22c55e', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 800 }}>✓</div>
                       <span style={{ fontSize: '10px', color: 'var(--text-main)', fontWeight: 600 }}>1. Assigned</span>
                     </div>
-                    
+
                     <div style={{ height: '2px', background: 'var(--glass-border)', flex: 1, margin: '0 8px', alignSelf: 'center', marginTop: '-12px' }} />
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flex: 1 }}>
                       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--input-bg)', border: '1.5px solid var(--glass-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'var(--text-dim)' }}>2</div>
                       <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>2. Picked Up</span>
                     </div>
-                    
+
                     <div style={{ height: '2px', background: 'var(--glass-border)', flex: 1, margin: '0 8px', alignSelf: 'center', marginTop: '-12px' }} />
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flex: 1 }}>
@@ -3409,12 +3463,12 @@ const Orders = () => {
               ) : driverLocation && driverLocation.lat != null ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   {/* Map frame */}
-                  <div style={{ 
-                    overflow: 'hidden', 
-                    borderRadius: '24px', 
-                    border: '1.5px solid var(--glass-border)', 
-                    background: '#090d16', 
-                    position: 'relative', 
+                  <div style={{
+                    overflow: 'hidden',
+                    borderRadius: '24px',
+                    border: '1.5px solid var(--glass-border)',
+                    background: '#090d16',
+                    position: 'relative',
                     height: '280px',
                     boxShadow: '0 8px 32px rgba(99, 102, 241, 0.15), 0 0 20px rgba(99, 102, 241, 0.1)'
                   }}>
@@ -3425,7 +3479,7 @@ const Orders = () => {
                       style={{ border: 'none', filter: 'brightness(0.95) contrast(1.05)' }}
                       src={`https://www.openstreetmap.org/export/embed.html?bbox=${driverLocation.lng - 0.005}%2C${driverLocation.lat - 0.005}%2C${driverLocation.lng + 0.005}%2C${driverLocation.lat + 0.005}&layer=mapnik&marker=${driverLocation.lat}%2C${driverLocation.lng}`}
                     />
-                    
+
                     <div style={{
                       position: 'absolute',
                       top: '12px',
@@ -3522,15 +3576,15 @@ const Orders = () => {
                   boxShadow: 'inset 0 0 12px rgba(255,255,255,0.02)'
                 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px' }}>
-                    <div style={{ 
-                      width: '56px', 
-                      height: '56px', 
-                      borderRadius: '16px', 
-                      background: 'var(--input-bg)', 
+                    <div style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '16px',
+                      background: 'var(--input-bg)',
                       border: '1.5px dashed var(--glass-border)',
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                       color: 'var(--text-dim)',
                       boxShadow: '0 0 20px rgba(255, 255, 255, 0.05)'
                     }}>
@@ -3558,7 +3612,7 @@ const Orders = () => {
                 <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>Create Custom Order</h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0' }}>Manually add a shipment consignee to the dashboard</p>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setShowCreateModal(false);
                   setCoSegment('');
@@ -3568,7 +3622,7 @@ const Orders = () => {
                   setCoCategoryId('');
                   setCoSubCategoryId('');
                   setCoErrors({});
-                }} 
+                }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
               >
                 <XCircle size={24} />
@@ -3582,7 +3636,7 @@ const Orders = () => {
                   <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)', margin: 0, letterSpacing: '0.5px' }}>SELECT CLIENT SEGMENT</h4>
                   <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '8px 0 0' }}>Configure manual order parameters for B2B or B2C trade channels</p>
                 </div>
-                
+
                 <div style={{ display: 'flex', gap: '24px', width: '100%', maxWidth: '600px', flexWrap: 'wrap' }}>
                   {/* B2B Card */}
                   <button
@@ -3696,7 +3750,7 @@ const Orders = () => {
                         {coSegment === 'b2b' ? '🏢 B2B Merchant Channel' : '🛍️ B2C Retail Channel'}
                       </span>
                     </div>
-                    <button 
+                    <button
                       onClick={() => {
                         setCoSegment('');
                         setCoUserId('');
@@ -3719,8 +3773,8 @@ const Orders = () => {
                     <div style={{ display: 'flex', gap: '16px', flexDirection: 'column' }}>
                       <div style={{ position: 'relative' }}>
                         <Search size={16} style={{ position: 'absolute', left: '16px', top: '16px', color: 'var(--text-dim)' }} />
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           placeholder={`Search ${coSegment.toUpperCase()} customers by name, phone or email...`}
                           value={userSearchTerm}
                           onChange={(e) => setUserSearchTerm(e.target.value)}
@@ -3732,11 +3786,11 @@ const Orders = () => {
 
                       {(userSearchTerm || coUserFocused) && (
                         <div style={{ background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: '16px', maxHeight: '160px', overflowY: 'auto', padding: '6px' }}>
-                          {users.filter(u => 
+                          {users.filter(u =>
                             (u.role || '').toLowerCase() === coSegment.toLowerCase() && (
                               !userSearchTerm ||
-                              u.name?.toLowerCase().includes(userSearchTerm.toLowerCase()) || 
-                              u.businessName?.toLowerCase().includes(userSearchTerm.toLowerCase()) || 
+                              u.name?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+                              u.businessName?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
                               u.email?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
                               u.phone?.includes(userSearchTerm)
                             )
@@ -3784,7 +3838,7 @@ const Orders = () => {
                               {users.find(u => u._id === coUserId)?.businessName || users.find(u => u._id === coUserId)?.name}
                             </p>
                           </div>
-                          <button 
+                          <button
                             onClick={() => {
                               setCoUserId('');
                               setCoAddress({ name: '', phone: '', address: '', city: '', pincode: '', state: '' });
@@ -3804,20 +3858,20 @@ const Orders = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Recipient Name</label>
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           id="co-recipient-name"
-                          value={coAddress.name} 
+                          value={coAddress.name}
                           onChange={(e) => {
                             setCoAddress({ ...coAddress, name: e.target.value });
                             if (coErrors.name) setCoErrors({ ...coErrors, name: false });
                           }}
-                          style={{ 
-                            padding: '12px', 
-                            borderRadius: '12px', 
-                            border: coErrors.name ? '1.5px solid #ef4444' : '1px solid var(--glass-border)', 
-                            background: 'var(--input-bg)', 
-                            color: 'var(--text-main)', 
+                          style={{
+                            padding: '12px',
+                            borderRadius: '12px',
+                            border: coErrors.name ? '1.5px solid #ef4444' : '1px solid var(--glass-border)',
+                            background: 'var(--input-bg)',
+                            color: 'var(--text-main)',
                             fontSize: '13px',
                             boxShadow: coErrors.name ? '0 0 8px rgba(239, 68, 68, 0.25)' : 'none',
                             outline: 'none'
@@ -3846,7 +3900,7 @@ const Orders = () => {
                                 Active
                               </span>
                             </div>
-                            
+
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', fontSize: '12px', color: 'var(--text-main)' }}>
                               <div>
                                 <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Address: </span>
@@ -3894,17 +3948,17 @@ const Orders = () => {
                               <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>
                                 Phone Number <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(Add manually for consignee)</span>
                               </label>
-                              <input 
-                                type="text" 
-                                value={coAddress.phone} 
+                              <input
+                                type="text"
+                                value={coAddress.phone}
                                 onChange={(e) => setCoAddress({ ...coAddress, phone: e.target.value })}
                                 placeholder="Enter manual contact number..."
-                                style={{ 
-                                  padding: '12px', 
-                                  borderRadius: '12px', 
-                                  border: '1px solid var(--glass-border)', 
-                                  background: 'var(--input-bg)', 
-                                  color: 'var(--text-main)', 
+                                style={{
+                                  padding: '12px',
+                                  borderRadius: '12px',
+                                  border: '1px solid var(--glass-border)',
+                                  background: 'var(--input-bg)',
+                                  color: 'var(--text-main)',
                                   fontSize: '13px',
                                   outline: 'none'
                                 }}
@@ -3920,16 +3974,16 @@ const Orders = () => {
                   <div>
                     <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', margin: '0 0 12px' }}>3. Add Products</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      
+
                       {/* Category & Subcategory Dropdowns */}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '8px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Filter by Category</label>
-                          <select 
+                          <select
                             value={coCategoryId}
                             onChange={(e) => {
                               setCoCategoryId(e.target.value);
-                              setCoSubCategoryId(''); 
+                              setCoSubCategoryId('');
                               setCoSelectedProductId('');
                               setProductSearchTerm('');
                             }}
@@ -3943,7 +3997,7 @@ const Orders = () => {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Filter by Subcategory</label>
-                          <select 
+                          <select
                             value={coSubCategoryId}
                             onChange={(e) => {
                               setCoSubCategoryId(e.target.value);
@@ -3964,8 +4018,8 @@ const Orders = () => {
                       {/* Product search and selection */}
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                         <div style={{ flex: 1, position: 'relative' }}>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             placeholder={coCategoryId ? "Click to view or search products..." : "Search products by specification name..."}
                             value={productSearchTerm}
                             onChange={(e) => setProductSearchTerm(e.target.value)}
@@ -4005,8 +4059,8 @@ const Orders = () => {
                         </div>
 
                         <div style={{ width: '100px' }}>
-                          <input 
-                            type="number" 
+                          <input
+                            type="number"
                             min="1"
                             value={coSelectedQty}
                             onChange={(e) => setCoSelectedQty(Number(e.target.value))}
@@ -4014,7 +4068,7 @@ const Orders = () => {
                           />
                         </div>
 
-                        <button 
+                        <button
                           onClick={() => {
                             const prod = products.find(p => p._id === coSelectedProductId);
                             if (!prod) {
@@ -4037,7 +4091,7 @@ const Orders = () => {
                             setProductSearchTerm('');
                             setCoSelectedQty(1);
                           }}
-                          className="btn-primary" 
+                          className="btn-primary"
                           style={{ padding: '12px 20px', background: 'var(--primary)', border: 'none', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '12px' }}
                         >
                           <Plus size={16} /> Add
@@ -4226,7 +4280,7 @@ const Orders = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', background: 'var(--card-bg)', padding: '20px 24px', borderRadius: '20px', border: '1px solid var(--glass-border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Payment Mode:</span>
-                      <select 
+                      <select
                         value={coPaymentMethod}
                         onChange={(e) => setCoPaymentMethod(e.target.value)}
                         style={{ padding: '8px 12px', borderRadius: '10px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', fontSize: '12px', fontWeight: 600 }}
@@ -4246,7 +4300,7 @@ const Orders = () => {
 
                 {/* Modal Actions */}
                 <div style={{ padding: '20px 32px', borderTop: '1px solid var(--glass-border)', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button 
+                  <button
                     onClick={() => {
                       setShowCreateModal(false);
                       setCoSegment('');
@@ -4256,13 +4310,13 @@ const Orders = () => {
                       setCoCategoryId('');
                       setCoSubCategoryId('');
                       setCoErrors({});
-                    }} 
-                    className="btn-primary" 
+                    }}
+                    className="btn-primary"
                     style={{ background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)' }}
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     onClick={async () => {
                       if (!coUserId) {
                         toast.error('Please select a customer first');
@@ -4272,7 +4326,7 @@ const Orders = () => {
                         toast.error('Please add at least one product');
                         return;
                       }
-                      
+
                       const errors = {};
                       if (!coAddress.name) errors.name = true;
 
@@ -4325,11 +4379,11 @@ const Orders = () => {
                 <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>Edit Order Details</h3>
                 <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0' }}>Modify products, quantities, prices or consignee details for Order #{filteredOrders.findIndex(o => o._id === editingOrder._id) !== -1 ? filteredOrders.findIndex(o => o._id === editingOrder._id) + 1 : editingOrder._id.slice(-8).toUpperCase()}</p>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setShowEditItemsModal(false);
                   setEditingOrder(null);
-                }} 
+                }}
                 style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
               >
                 <XCircle size={24} />
@@ -4376,457 +4430,457 @@ const Orders = () => {
             <div style={{ padding: '32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px', flex: 1 }}>
               {editOrderTab === 'items' ? (
                 <>
-              {/* Product Selector */}
-              <div>
-                <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', margin: '0 0 12px' }}>Add New Product</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  
-                  {/* Category & Subcategory Dropdowns */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Filter by Category</label>
-                      <select 
-                        value={eoCategoryId}
-                        onChange={(e) => {
-                          setEoCategoryId(e.target.value);
-                          setEoSubCategoryId(''); 
-                          setEoSelectedProductId('');
-                          setEoProductSearchTerm('');
-                        }}
-                        style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px', outline: 'none' }}
-                      >
-                        <option value="">All Categories</option>
-                        {categories.map(c => (
-                          <option key={c._id} value={c._id}>{c.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Filter by Subcategory</label>
-                      <select 
-                        value={eoSubCategoryId}
-                        onChange={(e) => {
-                          setEoSubCategoryId(e.target.value);
-                          setEoSelectedProductId('');
-                          setEoProductSearchTerm('');
-                        }}
-                        disabled={!eoCategoryId}
-                        style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px', outline: 'none', opacity: eoCategoryId ? 1 : 0.6 }}
-                      >
-                        <option value="">All Subcategories</option>
-                        {categories.find(c => c._id === eoCategoryId)?.subCategories?.map(sub => (
-                          <option key={sub._id} value={sub._id}>{sub.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                  {/* Product Selector */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', margin: '0 0 12px' }}>Add New Product</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-                  {/* Product Search Input */}
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1, position: 'relative' }}>
-                      <input 
-                        type="text" 
-                        placeholder={eoCategoryId ? "Click to view or search products..." : "Search products by specification name..."}
-                        value={eoProductSearchTerm}
-                        onChange={(e) => setEoProductSearchTerm(e.target.value)}
-                        onFocus={() => setEoProductFocused(true)}
-                        onBlur={() => setTimeout(() => setEoProductFocused(false), 200)}
-                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--card-bg)', color: 'var(--text-main)', fontSize: '13px' }}
-                      />
-                      {(eoProductSearchTerm || eoProductFocused) && (
-                        <div style={{ position: 'absolute', left: 0, right: 0, top: '48px', background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: '16px', maxHeight: '160px', overflowY: 'auto', padding: '6px', zIndex: 10 }}>
-                          {products.filter(p => {
-                            const matchSearch = !eoProductSearchTerm || p.name?.toLowerCase().includes(eoProductSearchTerm.toLowerCase());
-                            const matchCategory = !eoCategoryId || (p.categoryId?._id || p.categoryId) === eoCategoryId;
-                            const matchSubCategory = !eoSubCategoryId || (p.subCategoryId?._id || p.subCategoryId) === eoSubCategoryId;
-                            return matchSearch && matchCategory && matchSubCategory;
-                          }).map(p => (
-                            <button
-                              key={p._id}
-                              onClick={() => {
-                                setEoSelectedProductId(p._id);
-                                setEoProductSearchTerm(p.name);
-                              }}
-                              style={{ width: '100%', padding: '10px 14px', display: 'flex', gap: '10px', alignItems: 'center', background: 'transparent', border: 'none', borderRadius: '10px', color: 'var(--text-main)', cursor: 'pointer', textAlign: 'left' }}
-                              onMouseOver={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.05)'}
-                              onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-                            >
-                              <img src={p.imageUrl} style={{ width: '28px', height: '28px', borderRadius: '4px', objectFit: 'cover' }} alt="" />
-                              <div style={{ flex: 1 }}>
-                                <p style={{ fontWeight: 700, fontSize: '12px', margin: 0 }}>{p.name}</p>
-                                <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: 0 }}>
-                                  By: <strong style={{ color: 'var(--primary)' }}>{p.sellerName || 'Zudo Official'}</strong> • ₹{editingOrder.userId?.role === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
-                                </p>
-                              </div>
-                            </button>
-                          ))}
+                      {/* Category & Subcategory Dropdowns */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Filter by Category</label>
+                          <select
+                            value={eoCategoryId}
+                            onChange={(e) => {
+                              setEoCategoryId(e.target.value);
+                              setEoSubCategoryId('');
+                              setEoSelectedProductId('');
+                              setEoProductSearchTerm('');
+                            }}
+                            style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px', outline: 'none' }}
+                          >
+                            <option value="">All Categories</option>
+                            {categories.map(c => (
+                              <option key={c._id} value={c._id}>{c.name}</option>
+                            ))}
+                          </select>
                         </div>
-                      )}
-                    </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Filter by Subcategory</label>
+                          <select
+                            value={eoSubCategoryId}
+                            onChange={(e) => {
+                              setEoSubCategoryId(e.target.value);
+                              setEoSelectedProductId('');
+                              setEoProductSearchTerm('');
+                            }}
+                            disabled={!eoCategoryId}
+                            style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px', outline: 'none', opacity: eoCategoryId ? 1 : 0.6 }}
+                          >
+                            <option value="">All Subcategories</option>
+                            {categories.find(c => c._id === eoCategoryId)?.subCategories?.map(sub => (
+                              <option key={sub._id} value={sub._id}>{sub.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
 
-                    <div style={{ width: '100px' }}>
-                      <input 
-                        type="number" 
-                        min="1"
-                        value={eoSelectedQty}
-                        onChange={(e) => setEoSelectedQty(Number(e.target.value))}
-                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px', textAlign: 'center' }}
+                      {/* Product Search Input */}
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, position: 'relative' }}>
+                          <input
+                            type="text"
+                            placeholder={eoCategoryId ? "Click to view or search products..." : "Search products by specification name..."}
+                            value={eoProductSearchTerm}
+                            onChange={(e) => setEoProductSearchTerm(e.target.value)}
+                            onFocus={() => setEoProductFocused(true)}
+                            onBlur={() => setTimeout(() => setEoProductFocused(false), 200)}
+                            style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--card-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                          />
+                          {(eoProductSearchTerm || eoProductFocused) && (
+                            <div style={{ position: 'absolute', left: 0, right: 0, top: '48px', background: 'var(--card-bg)', border: '1px solid var(--glass-border)', borderRadius: '16px', maxHeight: '160px', overflowY: 'auto', padding: '6px', zIndex: 10 }}>
+                              {products.filter(p => {
+                                const matchSearch = !eoProductSearchTerm || p.name?.toLowerCase().includes(eoProductSearchTerm.toLowerCase());
+                                const matchCategory = !eoCategoryId || (p.categoryId?._id || p.categoryId) === eoCategoryId;
+                                const matchSubCategory = !eoSubCategoryId || (p.subCategoryId?._id || p.subCategoryId) === eoSubCategoryId;
+                                return matchSearch && matchCategory && matchSubCategory;
+                              }).map(p => (
+                                <button
+                                  key={p._id}
+                                  onClick={() => {
+                                    setEoSelectedProductId(p._id);
+                                    setEoProductSearchTerm(p.name);
+                                  }}
+                                  style={{ width: '100%', padding: '10px 14px', display: 'flex', gap: '10px', alignItems: 'center', background: 'transparent', border: 'none', borderRadius: '10px', color: 'var(--text-main)', cursor: 'pointer', textAlign: 'left' }}
+                                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.05)'}
+                                  onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  <img src={p.imageUrl} style={{ width: '28px', height: '28px', borderRadius: '4px', objectFit: 'cover' }} alt="" />
+                                  <div style={{ flex: 1 }}>
+                                    <p style={{ fontWeight: 700, fontSize: '12px', margin: 0 }}>{p.name}</p>
+                                    <p style={{ fontSize: '10px', color: 'var(--text-dim)', margin: 0 }}>
+                                      By: <strong style={{ color: 'var(--primary)' }}>{p.sellerName || 'Zudo Official'}</strong> • ₹{editingOrder.userId?.role === 'b2b' ? (p.b2bPrice || p.price) : p.price} • Stock: {p.stock}
+                                    </p>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ width: '100px' }}>
+                          <input
+                            type="number"
+                            min="1"
+                            value={eoSelectedQty}
+                            onChange={(e) => setEoSelectedQty(Number(e.target.value))}
+                            style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px', textAlign: 'center' }}
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            const prod = products.find(p => p._id === eoSelectedProductId);
+                            if (!prod) {
+                              toast.error('Please select a valid product first');
+                              return;
+                            }
+                            if (eoItems.some(item => item.productId === prod._id)) {
+                              toast.error('Product already in list');
+                              return;
+                            }
+                            const userRole = editingOrder.userId?.role || 'b2c';
+                            setEoItems([...eoItems, {
+                              productId: prod._id,
+                              name: prod.name,
+                              sellerName: prod.sellerName,
+                              quantity: eoSelectedQty,
+                              price: userRole === 'b2b' ? (prod.b2bPrice || prod.price) : prod.price
+                            }]);
+                            setEoSelectedProductId('');
+                            setEoProductSearchTerm('');
+                            setEoSelectedQty(1);
+                          }}
+                          className="btn-primary"
+                          style={{ padding: '12px 20px', background: 'var(--primary)', border: 'none', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '12px' }}
+                        >
+                          <Plus size={16} /> Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Current Items List */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', margin: '0 0 12px' }}>Current Products</h4>
+                    <div style={{ border: '1px solid var(--glass-border)', borderRadius: '16px', overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
+                            <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--text-dim)' }}>Product</th>
+                            <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '130px' }}>Quantity</th>
+                            <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--text-dim)', width: '130px' }}>Estimated Price</th>
+                            <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '90px' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {eoItems.length === 0 ? (
+                            <tr>
+                              <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)' }}>No products in this order. Add one above.</td>
+                            </tr>
+                          ) : eoItems.map((item, index) => {
+                            const isEditing = editingEoItemIndex === index;
+                            return (
+                              <tr key={index} style={{ borderBottom: index < eoItems.length - 1 ? '1px solid var(--glass-border)' : 'none', background: isEditing ? 'rgba(99, 102, 241, 0.05)' : 'transparent' }}>
+                                <td style={{ padding: '12px 16px' }}>
+                                  <div style={{ fontWeight: 600 }}>{item.name}</div>
+                                  <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
+                                </td>
+
+                                {/* Quantity Column */}
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                  {isEditing ? (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'var(--input-bg)', border: '1px solid var(--primary)', borderRadius: '8px', padding: '2px 4px' }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditEoItemQty(Math.max(1, editEoItemQty - 1))}
+                                        style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '2px 6px', fontWeight: 800, fontSize: '13px' }}
+                                      >
+                                        -
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={editEoItemQty}
+                                        onChange={(e) => setEditEoItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                                        style={{ width: '42px', textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-main)', fontWeight: 700, fontSize: '12px', outline: 'none' }}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditEoItemQty(editEoItemQty + 1)}
+                                        style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '2px 6px', fontWeight: 800, fontSize: '13px' }}
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (item.quantity > 1) {
+                                            const updated = [...eoItems];
+                                            updated[index].quantity -= 1;
+                                            setEoItems(updated);
+                                          }
+                                        }}
+                                        style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}
+                                        title="Decrease quantity"
+                                      >
+                                        -
+                                      </button>
+                                      <span style={{ fontWeight: 700, minWidth: '24px', textAlign: 'center' }}>{item.quantity}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const updated = [...eoItems];
+                                          updated[index].quantity += 1;
+                                          setEoItems(updated);
+                                        }}
+                                        style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}
+                                        title="Increase quantity"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Estimated Price Column */}
+                                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                                  {isEditing ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>₹/unit:</span>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="any"
+                                          value={editEoItemPrice}
+                                          onChange={(e) => setEditEoItemPrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                                          style={{ width: '68px', padding: '3px 6px', borderRadius: '6px', border: '1px solid var(--primary)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '11px', textAlign: 'right', outline: 'none' }}
+                                        />
+                                      </div>
+                                      <span style={{ fontWeight: 800, fontSize: '12px', color: 'var(--primary)' }}>
+                                        = ₹{(editEoItemPrice * editEoItemQty).toLocaleString()}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <div style={{ fontWeight: 800, color: 'var(--primary)' }}>
+                                        ₹{(item.price * item.quantity).toLocaleString()}
+                                      </div>
+                                      <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                                        ₹{Number(item.price).toLocaleString()} / unit
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Actions Column */}
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                  {isEditing ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const updated = [...eoItems];
+                                          updated[index] = {
+                                            ...updated[index],
+                                            quantity: editEoItemQty,
+                                            price: editEoItemPrice
+                                          };
+                                          setEoItems(updated);
+                                          setEditingEoItemIndex(null);
+                                          toast.success('Product updated');
+                                        }}
+                                        style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        title="Save Item Changes"
+                                      >
+                                        <Check size={14} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingEoItemIndex(null)}
+                                        style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        title="Cancel Editing"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingEoItemIndex(index);
+                                          setEditEoItemQty(item.quantity);
+                                          setEditEoItemPrice(item.price);
+                                        }}
+                                        style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', color: 'var(--primary)', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        title="Edit Item Quantity & Price"
+                                      >
+                                        <Edit size={14} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEoItems(eoItems.filter((_, i) => i !== index))}
+                                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        title="Remove Product"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Total Calculation */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', background: 'var(--card-bg)', padding: '16px 24px', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Recalculated Order Total</span>
+                      <span style={{ fontSize: '20px', fontWeight: 800, color: '#10b981' }}>
+                        ₹{eoItems.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Consignee & Shipping Details Tab */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', margin: '0 0 4px' }}>Edit Consignee & Delivery Address</h4>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Recipient Name *</label>
+                      <input
+                        type="text"
+                        value={eoShippingAddress.name}
+                        onChange={e => setEoShippingAddress({ ...eoShippingAddress, name: e.target.value })}
+                        placeholder="Consignee full name"
+                        style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
                       />
                     </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Contact Phone *</label>
+                      <input
+                        type="text"
+                        value={eoShippingAddress.phone}
+                        onChange={e => setEoShippingAddress({ ...eoShippingAddress, phone: e.target.value })}
+                        placeholder="10-digit mobile number"
+                        style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                      />
+                    </div>
+                  </div>
 
-                    <button 
-                      onClick={() => {
-                        const prod = products.find(p => p._id === eoSelectedProductId);
-                        if (!prod) {
-                          toast.error('Please select a valid product first');
-                          return;
-                        }
-                        if (eoItems.some(item => item.productId === prod._id)) {
-                          toast.error('Product already in list');
-                          return;
-                        }
-                        const userRole = editingOrder.userId?.role || 'b2c';
-                        setEoItems([...eoItems, {
-                          productId: prod._id,
-                          name: prod.name,
-                          sellerName: prod.sellerName,
-                          quantity: eoSelectedQty,
-                          price: userRole === 'b2b' ? (prod.b2bPrice || prod.price) : prod.price
-                        }]);
-                        setEoSelectedProductId('');
-                        setEoProductSearchTerm('');
-                        setEoSelectedQty(1);
-                      }}
-                      className="btn-primary" 
-                      style={{ padding: '12px 20px', background: 'var(--primary)', border: 'none', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '12px' }}
-                    >
-                      <Plus size={16} /> Add
-                    </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Street Address *</label>
+                    <textarea
+                      rows={3}
+                      value={eoShippingAddress.address}
+                      onChange={e => setEoShippingAddress({ ...eoShippingAddress, address: e.target.value })}
+                      placeholder="Door / Building / Street address"
+                      style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px', resize: 'none' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>City *</label>
+                      <input
+                        type="text"
+                        value={eoShippingAddress.city}
+                        onChange={e => setEoShippingAddress({ ...eoShippingAddress, city: e.target.value })}
+                        placeholder="City"
+                        style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Pincode *</label>
+                      <input
+                        type="text"
+                        value={eoShippingAddress.pincode}
+                        onChange={e => setEoShippingAddress({ ...eoShippingAddress, pincode: e.target.value })}
+                        placeholder="6-digit pincode"
+                        style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>State</label>
+                      <input
+                        type="text"
+                        value={eoShippingAddress.state}
+                        onChange={e => setEoShippingAddress({ ...eoShippingAddress, state: e.target.value })}
+                        placeholder="State"
+                        style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Current Items List */}
-              <div>
-                <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', margin: '0 0 12px' }}>Current Products</h4>
-                <div style={{ border: '1px solid var(--glass-border)', borderRadius: '16px', overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
-                        <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--text-dim)' }}>Product</th>
-                        <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '130px' }}>Quantity</th>
-                        <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--text-dim)', width: '130px' }}>Estimated Price</th>
-                        <th style={{ padding: '10px 16px', textAlign: 'center', color: 'var(--text-dim)', width: '90px' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {eoItems.length === 0 ? (
-                        <tr>
-                          <td colSpan="4" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)' }}>No products in this order. Add one above.</td>
-                        </tr>
-                      ) : eoItems.map((item, index) => {
-                        const isEditing = editingEoItemIndex === index;
-                        return (
-                          <tr key={index} style={{ borderBottom: index < eoItems.length - 1 ? '1px solid var(--glass-border)' : 'none', background: isEditing ? 'rgba(99, 102, 241, 0.05)' : 'transparent' }}>
-                            <td style={{ padding: '12px 16px' }}>
-                              <div style={{ fontWeight: 600 }}>{item.name}</div>
-                              <div style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px' }}>By: <strong style={{ color: 'var(--primary)' }}>{item.sellerName || 'Zudo Official'}</strong></div>
-                            </td>
-
-                            {/* Quantity Column */}
-                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                              {isEditing ? (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'var(--input-bg)', border: '1px solid var(--primary)', borderRadius: '8px', padding: '2px 4px' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditEoItemQty(Math.max(1, editEoItemQty - 1))}
-                                    style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '2px 6px', fontWeight: 800, fontSize: '13px' }}
-                                  >
-                                    -
-                                  </button>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={editEoItemQty}
-                                    onChange={(e) => setEditEoItemQty(Math.max(1, parseInt(e.target.value) || 1))}
-                                    style={{ width: '42px', textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-main)', fontWeight: 700, fontSize: '12px', outline: 'none' }}
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditEoItemQty(editEoItemQty + 1)}
-                                    style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', padding: '2px 6px', fontWeight: 800, fontSize: '13px' }}
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              ) : (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                                  <button 
-                                    type="button"
-                                    onClick={() => {
-                                      if (item.quantity > 1) {
-                                        const updated = [...eoItems];
-                                        updated[index].quantity -= 1;
-                                        setEoItems(updated);
-                                      }
-                                    }}
-                                    style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}
-                                    title="Decrease quantity"
-                                  >
-                                    -
-                                  </button>
-                                  <span style={{ fontWeight: 700, minWidth: '24px', textAlign: 'center' }}>{item.quantity}</span>
-                                  <button 
-                                    type="button"
-                                    onClick={() => {
-                                      const updated = [...eoItems];
-                                      updated[index].quantity += 1;
-                                      setEoItems(updated);
-                                    }}
-                                    style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}
-                                    title="Increase quantity"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-
-                            {/* Estimated Price Column */}
-                            <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                              {isEditing ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>₹/unit:</span>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="any"
-                                      value={editEoItemPrice}
-                                      onChange={(e) => setEditEoItemPrice(Math.max(0, parseFloat(e.target.value) || 0))}
-                                      style={{ width: '68px', padding: '3px 6px', borderRadius: '6px', border: '1px solid var(--primary)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '11px', textAlign: 'right', outline: 'none' }}
-                                    />
-                                  </div>
-                                  <span style={{ fontWeight: 800, fontSize: '12px', color: 'var(--primary)' }}>
-                                    = ₹{(editEoItemPrice * editEoItemQty).toLocaleString()}
-                                  </span>
-                                </div>
-                              ) : (
-                                <div>
-                                  <div style={{ fontWeight: 800, color: 'var(--primary)' }}>
-                                    ₹{(item.price * item.quantity).toLocaleString()}
-                                  </div>
-                                  <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-                                    ₹{Number(item.price).toLocaleString()} / unit
-                                  </div>
-                                </div>
-                              )}
-                            </td>
-
-                            {/* Actions Column */}
-                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                              {isEditing ? (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const updated = [...eoItems];
-                                      updated[index] = {
-                                        ...updated[index],
-                                        quantity: editEoItemQty,
-                                        price: editEoItemPrice
-                                      };
-                                      setEoItems(updated);
-                                      setEditingEoItemIndex(null);
-                                      toast.success('Product updated');
-                                    }}
-                                    style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#10b981', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                    title="Save Item Changes"
-                                  >
-                                    <Check size={14} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingEoItemIndex(null)}
-                                    style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                    title="Cancel Editing"
-                                  >
-                                    <X size={14} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingEoItemIndex(index);
-                                      setEditEoItemQty(item.quantity);
-                                      setEditEoItemPrice(item.price);
-                                    }}
-                                    style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', color: 'var(--primary)', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                    title="Edit Item Quantity & Price"
-                                  >
-                                    <Edit size={14} />
-                                  </button>
-                                  <button 
-                                    type="button"
-                                    onClick={() => setEoItems(eoItems.filter((_, i) => i !== index))}
-                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                    title="Remove Product"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Total Calculation */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', background: 'var(--card-bg)', padding: '16px 24px', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Recalculated Order Total</span>
-                  <span style={{ fontSize: '20px', fontWeight: 800, color: '#10b981' }}>
-                    ₹{eoItems.reduce((sum, item) => sum + (item.price * item.quantity), 0).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </>
-          ) : (
-            /* Consignee & Shipping Details Tab */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <h4 style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', margin: '0 0 4px' }}>Edit Consignee & Delivery Address</h4>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Recipient Name *</label>
-                  <input
-                    type="text"
-                    value={eoShippingAddress.name}
-                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, name: e.target.value })}
-                    placeholder="Consignee full name"
-                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Contact Phone *</label>
-                  <input
-                    type="text"
-                    value={eoShippingAddress.phone}
-                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, phone: e.target.value })}
-                    placeholder="10-digit mobile number"
-                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Street Address *</label>
-                <textarea
-                  rows={3}
-                  value={eoShippingAddress.address}
-                  onChange={e => setEoShippingAddress({ ...eoShippingAddress, address: e.target.value })}
-                  placeholder="Door / Building / Street address"
-                  style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px', resize: 'none' }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>City *</label>
-                  <input
-                    type="text"
-                    value={eoShippingAddress.city}
-                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, city: e.target.value })}
-                    placeholder="City"
-                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>Pincode *</label>
-                  <input
-                    type="text"
-                    value={eoShippingAddress.pincode}
-                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, pincode: e.target.value })}
-                    placeholder="6-digit pincode"
-                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)' }}>State</label>
-                  <input
-                    type="text"
-                    value={eoShippingAddress.state}
-                    onChange={e => setEoShippingAddress({ ...eoShippingAddress, state: e.target.value })}
-                    placeholder="State"
-                    style={{ padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '13px' }}
-                  />
-                </div>
-              </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Modal Actions */}
-        <div style={{ padding: '20px 32px', borderTop: '1px solid var(--glass-border)', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-          <button 
-            onClick={() => {
-              setShowEditItemsModal(false);
-              setEditingOrder(null);
-            }} 
-            className="btn-primary" 
-            style={{ background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)' }}
-          >
-            Cancel
-          </button>
-          <button 
-            onClick={async () => {
-              if (eoItems.length === 0) {
-                toast.error('Order must have at least one product');
-                return;
-              }
+            {/* Modal Actions */}
+            <div style={{ padding: '20px 32px', borderTop: '1px solid var(--glass-border)', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowEditItemsModal(false);
+                  setEditingOrder(null);
+                }}
+                className="btn-primary"
+                style={{ background: 'var(--glass-bg)', color: 'var(--text-main)', border: '1px solid var(--glass-border)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (eoItems.length === 0) {
+                    toast.error('Order must have at least one product');
+                    return;
+                  }
 
-              try {
-                await axios.put(`/orders/admin/${editingOrder._id}/items`, {
-                  items: eoItems,
-                  shippingAddress: eoShippingAddress
-                });
-                toast.success('Order successfully updated!');
-                setShowEditItemsModal(false);
-                setEditingOrder(null);
-                fetchOrders();
-              } catch (err) {
-                toast.error('Failed to update order: ' + (err.response?.data?.message || err.message));
-              }
-            }}
-            className="btn-primary"
-          >
-            Save Changes
-          </button>
-        </div>
+                  try {
+                    await axios.put(`/orders/admin/${editingOrder._id}/items`, {
+                      items: eoItems,
+                      shippingAddress: eoShippingAddress
+                    });
+                    toast.success('Order successfully updated!');
+                    setShowEditItemsModal(false);
+                    setEditingOrder(null);
+                    fetchOrders();
+                  } catch (err) {
+                    toast.error('Failed to update order: ' + (err.response?.data?.message || err.message));
+                  }
+                }}
+                className="btn-primary"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Status Confirmation Modal */}
       {showStatusModal && (
-        <div style={{ 
-          position: 'fixed', inset: 0, 
+        <div style={{
+          position: 'fixed', inset: 0,
           background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <div style={{ 
+          <div style={{
             background: 'var(--card-bg)', padding: '28px', borderRadius: '24px',
             border: '1px solid var(--glass-border)', width: '420px', maxWidth: '90%',
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
           }}>
-            <div style={{ 
-              width: '52px', height: '52px', borderRadius: '26px', 
+            <div style={{
+              width: '52px', height: '52px', borderRadius: '26px',
               background: statusActionData.status === 'Delivered' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
               color: statusActionData.status === 'Delivered' ? '#10b981' : '#6366f1'
@@ -4846,18 +4900,18 @@ const Orders = () => {
 
             {statusActionData.status === 'Delivered' && (
               <div style={{ marginBottom: '20px' }}>
-                <input 
-                  type="text" 
-                  maxLength={6} 
+                <input
+                  type="text"
+                  maxLength={6}
                   autoFocus
-                  placeholder="000000" 
-                  value={statusOtpInput} 
+                  placeholder="000000"
+                  value={statusOtpInput}
                   onChange={e => setStatusOtpInput(e.target.value.replace(/\D/g, ''))}
-                  style={{ 
-                    width: '100%', padding: '14px', borderRadius: '12px', 
-                    border: '2px solid #10b981', background: 'var(--input-bg)', 
-                    color: 'var(--text-main)', textAlign: 'center', fontSize: '26px', 
-                    letterSpacing: '6px', fontWeight: 800, fontFamily: 'monospace' 
+                  style={{
+                    width: '100%', padding: '14px', borderRadius: '12px',
+                    border: '2px solid #10b981', background: 'var(--input-bg)',
+                    color: 'var(--text-main)', textAlign: 'center', fontSize: '26px',
+                    letterSpacing: '6px', fontWeight: 800, fontFamily: 'monospace'
                   }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
@@ -4876,22 +4930,22 @@ const Orders = () => {
             )}
 
             <div style={{ display: 'flex', gap: '12px' }}>
-              <button 
+              <button
                 onClick={() => {
                   setShowStatusModal(false);
                   setStatusActionData({ orderId: null, status: null });
                   setStatusOtpInput('');
                 }}
-                style={{ 
+                style={{
                   flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
                   background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
                 }}
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={confirmUpdateStatus}
-                style={{ 
+                style={{
                   flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
                   background: statusActionData.status === 'Delivered' ? '#10b981' : '#6366f1', color: '#fff', fontWeight: 600, cursor: 'pointer'
                 }}
@@ -4905,17 +4959,17 @@ const Orders = () => {
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div style={{ 
-          position: 'fixed', inset: 0, 
+        <div style={{
+          position: 'fixed', inset: 0,
           background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <div style={{ 
+          <div style={{
             background: 'var(--card-bg)', padding: '24px', borderRadius: '24px',
             border: '1px solid var(--glass-border)', width: '400px', maxWidth: '90%',
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
           }}>
-            <div style={{ 
+            <div style={{
               width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(239, 68, 68, 0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
               color: '#ef4444'
@@ -4929,21 +4983,21 @@ const Orders = () => {
               Are you sure you want to permanently delete this order? This action cannot be undone.
             </p>
             <div style={{ display: 'flex', gap: '12px' }}>
-              <button 
+              <button
                 onClick={() => {
                   setShowDeleteModal(false);
                   setDeleteOrderId(null);
                 }}
-                style={{ 
+                style={{
                   flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
                   background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
                 }}
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={confirmDeleteOrder}
-                style={{ 
+                style={{
                   flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
                   background: '#ef4444', color: '#fff', fontWeight: 600, cursor: 'pointer'
                 }}
@@ -4957,17 +5011,17 @@ const Orders = () => {
 
       {/* Return Driver Modal */}
       {showReturnDriverModal && (
-        <div style={{ 
-          position: 'fixed', inset: 0, 
+        <div style={{
+          position: 'fixed', inset: 0,
           background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <div style={{ 
+          <div style={{
             background: 'var(--card-bg)', padding: '24px', borderRadius: '24px',
             border: '1px solid var(--glass-border)', width: '400px', maxWidth: '90%',
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center'
           }}>
-            <div style={{ 
+            <div style={{
               width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(99, 102, 241, 0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
               color: '#6366f1'
@@ -4980,9 +5034,9 @@ const Orders = () => {
             <p style={{ color: 'var(--text-dim)', fontSize: '14px', marginBottom: '20px', lineHeight: '1.5' }}>
               Please enter the Driver ID for the return pickup.
             </p>
-            
-            <input 
-              type="text" 
+
+            <input
+              type="text"
               placeholder="Enter Driver ID"
               value={returnDriverIdInput}
               onChange={(e) => setReturnDriverIdInput(e.target.value)}
@@ -4995,24 +5049,24 @@ const Orders = () => {
             />
 
             <div style={{ display: 'flex', gap: '12px' }}>
-              <button 
+              <button
                 onClick={() => {
                   setShowReturnDriverModal(false);
                   setReturnDriverActionData({ orderId: null });
                 }}
-                style={{ 
+                style={{
                   flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--glass-border)',
                   background: 'transparent', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer'
                 }}
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={confirmAssignReturnDriver}
                 disabled={!returnDriverIdInput.trim()}
-                style={{ 
+                style={{
                   flex: 1, padding: '12px', borderRadius: '12px', border: 'none',
-                  background: returnDriverIdInput.trim() ? '#6366f1' : '#94a3b8', 
+                  background: returnDriverIdInput.trim() ? '#6366f1' : '#94a3b8',
                   color: '#fff', fontWeight: 600, cursor: returnDriverIdInput.trim() ? 'pointer' : 'not-allowed'
                 }}
               >
@@ -5090,18 +5144,23 @@ const Orders = () => {
                     }}>
                       {(viewingOrder.userId?.role || 'b2c').toUpperCase()}
                     </span>
-                    <span style={{
-                      fontSize: '10px',
-                      fontWeight: 800,
-                      padding: '2px 8px',
-                      borderRadius: '6px',
-                      textTransform: 'uppercase',
-                      background: viewingOrder.orderStatus === 'Delivered' ? 'rgba(16, 185, 129, 0.12)' : viewingOrder.orderStatus === 'Cancelled' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                      color: viewingOrder.orderStatus === 'Delivered' ? '#10b981' : viewingOrder.orderStatus === 'Cancelled' ? '#ef4444' : '#f59e0b',
-                      border: `1px solid ${viewingOrder.orderStatus === 'Delivered' ? 'rgba(16, 185, 129, 0.3)' : viewingOrder.orderStatus === 'Cancelled' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
-                    }}>
-                      {viewingOrder.orderStatus}
-                    </span>
+                    {(() => {
+                      const mStyle = getOrderStatusStyle(viewingOrder.orderStatus);
+                      return (
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 800,
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          textTransform: 'uppercase',
+                          background: mStyle.bg,
+                          color: mStyle.color,
+                          border: `1px solid ${mStyle.border}`
+                        }}>
+                          {viewingOrder.orderStatus}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', fontSize: '11px', color: 'var(--text-dim)', flexWrap: 'wrap' }}>
                     <span>ID: <code style={{ fontFamily: 'monospace', color: 'var(--text-main)' }}>{viewingOrder._id}</code></span>
@@ -5169,16 +5228,20 @@ const Orders = () => {
             </div>
 
             {/* Modal Navigation Tabs */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '0 28px',
-              borderBottom: '1px solid var(--glass-border)',
-              background: 'rgba(255, 255, 255, 0.02)',
-              overflowX: 'auto',
-              flexShrink: 0
-            }}>
+            <div 
+              className="custom-scrollbar"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: isMobile ? '0 12px' : '0 28px',
+                borderBottom: '1px solid var(--glass-border)',
+                background: 'rgba(255, 255, 255, 0.02)',
+                overflowX: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                flexShrink: 0
+              }}
+            >
               {[
                 { id: 'all', label: 'Overview', icon: FileText },
                 { id: 'products', label: `Full Product Details (${viewingOrder.items?.length || 0})`, icon: Boxes, badge: viewingOrder.items?.length || 0 },
@@ -5587,8 +5650,8 @@ const Orders = () => {
                                 <div>
                                   <span style={{ color: 'var(--text-dim)', display: 'block' }}>Admin Commission Rate</span>
                                   <strong style={{ color: 'var(--primary)' }}>
-                                    {pInfo.commissionRate > 0 
-                                      ? (pInfo.commissionType === 'percentage' ? `${pInfo.commissionRate}%` : `₹${pInfo.commissionRate} / ${pInfo.measurementBasis}`) 
+                                    {pInfo.commissionRate > 0
+                                      ? (pInfo.commissionType === 'percentage' ? `${pInfo.commissionRate}%` : `₹${pInfo.commissionRate} / ${pInfo.measurementBasis}`)
                                       : 'Standard Platform'}
                                   </strong>
                                 </div>
@@ -5755,14 +5818,14 @@ const Orders = () => {
                         )}
                         {(() => {
                           const orderCommission = Number(
-                            viewingOrder.totalCommissionAmount !== undefined 
-                              ? viewingOrder.totalCommissionAmount 
+                            viewingOrder.totalCommissionAmount !== undefined
+                              ? viewingOrder.totalCommissionAmount
                               : (viewingOrder.items || []).reduce((sum, it) => {
-                                  const itComm = it.totalCommission !== undefined 
-                                    ? it.totalCommission 
-                                    : ((it.unitCommission || 0) * (it.quantity || 1));
-                                  return sum + itComm;
-                                }, 0)
+                                const itComm = it.totalCommission !== undefined
+                                  ? it.totalCommission
+                                  : ((it.unitCommission || 0) * (it.quantity || 1));
+                                return sum + itComm;
+                              }, 0)
                           );
                           return orderCommission > 0 ? (
                             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6366f1' }}>
@@ -6024,7 +6087,7 @@ const Orders = () => {
 
       {/* Product Image Lightbox Preview */}
       {previewImage && (
-        <div 
+        <div
           onClick={() => setPreviewImage(null)}
           style={{
             position: 'fixed',
@@ -6039,10 +6102,10 @@ const Orders = () => {
           }}
         >
           <div style={{ position: 'relative', maxWidth: '600px', maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
-            <img 
-              src={previewImage} 
-              alt="Product Preview" 
-              style={{ width: '100%', maxHeight: '85vh', objectFit: 'contain', borderRadius: '18px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }} 
+            <img
+              src={previewImage}
+              alt="Product Preview"
+              style={{ width: '100%', maxHeight: '85vh', objectFit: 'contain', borderRadius: '18px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}
             />
             <button
               onClick={() => setPreviewImage(null)}

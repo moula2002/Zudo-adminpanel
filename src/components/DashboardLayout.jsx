@@ -68,7 +68,7 @@ const DashboardLayout = ({ children }) => {
   }, [isSwitchingLocation]);
 
   // Responsive state
-  const [isMobile, setIsMobile] = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(() => typeof window !== 'undefined' && window.innerWidth <= 1024);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -311,7 +311,7 @@ const DashboardLayout = ({ children }) => {
             background: 'rgba(15, 23, 42, 0.6)',
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
-            zIndex: 998,
+            zIndex: 9998,
             opacity: sidebarOpen ? 1 : 0,
             pointerEvents: sidebarOpen ? 'auto' : 'none',
             transition: 'opacity 0.3s ease'
@@ -328,7 +328,7 @@ const DashboardLayout = ({ children }) => {
         flexDirection: 'column',
         position: 'fixed',
         height: isMobile ? '100vh' : 'calc(100vh - 32px)',
-        zIndex: isMobile ? 999 : 10,
+        zIndex: isMobile ? 9999 : 10,
         top: isMobile ? 0 : '16px',
         left: isMobile ? 0 : '16px',
         bottom: isMobile ? 0 : '16px',
@@ -677,7 +677,7 @@ const DashboardLayout = ({ children }) => {
                 <button
                   type="button"
                   aria-label="Open navigation menu"
-                  onClick={() => setSidebarOpen(true)}
+                  onClick={() => setSidebarOpen(prev => !prev)}
                   style={{
                     width: '42px',
                     height: '42px',

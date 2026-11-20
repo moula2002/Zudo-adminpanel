@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import api, { uploadApi } from '../utils/api';
 import { Truck, Plus, Search, Mail, Phone, Hash, Car, Loader2, CheckCircle2, Trash2, XCircle, MapPin, MapPinOff, RefreshCw, FileText, Calendar, AlertTriangle, ExternalLink, UploadCloud, Check, Download, Key } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { getOrderStatusStyle } from '../utils/statusColors';
 
 const Drivers = () => {
   const [drivers, setDrivers] = useState([]);
@@ -990,13 +991,19 @@ const Drivers = () => {
                             {new Date(order.createdAt).toLocaleDateString()} • {order.items.length} Items • ₹{order.totalAmount}
                           </div>
                         </div>
-                        <span style={{
-                          padding: '4px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 700,
-                          background: order.orderStatus === 'Delivered' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(99, 102, 241, 0.1)',
-                          color: order.orderStatus === 'Delivered' ? '#22c55e' : '#6366f1'
-                        }}>
-                          {order.orderStatus.toUpperCase()}
-                        </span>
+                        {(() => {
+                          const sStyle = getOrderStatusStyle(order.orderStatus);
+                          return (
+                            <span style={{
+                              padding: '4px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 700,
+                              background: sStyle.bg,
+                              color: sStyle.color,
+                              border: `1px solid ${sStyle.border}`
+                            }}>
+                              {order.orderStatus.toUpperCase()}
+                            </span>
+                          );
+                        })()}
                       </div>
                     ))
                   )}
