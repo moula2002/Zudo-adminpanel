@@ -1915,7 +1915,7 @@ const Sellers = () => {
                       <th style={{ padding: '24px', fontSize: '13px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Merchant</th>
                       <th style={{ padding: '24px', fontSize: '13px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Business Assets</th>
                       <th style={{ padding: '24px', fontSize: '13px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px' }}>Verification</th>
-                      <th style={{ padding: '24px', fontSize: '13px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px', textAlign: 'right' }}>Actions</th>
+                      <th style={{ padding: '24px', fontSize: '13px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '1px', textAlign: 'right', minWidth: '460px' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2011,8 +2011,8 @@ const Sellers = () => {
                             </span>
                           </td>
 
-                          <td style={{ padding: '20px 24px', textAlign: 'right' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                          <td style={{ padding: '20px 24px', textAlign: 'right', minWidth: '460px' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'nowrap' }}>
                               {/* Eye Icon - View Seller Products */}
                               <button 
                                 onClick={() => handleViewSellerProducts(seller)}
@@ -2028,7 +2028,8 @@ const Sellers = () => {
                                   display: 'inline-flex', 
                                   alignItems: 'center', 
                                   gap: '6px', 
-                                  transition: '0.2s'
+                                  transition: '0.2s',
+                                  whiteSpace: 'nowrap'
                                 }}
                                 title={`View products uploaded by ${seller.businessName || seller.name}`}
                               >
@@ -2039,10 +2040,10 @@ const Sellers = () => {
                               <button 
                                 onClick={() => handleViewSellerHistory(seller)}
                                 style={{ 
-                                  background: 'rgba(16, 185, 129, 0.1)', 
-                                  border: '1px solid rgba(16, 185, 129, 0.25)', 
+                                  background: 'rgba(16, 185, 129, 0.12)', 
+                                  border: '1px solid rgba(16, 185, 129, 0.3)', 
                                   color: '#10b981', 
-                                  padding: '8px 12px', 
+                                  padding: '8px 13px', 
                                   borderRadius: '10px', 
                                   cursor: 'pointer', 
                                   fontSize: '11px', 
@@ -2050,7 +2051,8 @@ const Sellers = () => {
                                   display: 'inline-flex', 
                                   alignItems: 'center', 
                                   gap: '6px', 
-                                  transition: '0.2s'
+                                  transition: '0.2s',
+                                  whiteSpace: 'nowrap'
                                 }}
                                 title={`View business history for ${seller.businessName || seller.name}`}
                               >
