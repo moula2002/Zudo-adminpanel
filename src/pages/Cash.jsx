@@ -32,7 +32,8 @@ import {
   LayoutGrid,
   Table,
   Copy,
-  Check
+  Check,
+  MapPin
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -41,6 +42,7 @@ const Cash = () => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [editId, setEditId] = useState(null);
   const [deleteModalData, setDeleteModalData] = useState({ show: false, id: null });
   const [viewingTransaction, setViewingTransaction] = useState(null);
@@ -49,6 +51,8 @@ const Cash = () => {
   // Search, Filter & View States
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [locationFilter, setLocationFilter] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
   const [viewMode, setViewMode] = useState(() => (typeof window !== 'undefined' && window.innerWidth <= 768 ? 'cards' : 'table'));
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
@@ -62,7 +66,8 @@ const Cash = () => {
     otp: '',
     amount: '',
     description: '',
-    paymentMethod: 'Cash'
+    paymentMethod: 'Cash',
+    locationId: ''
   });
 
   const [drivers, setDrivers] = useState([]);
@@ -88,6 +93,7 @@ const Cash = () => {
     fetchTransactions();
     fetchDrivers();
     fetchPendingDeposits();
+    fetchLocations();
   }, []);
 
   const handleRefresh = async () => {
@@ -96,13 +102,23 @@ const Cash = () => {
       await Promise.all([
         fetchTransactions(),
         fetchDrivers(),
-        fetchPendingDeposits()
+        fetchPendingDeposits(),
+        fetchLocations()
       ]);
       toast.success('Cash collection records updated');
     } catch (e) {
       toast.error('Failed to refresh data');
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const fetchLocations = async () => {
+    try {
+      const { data } = await axios.get('locations/active');
+      setLocations(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.warn('Error fetching active locations:', error);
     }
   };
 
@@ -131,6 +147,42 @@ const Cash = () => {
     } catch (error) {
       console.error('Error fetching transactions:', error);
     }
+  };
+
+  // Safe Date Formatter
+  const formatDateTime = (dateVal) => {
+    if (!dateVal) return { date: '—', time: '—', full: '—' };
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return { date: '—', time: '—', full: '—' };
+    return {
+      date: d.toLocaleDateString(),
+      time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      full: d.toLocaleString()
+    };
+  };
+
+  // Status Badge Helper
+  const getStatusBadge = (status) => {
+    const s = (status || 'Settled').toLowerCase();
+    if (s === 'settled' || s === 'completed' || s === 'verified' || s === 'active') {
+      return {
+        bg: 'rgba(34, 197, 94, 0.12)',
+        color: '#22c55e',
+        label: status === 'active' ? 'Settled' : (status || 'Settled')
+      };
+    }
+    if (s === 'pending') {
+      return {
+        bg: 'rgba(245, 158, 11, 0.12)',
+        color: '#f59e0b',
+        label: 'Pending'
+      };
+    }
+    return {
+      bg: 'rgba(148, 163, 184, 0.12)',
+      color: '#94a3b8',
+      label: status || 'Recorded'
+    };
   };
 
   const fetchDrivers = async () => {
@@ -193,12 +245,18 @@ const Cash = () => {
       if (isVerified) {
         await new Promise(resolve => setTimeout(resolve, 600));
 
+        const targetLocId = selectedDriver.locationId || selectedDriver.location?._id || (localStorage.getItem('zudo_admin_location') !== 'global' ? localStorage.getItem('zudo_admin_location') : undefined);
+
         const { data: transaction } = await axios.post('cash', {
           type: 'B2C (Driver)',
           name: selectedDriver.name,
           phone: selectedDriver.phone,
           amount: depositAmount,
           otp: generatedOtp,
+          driverId: selectedDriver._id,
+          locationId: targetLocId,
+          status: 'Settled',
+          verification: `OTP: ${generatedOtp}`,
           description: `Collected from driver ${selectedDriver.name}`,
           paymentMethod: 'Cash'
         });
@@ -244,15 +302,17 @@ const Cash = () => {
   const handleEditClick = (t) => {
     setEditId(t._id || t.id);
     setFormData({
-      type: t.type === 'B2C (Driver)' ? 'B2C (Driver)' : t.type,
+      type: t.type === 'B2C (Driver)' || t.type === 'B2C Driver' ? 'B2C (Driver)' : t.type,
       name: t.name,
-      phone: t.phone,
+      phone: t.phone || '',
       email: t.email || '',
       password: '',
       otp: t.otp || '',
       amount: t.amount,
       description: t.description || '',
-      paymentMethod: t.paymentMethod || 'Cash'
+      paymentMethod: t.paymentMethod || 'Cash',
+      status: t.status || 'Settled',
+      locationId: t.locationId || t.location?._id || ''
     });
     setShowForm(true);
   };
@@ -296,7 +356,9 @@ const Cash = () => {
         otp: '',
         amount: '',
         description: '',
-        paymentMethod: 'Cash'
+        paymentMethod: 'Cash',
+        status: 'Settled',
+        locationId: ''
       });
     } catch (error) {
       toast.error(editId ? 'Failed to update transaction' : 'Failed to record transaction');
@@ -311,61 +373,92 @@ const Cash = () => {
 
     if (filterType !== 'All') {
       if (filterType === 'B2C (Driver)') {
-        result = result.filter(t => t.type === 'B2C (Driver)');
+        result = result.filter(t => t.type === 'B2C (Driver)' || t.type === 'B2C Driver');
       } else if (filterType === 'B2C') {
         result = result.filter(t => t.type === 'B2C');
       } else if (filterType === 'B2B') {
         result = result.filter(t => t.type === 'B2B');
+      } else {
+        result = result.filter(t => (t.type || '').toLowerCase() === filterType.toLowerCase());
       }
+    }
+
+    if (statusFilter !== 'All') {
+      result = result.filter(t => {
+        const s = (t.status || 'Settled').toLowerCase();
+        if (statusFilter === 'Settled') {
+          return s === 'settled' || s === 'completed' || s === 'verified' || s === 'active';
+        }
+        return s === statusFilter.toLowerCase();
+      });
+    }
+
+    if (locationFilter !== 'All') {
+      result = result.filter(t => {
+        const loc = (t.locationName || t.location?.city || t.locationId || '').toString().toLowerCase();
+        return loc.includes(locationFilter.toLowerCase());
+      });
     }
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
       result = result.filter(t => {
         const name = (t.name || '').toLowerCase();
-        const phone = (t.phone || '').toLowerCase();
+        const driverName = (t.driverId?.name || '').toLowerCase();
+        const phone = (t.phone || t.driverId?.phone || '').toLowerCase();
         const email = (t.email || '').toLowerCase();
         const desc = (t.description || '').toLowerCase();
         const type = (t.type || '').toLowerCase();
+        const status = (t.status || '').toLowerCase();
+        const method = (t.paymentMethod || '').toLowerCase();
+        const location = (t.locationName || t.location?.city || '').toLowerCase();
+        const otp = String(t.otp || '');
         const amount = String(t.amount || '');
         const id = String(t._id || t.id || '').toLowerCase();
-        return name.includes(term) || phone.includes(term) || email.includes(term) || desc.includes(term) || type.includes(term) || amount.includes(term) || id.includes(term);
+        return name.includes(term) || driverName.includes(term) || phone.includes(term) || email.includes(term) || desc.includes(term) || type.includes(term) || status.includes(term) || method.includes(term) || location.includes(term) || otp.includes(term) || amount.includes(term) || id.includes(term);
       });
     }
 
     result.sort((a, b) => {
+      const dateA = new Date(a.date || a.createdAt || 0).getTime();
+      const dateB = new Date(b.date || b.createdAt || 0).getTime();
       if (sortBy === 'oldest') {
-        return new Date(a.date || a.createdAt || 0) - new Date(b.date || b.createdAt || 0);
+        return dateA - dateB;
       } else if (sortBy === 'highest') {
         return Number(b.amount || 0) - Number(a.amount || 0);
       } else if (sortBy === 'lowest') {
         return Number(a.amount || 0) - Number(b.amount || 0);
       }
       // 'newest' default
-      return new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0);
+      return dateB - dateA;
     });
 
     return result;
-  }, [transactions, filterType, searchTerm, sortBy]);
+  }, [transactions, filterType, statusFilter, locationFilter, searchTerm, sortBy]);
 
   const exportTransactions = () => {
     if (filteredTransactions.length === 0) {
       toast.error('No transactions available to export');
       return;
     }
-    const exportData = filteredTransactions.map((t, index) => ({
-      'SL No': index + 1,
-      'Transaction ID': t._id || t.id,
-      'Client Name': t.name,
-      'Client Phone': t.phone,
-      'Email': t.email || '—',
-      'Flow Type': t.type,
-      'Date & Time': new Date(t.date || t.createdAt).toLocaleString(),
-      'Verification Status': t.type === 'B2B' ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'N/A'),
-      'Amount (₹)': Number(t.amount || 0),
-      'Payment Method': t.paymentMethod || 'Cash',
-      'Description / Notes': t.description || '—'
-    }));
+    const exportData = filteredTransactions.map((t, index) => {
+      const dt = formatDateTime(t.date || t.createdAt);
+      return {
+        'SL No': index + 1,
+        'Transaction ID': t._id || t.id,
+        'Client / Payee': t.name,
+        'Phone Number': t.phone || (t.driverId?.phone) || '—',
+        'Email': t.email || '—',
+        'Flow Type': t.type,
+        'Branch / Location': t.locationName || t.location?.city || 'Default',
+        'Date & Time': dt.full,
+        'Verification': t.type === 'B2B' ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : (t.verification || 'Verified')),
+        'Settlement Status': t.status || 'Settled',
+        'Amount (₹)': Number(t.amount || 0),
+        'Payment Method': t.paymentMethod || 'Cash',
+        'Description / Notes': t.description || '—'
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Cash_Logs");
@@ -438,7 +531,7 @@ const Cash = () => {
             type="button"
             onClick={() => {
               setEditId(null);
-              setFormData({ type: 'B2C', name: '', phone: '', email: '', password: '', otp: '', amount: '', description: '', paymentMethod: 'Cash' });
+              setFormData({ type: 'B2C', name: '', phone: '', email: '', password: '', otp: '', amount: '', description: '', paymentMethod: 'Cash', status: 'Settled', locationId: '' });
               setShowForm(true);
             }}
             style={{
@@ -474,7 +567,7 @@ const Cash = () => {
           <div>
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Total B2C Cash</p>
             <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: 'var(--text-main)' }}>
-              ₹{transactions.filter(t => t.type === 'B2C' || t.type === 'B2C (Driver)').reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString('en-IN')}
+              ₹{transactions.filter(t => (t.type || '').startsWith('B2C')).reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString('en-IN')}
             </h2>
           </div>
         </div>
@@ -486,7 +579,7 @@ const Cash = () => {
           <div>
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Total B2B Cash</p>
             <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: 'var(--text-main)' }}>
-              ₹{transactions.filter(t => t.type === 'B2B').reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString('en-IN')}
+              ₹{transactions.filter(t => (t.type || '').startsWith('B2B')).reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString('en-IN')}
             </h2>
           </div>
         </div>
@@ -773,6 +866,35 @@ const Cash = () => {
               <option value="B2C (Driver)">B2C Driver Collections</option>
             </select>
 
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="input-field"
+              style={{ padding: '8px 12px', minHeight: 'auto', fontSize: '12.5px', width: isMobile ? '100%' : 'auto' }}
+            >
+              <option value="All">All Statuses</option>
+              <option value="Settled">Settled / Verified</option>
+              <option value="Pending">Pending</option>
+            </select>
+
+            {/* Location Filter */}
+            {locations.length > 0 && (
+              <select
+                value={locationFilter}
+                onChange={e => setLocationFilter(e.target.value)}
+                className="input-field"
+                style={{ padding: '8px 12px', minHeight: 'auto', fontSize: '12.5px', width: isMobile ? '100%' : 'auto' }}
+              >
+                <option value="All">All Locations</option>
+                {locations.map(loc => (
+                  <option key={loc._id} value={loc.city || loc.name}>
+                    {loc.city} ({loc.state || 'Hub'})
+                  </option>
+                ))}
+              </select>
+            )}
+
             {/* Sorting */}
             <select
               value={sortBy}
@@ -825,62 +947,88 @@ const Cash = () => {
               <CreditCard size={36} style={{ opacity: 0.25 }} />
             </div>
             <h4 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 6px' }}>
-              {searchTerm || filterType !== 'All' ? 'No matching logs found' : 'No Transactions Yet'}
+              {searchTerm || filterType !== 'All' || statusFilter !== 'All' || locationFilter !== 'All' ? 'No matching logs found' : 'No Transactions Yet'}
             </h4>
             <p style={{ color: 'var(--text-dim)', fontSize: '13px', maxWidth: '340px', margin: '0 auto' }}>
-              {searchTerm || filterType !== 'All' ? 'Try adjusting your search query or flow filter.' : 'Manual cash receipts and driver settlements will automatically appear in this audit log.'}
+              {searchTerm || filterType !== 'All' || statusFilter !== 'All' || locationFilter !== 'All' ? 'Try adjusting your search query or filter options.' : 'Manual cash receipts and driver settlements will automatically appear in this audit log.'}
             </p>
           </div>
         ) : viewMode === 'table' ? (
           <div style={{ overflowX: 'auto' }} className="custom-scrollbar">
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '850px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px' }}>
               <thead>
                 <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Client / Payee</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Flow Type</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Amount Collected (₹)</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Date & Time</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Verification</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'center', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Status</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Action</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Client / Payee</th>
+                  <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Flow Type</th>
+                  <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Branch / Location</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'right', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Amount Collected (₹)</th>
+                  <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Date & Time</th>
+                  <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Verification</th>
+                  <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Status</th>
+                  <th style={{ padding: '14px 20px', textAlign: 'right', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTransactions.map((t) => {
                   const txId = t._id || t.id;
                   const isB2B = t.type === 'B2B';
+                  const isDriver = t.type === 'B2C (Driver)' || t.type === 'B2C Driver';
+                  const dt = formatDateTime(t.date || t.createdAt);
+                  const statusBadge = getStatusBadge(t.status);
+                  const locName = t.locationName || t.location?.city || '';
+
                   return (
                     <tr key={txId} style={{ borderBottom: '1px solid var(--glass-border)' }} className="table-row-hover hover-row">
-                      <td style={{ padding: '16px 24px' }}>
+                      <td style={{ padding: '16px 20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div style={{
                             width: '38px', height: '38px', borderRadius: '12px',
-                            background: isB2B ? 'rgba(99, 102, 241, 0.12)' : 'rgba(236, 72, 153, 0.12)',
-                            color: isB2B ? '#6366f1' : '#ec4899',
+                            background: isB2B ? 'rgba(99, 102, 241, 0.12)' : (isDriver ? 'rgba(245, 158, 11, 0.12)' : 'rgba(236, 72, 153, 0.12)'),
+                            color: isB2B ? '#6366f1' : (isDriver ? '#f59e0b' : '#ec4899'),
                             display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800,
                             flexShrink: 0
                           }}>
-                            {t.name ? t.name[0] : 'C'}
+                            {t.name ? t.name[0] : (isDriver ? 'D' : 'C')}
                           </div>
                           <div>
-                            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{t.name}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{t.phone || 'No phone'}</div>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>{t.name}</span>
+                              {t.driverId && (
+                                <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontWeight: 800 }}>
+                                  Driver
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+                              {t.phone || (t.driverId?.phone) || 'No phone'}
+                            </div>
                           </div>
                         </div>
                       </td>
 
-                      <td style={{ padding: '16px 24px' }}>
+                      <td style={{ padding: '16px 16px' }}>
                         <span style={{
                           padding: '3px 10px', borderRadius: '12px', fontSize: '10.5px', fontWeight: 800,
-                          background: isB2B ? 'rgba(99, 102, 241, 0.12)' : 'rgba(236, 72, 153, 0.12)',
-                          color: isB2B ? '#6366f1' : '#ec4899'
+                          background: isB2B ? 'rgba(99, 102, 241, 0.12)' : (isDriver ? 'rgba(245, 158, 11, 0.12)' : 'rgba(236, 72, 153, 0.12)'),
+                          color: isB2B ? '#6366f1' : (isDriver ? '#f59e0b' : '#ec4899')
                         }}>
                           {t.type}
                         </span>
                       </td>
 
+                      <td style={{ padding: '16px 16px' }}>
+                        {locName ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700, color: 'var(--text-main)', background: 'var(--glass-bg)', padding: '3px 9px', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
+                            <MapPin size={12} style={{ color: 'var(--primary)' }} />
+                            <span>{locName}</span>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>—</span>
+                        )}
+                      </td>
+
                       {/* Explicit AMOUNT Column */}
-                      <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                      <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                         <div style={{ fontSize: '15.5px', fontWeight: 800, color: '#10b981', fontFamily: 'monospace' }}>
                           ₹{Number(t.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </div>
@@ -889,33 +1037,33 @@ const Cash = () => {
                         </div>
                       </td>
 
-                      <td style={{ padding: '16px 24px' }}>
+                      <td style={{ padding: '16px 18px' }}>
                         <div style={{ fontSize: '12.5px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Clock size={13} />
-                          {new Date(t.date || t.createdAt).toLocaleDateString()}
+                          {dt.date}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px', opacity: 0.8 }}>
-                          {new Date(t.date || t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {dt.time}
                         </div>
                       </td>
 
-                      <td style={{ padding: '16px 24px' }}>
-                        <div style={{ fontSize: '12.5px', color: '#10b981', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <td style={{ padding: '16px 18px' }}>
+                        <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <ShieldCheck size={14} />
-                          {isB2B ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'Verified')}
+                          {isB2B ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : (t.verification || 'Verified'))}
                         </div>
                       </td>
 
-                      <td style={{ padding: '16px 24px', textAlign: 'center' }}>
+                      <td style={{ padding: '16px 16px', textAlign: 'center' }}>
                         <span style={{
                           padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 800,
-                          background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', textTransform: 'uppercase'
+                          background: statusBadge.bg, color: statusBadge.color, textTransform: 'uppercase'
                         }}>
-                          Settled
+                          {statusBadge.label}
                         </span>
                       </td>
 
-                      <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                      <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                           <button
                             onClick={() => setViewingTransaction(t)}
@@ -953,6 +1101,10 @@ const Cash = () => {
               {filteredTransactions.map((t) => {
                 const txId = t._id || t.id;
                 const isB2B = t.type === 'B2B';
+                const isDriver = t.type === 'B2C (Driver)' || t.type === 'B2C Driver';
+                const dt = formatDateTime(t.date || t.createdAt);
+                const statusBadge = getStatusBadge(t.status);
+                const locName = t.locationName || t.location?.city || '';
 
                 return (
                   <div
@@ -971,25 +1123,41 @@ const Cash = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{
                           width: '36px', height: '36px', borderRadius: '10px',
-                          background: isB2B ? 'rgba(99, 102, 241, 0.15)' : 'rgba(236, 72, 153, 0.15)',
-                          color: isB2B ? '#6366f1' : '#ec4899',
+                          background: isB2B ? 'rgba(99, 102, 241, 0.15)' : (isDriver ? 'rgba(245, 158, 11, 0.15)' : 'rgba(236, 72, 153, 0.15)'),
+                          color: isB2B ? '#6366f1' : (isDriver ? '#f59e0b' : '#ec4899'),
                           display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800
                         }}>
-                          {t.name ? t.name[0] : 'C'}
+                          {t.name ? t.name[0] : (isDriver ? 'D' : 'C')}
                         </div>
                         <div>
-                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{t.name}</div>
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>{t.phone || 'No phone'}</div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>{t.name}</span>
+                            {t.driverId && (
+                              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '5px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', fontWeight: 800 }}>
+                                Driver
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>
+                            {t.phone || (t.driverId?.phone) || 'No phone'}
+                          </div>
                         </div>
                       </div>
 
-                      <span style={{
-                        padding: '3px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 800,
-                        background: isB2B ? 'rgba(99, 102, 241, 0.15)' : 'rgba(236, 72, 153, 0.15)',
-                        color: isB2B ? '#6366f1' : '#ec4899'
-                      }}>
-                        {t.type}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <span style={{
+                          padding: '3px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 800,
+                          background: isB2B ? 'rgba(99, 102, 241, 0.15)' : (isDriver ? 'rgba(245, 158, 11, 0.15)' : 'rgba(236, 72, 153, 0.15)'),
+                          color: isB2B ? '#6366f1' : (isDriver ? '#f59e0b' : '#ec4899')
+                        }}>
+                          {t.type}
+                        </span>
+                        {locName && (
+                          <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                            <MapPin size={10} style={{ color: 'var(--primary)' }} /> {locName}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
@@ -1008,9 +1176,14 @@ const Cash = () => {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: 'var(--text-dim)' }}>
-                      <span>{new Date(t.date || t.createdAt).toLocaleDateString()}</span>
-                      <span style={{ color: '#10b981', fontWeight: 700 }}>
-                        {isB2B ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'Verified')}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={12} /> {dt.date} {dt.time}
+                      </span>
+                      <span style={{
+                        padding: '2px 7px', borderRadius: '6px', fontSize: '10px', fontWeight: 800,
+                        background: statusBadge.bg, color: statusBadge.color
+                      }}>
+                        {statusBadge.label}
                       </span>
                     </div>
 
@@ -1046,105 +1219,146 @@ const Cash = () => {
       </div>
 
       {/* Transaction Details Modal */}
-      {viewingTransaction && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
-          backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', zIndex: 1200, padding: '16px'
-        }}>
-          <div className="glass-card" style={{
-            width: '100%', maxWidth: '480px', borderRadius: '24px',
-            overflow: 'hidden', border: '1px solid var(--glass-border)',
-            boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
-            padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px'
+      {viewingTransaction && (() => {
+        const dt = formatDateTime(viewingTransaction.date || viewingTransaction.createdAt);
+        const statusBadge = getStatusBadge(viewingTransaction.status);
+        const locName = viewingTransaction.locationName || viewingTransaction.location?.city || '';
+        const txId = viewingTransaction._id || viewingTransaction.id;
+
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 1200, padding: '16px'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <CreditCard size={20} />
+            <div className="glass-card" style={{
+              width: '100%', maxWidth: '480px', borderRadius: '24px',
+              overflow: 'hidden', border: '1px solid var(--glass-border)',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+              padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CreditCard size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Cash Receipt Slip</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'monospace' }}>
+                        Ref: {txId}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(txId, txId)}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: 0, display: 'inline-flex' }}
+                        title="Copy Reference ID"
+                      >
+                        {copiedTxId === txId ? <Check size={12} color="#22c55e" /> : <Copy size={12} />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Cash Receipt Slip</h3>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                    Ref: {viewingTransaction._id || viewingTransaction.id}
+                <button
+                  onClick={() => setViewingTransaction(null)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: '6px' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div style={{ background: 'rgba(34, 197, 94, 0.08)', borderRadius: '16px', padding: '16px', textAlign: 'center', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Cash Amount Collected</span>
+                <div style={{ fontSize: '28px', fontWeight: 900, color: '#10b981', margin: '4px 0 0', fontFamily: 'monospace' }}>
+                  ₹{Number(viewingTransaction.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
+                  Payment Method: <strong style={{ color: 'var(--text-main)' }}>{viewingTransaction.paymentMethod || 'Cash'}</strong>
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Client / Payee</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>{viewingTransaction.name}</span>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>{viewingTransaction.phone || (viewingTransaction.driverId?.phone) || '—'}</span>
+                </div>
+
+                <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Flow Type & Status</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: viewingTransaction.type === 'B2B' ? 'var(--primary)' : '#ec4899' }}>
+                      {viewingTransaction.type}
+                    </span>
+                    <span style={{ padding: '1px 6px', borderRadius: '5px', fontSize: '10px', fontWeight: 800, background: statusBadge.bg, color: statusBadge.color }}>
+                      {statusBadge.label}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 700, marginTop: '2px', display: 'block' }}>
+                    {viewingTransaction.type === 'B2B' ? 'Password Verified' : (viewingTransaction.otp ? `OTP: ${viewingTransaction.otp}` : (viewingTransaction.verification || 'Verified'))}
                   </span>
                 </div>
               </div>
-              <button
-                onClick={() => setViewingTransaction(null)}
-                style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: '6px' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            <div style={{ background: 'rgba(34, 197, 94, 0.08)', borderRadius: '16px', padding: '16px', textAlign: 'center', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Cash Amount Collected</span>
-              <div style={{ fontSize: '28px', fontWeight: 900, color: '#10b981', margin: '4px 0 0', fontFamily: 'monospace' }}>
-                ₹{Number(viewingTransaction.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </div>
-              <span style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
-                Payment Method: <strong style={{ color: 'var(--text-main)' }}>{viewingTransaction.paymentMethod || 'Cash'}</strong>
-              </span>
-            </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Branch / Location</span>
+                  <span style={{ fontSize: '12.5px', color: 'var(--text-main)', fontWeight: 700, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <MapPin size={13} style={{ color: 'var(--primary)' }} />
+                    {locName || 'Default Hub'}
+                  </span>
+                </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Client / Payee</span>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>{viewingTransaction.name}</span>
-                <span style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>{viewingTransaction.phone}</span>
+                <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Timestamp</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
+                    {dt.full}
+                  </span>
+                </div>
               </div>
 
-              <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Flow Type</span>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: viewingTransaction.type === 'B2B' ? 'var(--primary)' : '#ec4899', marginTop: '2px', display: 'block' }}>
-                  {viewingTransaction.type}
-                </span>
-                <span style={{ fontSize: '11.5px', color: '#10b981', fontWeight: 700 }}>
-                  {viewingTransaction.type === 'B2B' ? 'Password Verified' : (viewingTransaction.otp ? `OTP: ${viewingTransaction.otp}` : 'Verified')}
-                </span>
+              {viewingTransaction.driverId && (
+                <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Linked Driver Account</span>
+                  <span style={{ fontSize: '12.5px', color: 'var(--text-main)', fontWeight: 700, marginTop: '2px', display: 'block' }}>
+                    {viewingTransaction.driverId.name || 'Driver'} {viewingTransaction.driverId.phone ? `(${viewingTransaction.driverId.phone})` : ''}
+                  </span>
+                </div>
+              )}
+
+              {viewingTransaction.description && (
+                <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Notes / Description</span>
+                  <span style={{ fontSize: '12.5px', color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
+                    {viewingTransaction.description}
+                  </span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+                <button
+                  onClick={() => {
+                    const t = viewingTransaction;
+                    setViewingTransaction(null);
+                    handleEditClick(t);
+                  }}
+                  className="btn-secondary"
+                  style={{ padding: '8px 16px', fontSize: '12.5px' }}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => setViewingTransaction(null)}
+                  className="btn-primary"
+                  style={{ padding: '8px 20px', fontSize: '12.5px' }}
+                >
+                  Close
+                </button>
               </div>
-            </div>
-
-            <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-              <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Timestamp</span>
-              <span style={{ fontSize: '12.5px', color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
-                {new Date(viewingTransaction.date || viewingTransaction.createdAt).toLocaleString()}
-              </span>
-            </div>
-
-            {viewingTransaction.description && (
-              <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Notes / Description</span>
-                <span style={{ fontSize: '12.5px', color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
-                  {viewingTransaction.description}
-                </span>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
-              <button
-                onClick={() => {
-                  const t = viewingTransaction;
-                  setViewingTransaction(null);
-                  handleEditClick(t);
-                }}
-                className="btn-secondary"
-                style={{ padding: '8px 16px', fontSize: '12.5px' }}
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => setViewingTransaction(null)}
-                className="btn-primary"
-                style={{ padding: '8px 20px', fontSize: '12.5px' }}
-              >
-                Close
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Transaction Form Modal */}
       {showForm && (
@@ -1296,6 +1510,25 @@ const Cash = () => {
                       </div>
                     </div>
                   </>
+                )}
+
+                {locations.length > 0 && (
+                  <div style={{ position: 'relative' }}>
+                    <MapPin size={14} style={{ position: 'absolute', left: '12px', top: '12px', color: '#6366f1' }} />
+                    <select
+                      className="input-field"
+                      style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
+                      value={formData.locationId || ''}
+                      onChange={e => setFormData({ ...formData, locationId: e.target.value })}
+                    >
+                      <option value="">Branch / Location (Default Hub)</option>
+                      {locations.map(loc => (
+                        <option key={loc._id} value={loc._id}>
+                          {loc.city} ({loc.state || 'Branch'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
