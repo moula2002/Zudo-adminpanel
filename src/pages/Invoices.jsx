@@ -1287,7 +1287,7 @@ const Invoices = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '850px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'var(--card-bg)' }}>
-                  <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>ORDER ID</th>
+                  <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>INVOICE / ORDER</th>
                   <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>CUSTOMER / SELLER</th>
                   <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>DATE</th>
                   <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>AMOUNT / TYPE</th>
@@ -1330,11 +1330,11 @@ const Invoices = () => {
                     <tr key={inv._id} style={{ borderBottom: '1px solid var(--glass-border)' }} className="table-row-hover hover-row">
                       <td style={{ padding: '16px 24px' }}>
                         <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--primary)', fontFamily: 'monospace' }}>
-                          {orderDisplayId}
+                          {inv.invoiceNumber || orderDisplayId}
                         </div>
-                        {inv.invoiceNumber && inv.invoiceNumber !== orderDisplayId.replace('#', '') && (
+                        {inv.invoiceNumber && (
                           <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                            Inv: {inv.invoiceNumber}
+                            Order: {orderDisplayId}
                           </div>
                         )}
                         {imageCount > 0 && (
