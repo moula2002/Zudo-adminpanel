@@ -3333,9 +3333,20 @@ const Orders = () => {
                         </span>
                       )}
                     </div>
-                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0' }}>
-                      📞 {driver.phone} {driver.vehicleDetails && driver.vehicleNo && driver.vehicleDetails !== driver.vehicleNo ? `• ${driver.vehicleDetails}` : ''}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '4px' }}>
+                      <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: 0 }}>
+                        📞 {driver.phone} {driver.vehicleDetails && driver.vehicleNo && driver.vehicleDetails !== driver.vehicleNo ? `• ${driver.vehicleDetails}` : ''}
+                      </p>
+                      {driver.cashManagement ? (
+                        <span style={{ fontSize: '10px', fontWeight: 700, color: '#22c55e', background: 'rgba(34, 197, 94, 0.12)', padding: '2px 6px', borderRadius: '4px' }}>
+                          ✓ Cash Mgmt
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: '#94a3b8', background: 'rgba(148, 163, 184, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                          No Cash Mgmt
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               ))}

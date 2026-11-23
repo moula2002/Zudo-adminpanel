@@ -336,6 +336,7 @@ const Drivers = () => {
     const newValue = !driver.cashManagement;
     try {
       await api.put(`/drivers/${driver._id}`, { cashManagement: newValue });
+      toast.success(`Cash management ${newValue ? 'enabled' : 'disabled'} for ${driver.name}`);
       fetchDrivers();
     } catch (err) {
       toast.error('Failed to update cash management status');
@@ -630,6 +631,7 @@ const Drivers = () => {
                       cursor: 'pointer',
                       transition: '0.3s'
                     }}
+                    title={`Click to ${driver.cashManagement ? 'disable' : 'enable'} cash management for ${driver.name}`}
                   >
                     <div style={{
                       width: '16px',
@@ -642,6 +644,15 @@ const Drivers = () => {
                       transition: '0.3s'
                     }} />
                   </div>
+                  <span style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: driver.cashManagement ? '#22c55e' : 'var(--text-dim)',
+                    marginTop: '4px',
+                    display: 'block'
+                  }}>
+                    {driver.cashManagement ? 'Enabled' : 'Disabled'}
+                  </span>
                 </td>
                 <td style={{ padding: '16px 24px' }}>
                   <span style={{

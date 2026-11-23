@@ -194,12 +194,14 @@ const Payments = () => {
     setGenerateSeparateInvoiceOption(true);
     setShowSettleModal(true);
 
-    // Fetch delivered orders for this merchant to allow selecting separate invoices/orders
+    // Fetch orders for this merchant to allow selecting separate invoices/orders
     setLoadingSellerOrders(true);
     try {
       const res = await api.get(`/payments/sellers/${merchantData.seller._id}/details`);
-      const deliveredOrders = (res.data?.orders || []).filter(o => o.orderStatus === 'Delivered');
-      setSellerOrdersForSettle(deliveredOrders);
+      const allOrders = res.data?.orders || [];
+      const validOrders = allOrders.filter(o => !['Cancelled', 'Returned', 'Rejected', 'Return Rejected'].includes(o.orderStatus));
+      const deliveredOrders = validOrders.filter(o => o.orderStatus === 'Delivered');
+      setSellerOrdersForSettle(deliveredOrders.length > 0 ? deliveredOrders : validOrders);
     } catch (e) {
       setSellerOrdersForSettle([]);
     } finally {
@@ -731,7 +733,17 @@ const Payments = () => {
       {/* -------------------------------------------------------------------- */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '16px' }}>
         {[
-          { label: 'Total Seller Sales', value: `₹${safeFormatCurrency(dashboardStats.totalSellerSales)}`, icon: Activity, color: '#6366f1', sub: `${dashboardStats.deliveredOrdersCount || 0} delivered orders` },
+          { 
+            label: 'Total Seller Sales', 
+            value: `₹${safeFormatCurrency(dashboardStats.totalSellerSales)}`, 
+            icon: Activity, 
+            color: '#6366f1', 
+            sub: dashboardStats.deliveredOrdersCount > 0 
+              ? `${dashboardStats.deliveredOrdersCount} delivered (${dashboardStats.totalOrdersCount || dashboardStats.deliveredOrdersCount} total)` 
+              : (dashboardStats.totalOrdersCount || 0) > 0 
+                ? `${dashboardStats.totalOrdersCount} active orders` 
+                : '0 orders' 
+          },
           { label: 'Total COD Sales', value: `₹${safeFormatCurrency(dashboardStats.totalCodSales)}`, icon: Banknote, color: '#f59e0b', sub: 'Cash at Delivery' },
           { label: 'Total Online Sales', value: `₹${safeFormatCurrency(dashboardStats.totalOnlineSales)}`, icon: CreditCard, color: '#3b82f6', sub: 'Gateways & UPI' },
           { label: 'Total Settled Amount', value: `₹${safeFormatCurrency(dashboardStats.totalSettledAmount)}`, icon: CheckCircle2, color: '#22c55e', sub: 'Paid out to sellers' },
@@ -765,8 +777,8 @@ const Payments = () => {
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--glass-border)', paddingBottom: '4px', overflowX: 'auto' }}>
         {[
           { id: 'sellers', label: 'Seller Payments', count: merchants.length, icon: Users },
-          { id: 'cod', label: 'COD Management', count: codOrders.length, icon: Banknote },
-          { id: 'online', label: 'Online Management', count: onlineOrders.length, icon: CreditCard },
+          { id: 'cod', label: 'Customer Payments (COD)', count: codOrders.length, icon: Banknote },
+          { id: 'online', label: 'Customer Payments (Online)', count: onlineOrders.length, icon: CreditCard },
           { id: 'audit', label: 'Audit Trail', count: auditLogs.length, icon: History },
           { id: 'invoices', label: 'Seller Invoices', count: sellerInvoices.length, icon: Receipt },
         ].map((tab) => (
@@ -811,6 +823,18 @@ const Payments = () => {
       {/* -------------------------------------------------------------------- */}
       {activeTab === 'sellers' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Header Description */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={20} style={{ color: 'var(--primary)' }} /> Seller Settlements & Payout Records
+              </h2>
+              <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '2px 0 0 0' }}>
+                Manage merchant sales, commission deductions, outstanding balances, and payouts
+              </p>
+            </div>
+          </div>
+
           {/* Controls Bar */}
           <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ position: 'relative', flex: '1', minWidth: '260px', maxWidth: '420px' }}>
@@ -920,7 +944,11 @@ const Payments = () => {
                               ₹{safeFormatCurrency(item.totalSales, 2)}
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                              {item.orderCount} delivered orders
+                              {item.deliveredOrderCount > 0 
+                                ? `${item.deliveredOrderCount} delivered (${item.totalOrderCount || item.deliveredOrderCount} total)`
+                                : (item.totalOrderCount || item.orderCount || 0) > 0 
+                                  ? `${item.totalOrderCount || item.orderCount} active orders` 
+                                  : '0 orders'}
                             </div>
                           </td>
 
@@ -1044,6 +1072,18 @@ const Payments = () => {
       {/* -------------------------------------------------------------------- */}
       {activeTab === 'cod' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Header Description */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Banknote size={20} style={{ color: '#f59e0b' }} /> Customer Cash on Delivery (COD) Records
+              </h2>
+              <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '2px 0 0 0' }}>
+                View and manage customer COD payments, driver collection status, and settlement approvals
+              </p>
+            </div>
+          </div>
+
           {/* Filter Bar */}
           <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ position: 'relative', flex: '1', minWidth: '260px', maxWidth: '420px' }}>
@@ -1273,6 +1313,18 @@ const Payments = () => {
       {/* -------------------------------------------------------------------- */}
       {activeTab === 'online' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Header Description */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CreditCard size={20} style={{ color: '#3b82f6' }} /> Customer Online Payment Records
+              </h2>
+              <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '2px 0 0 0' }}>
+                Verify and manage customer payments processed through online gateways, UPI, and net banking
+              </p>
+            </div>
+          </div>
+
           {/* Controls */}
           <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ position: 'relative', flex: '1', minWidth: '260px', maxWidth: '420px' }}>
@@ -1984,7 +2036,7 @@ const Payments = () => {
                         Select Orders for Settlement & Invoice
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                        Selected: <strong style={{ color: 'var(--primary)' }}>{selectedOrderIdsForSettle.length}</strong> of {sellerOrdersForSettle.length} delivered orders (₹{safeFormatCurrency(settleAmount || 0, 2)})
+                        Selected: <strong style={{ color: 'var(--primary)' }}>{selectedOrderIdsForSettle.length}</strong> of {sellerOrdersForSettle.length} orders (₹{safeFormatCurrency(settleAmount || 0, 2)})
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -2369,7 +2421,11 @@ const Payments = () => {
                 marginBottom: '20px'
               }}>
                 {[
-                  { label: 'DELIVERED ORDERS', val: sellerDetails.summary.deliveredOrdersCount, color: '#6366f1' },
+                  { 
+                    label: 'ORDERS', 
+                    val: `${sellerDetails.summary.deliveredOrdersCount || 0} delivered (${sellerDetails.summary.totalOrders || sellerDetails.summary.deliveredOrdersCount || 0} total)`, 
+                    color: '#6366f1' 
+                  },
                   { label: 'GROSS SALES', val: `₹${safeFormatCurrency(sellerDetails?.summary?.totalSales)}`, color: 'var(--text-main)' },
                   { label: 'COD SALES', val: `₹${safeFormatCurrency(sellerDetails?.summary?.codSales)}`, color: '#f59e0b' },
                   { label: 'ONLINE SALES', val: `₹${safeFormatCurrency(sellerDetails?.summary?.onlineSales)}`, color: '#3b82f6' },
@@ -2807,14 +2863,16 @@ const Payments = () => {
                 fontWeight: 700, 
                 padding: '3px 8px', 
                 borderRadius: '8px',
-                background: (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) > 0 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                color: (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) > 0 ? '#22c55e' : '#ef4444'
+                background: ((selectedMerchant.deliveredOrderCount || selectedMerchant.totalOrderCount || selectedMerchant.orderCount || 0) > 0) ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                color: ((selectedMerchant.deliveredOrderCount || selectedMerchant.totalOrderCount || selectedMerchant.orderCount || 0) > 0) ? '#22c55e' : '#ef4444'
               }}>
-                {selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0} Delivered Orders
+                {selectedMerchant.deliveredOrderCount > 0 
+                  ? `${selectedMerchant.deliveredOrderCount} Delivered (${selectedMerchant.totalOrderCount || selectedMerchant.deliveredOrderCount} Total)`
+                  : `${selectedMerchant.totalOrderCount || selectedMerchant.orderCount || 0} Active Orders`}
               </span>
             </div>
 
-            {(selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) === 0 ? (
+            {((selectedMerchant.totalOrderCount || selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) === 0) ? (
               <div style={{
                 background: 'rgba(239, 68, 68, 0.1)',
                 border: '1px solid rgba(239, 68, 68, 0.25)',
@@ -2825,7 +2883,7 @@ const Payments = () => {
                 lineHeight: '1.5',
                 marginBottom: '16px'
               }}>
-                <strong>Cannot Generate Invoice:</strong> This merchant partner currently has 0 delivered orders. Commercial invoices require delivered orders with valid delivery timestamps.
+                <strong>Cannot Generate Invoice:</strong> This merchant partner currently has 0 orders. Commercial invoices require orders in the system.
               </div>
             ) : null}
 
@@ -2955,7 +3013,7 @@ const Payments = () => {
 
                 <button
                   type="submit"
-                  disabled={generateLoading || (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) === 0}
+                  disabled={generateLoading || ((selectedMerchant.deliveredOrderCount || selectedMerchant.totalOrderCount || selectedMerchant.orderCount || 0) === 0)}
                   className="btn-primary"
                   style={{
                     flex: '2',
@@ -2966,8 +3024,8 @@ const Payments = () => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '6px',
-                    cursor: generateLoading || (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) === 0 ? 'not-allowed' : 'pointer',
-                    opacity: (selectedMerchant.orderCount || selectedMerchant.deliveredOrderCount || 0) === 0 ? 0.5 : 1
+                    cursor: generateLoading || ((selectedMerchant.deliveredOrderCount || selectedMerchant.totalOrderCount || selectedMerchant.orderCount || 0) === 0) ? 'not-allowed' : 'pointer',
+                    opacity: ((selectedMerchant.deliveredOrderCount || selectedMerchant.totalOrderCount || selectedMerchant.orderCount || 0) === 0) ? 0.5 : 1
                   }}
                 >
                   {generateLoading ? <Loader2 className="animate-spin" size={16} /> : <FilePlus size={16} />}
