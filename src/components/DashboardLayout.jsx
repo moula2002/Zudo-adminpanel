@@ -241,6 +241,9 @@ const DashboardLayout = ({ children }) => {
     if (item.id === 'products' && (location.pathname === '/add-product' || location.pathname.startsWith('/edit-product/'))) {
       return true;
     }
+    if (item.id === 'sellers' && (location.pathname === '/sellers/history' || location.pathname === '/history' || location.pathname.startsWith('/sellers/'))) {
+      return true;
+    }
     if (item.children && item.children.length > 0) {
       return item.children.some(c => location.pathname === c.to.split('?')[0]);
     }

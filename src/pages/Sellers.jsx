@@ -69,14 +69,23 @@ const Sellers = () => {
   const [categories, setCategories] = useState([]);
   const [selectedProductPreview, setSelectedProductPreview] = useState(null);
 
-  // Seller-Wise Business & Order History State
+  // Seller-Wise History State
   const [viewingSellerHistory, setViewingSellerHistory] = useState(null);
   const [sellerHistoryRows, setSellerHistoryRows] = useState([]);
+  const [sellerHistoryCounts, setSellerHistoryCounts] = useState({
+    all: 0, orders: 0, delivered: 0, pickups: 0, returns: 0, payments: 0, invoices: 0, statusUpdates: 0
+  });
   const [sellerHistoryLoading, setSellerHistoryLoading] = useState(false);
   const [sellerHistorySearch, setSellerHistorySearch] = useState('');
   const [sellerHistoryCategory, setSellerHistoryCategory] = useState('all');
   const [sellerHistoryStatus, setSellerHistoryStatus] = useState('');
+  const [sellerHistoryStartDate, setSellerHistoryStartDate] = useState('');
+  const [sellerHistoryEndDate, setSellerHistoryEndDate] = useState('');
+  const [sellerHistoryPage, setSellerHistoryPage] = useState(1);
+  const [sellerHistoryTotalPages, setSellerHistoryTotalPages] = useState(1);
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState(null);
+  const [historyOrderDetails, setHistoryOrderDetails] = useState(null);
+  const [historyDetailsLoading, setHistoryDetailsLoading] = useState(false);
 
   const fetchSellers = async () => {
     try {
@@ -253,139 +262,168 @@ const Sellers = () => {
     }
   };
 
-  const handleViewSellerHistory = async (seller) => {
-    setViewingSellerHistory(seller);
+  const fetchSellerHistory = async (seller, overrideParams = {}) => {
+    if (!seller?._id) return;
     setSellerHistoryLoading(true);
-    setSellerHistorySearch('');
-    setSellerHistoryCategory('all');
-    setSellerHistoryStatus('');
-    setSelectedHistoryOrder(null);
     try {
-      const res = await api.get(`/sellers/${seller._id}/history`, {
-        params: { limit: 100 }
-      }).catch(async () => {
-        return await api.get('/sellers/history', {
-          params: { sellerId: seller._id, limit: 100 }
-        });
-      });
-      if (res?.data?.data && Array.isArray(res.data.data)) {
-        setSellerHistoryRows(res.data.data);
-      } else {
-        await fetchSellerOrdersFallback(seller);
+      const category = overrideParams.category !== undefined ? overrideParams.category : sellerHistoryCategory;
+      const search = overrideParams.search !== undefined ? overrideParams.search : sellerHistorySearch;
+      const status = overrideParams.status !== undefined ? overrideParams.status : sellerHistoryStatus;
+      const startDate = overrideParams.startDate !== undefined ? overrideParams.startDate : sellerHistoryStartDate;
+      const endDate = overrideParams.endDate !== undefined ? overrideParams.endDate : sellerHistoryEndDate;
+      const page = overrideParams.page !== undefined ? overrideParams.page : sellerHistoryPage;
+
+      const params = {
+        sellerId: seller._id,
+        activityType: category,
+        search,
+        status,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        page,
+        limit: 20
+      };
+
+      const res = await api.get('/sellers/history', { params });
+      if (res.data?.success) {
+        setSellerHistoryRows(res.data.data || []);
+        if (res.data.counts) setSellerHistoryCounts(res.data.counts);
+        if (res.data.pagination) {
+          setSellerHistoryPage(res.data.pagination.currentPage || 1);
+          setSellerHistoryTotalPages(res.data.pagination.totalPages || 1);
+        }
       }
     } catch (err) {
-      console.warn('Dedicated seller history fetch failed, falling back to orders:', err);
-      await fetchSellerOrdersFallback(seller);
+      console.error('Failed to fetch seller history:', err);
+      try {
+        const fallbackRes = await api.get(`/payments/sellers/${seller._id}/details`);
+        if (fallbackRes.data?.orders) {
+          const mappedOrders = fallbackRes.data.orders.map(o => ({
+            id: `order:${o.orderId}`,
+            orderId: o.orderId,
+            referenceId: o.orderNumber ? `#${o.orderNumber}` : (o.orderRef ? `#${o.orderRef}` : String(o.orderId).slice(-6)),
+            occurredAt: o.orderDate,
+            customer: { name: o.customerName || 'Customer', phone: o.customerPhone || '' },
+            activity: `Order status: ${o.orderStatus || 'Completed'}`,
+            amount: o.netTotal || o.totalAmount || 0,
+            status: o.orderStatus || 'Completed',
+            activityType: 'orders',
+            details: {
+              items: o.items || [],
+              itemCount: (o.items || []).length,
+              paymentMethod: o.paymentMethod || 'Online',
+              paymentStatus: o.paymentStatus || 'Paid'
+            }
+          }));
+          setSellerHistoryRows(mappedOrders);
+          setSellerHistoryCounts({
+            all: mappedOrders.length,
+            orders: mappedOrders.length,
+            delivered: mappedOrders.filter(m => /delivered/i.test(m.status)).length,
+            pickups: mappedOrders.filter(m => /pickup|packed|shipped/i.test(m.status)).length,
+            returns: mappedOrders.filter(m => /return/i.test(m.status)).length,
+            payments: (fallbackRes.data.payouts || []).length,
+            invoices: 0,
+            statusUpdates: mappedOrders.length
+          });
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback fetch seller history also failed:', fallbackErr);
+        toast.error('Unable to load seller history');
+      }
     } finally {
       setSellerHistoryLoading(false);
     }
   };
 
-  const fetchSellerOrdersFallback = async (seller) => {
-    try {
-      const ordersRes = await api.get('/orders', { params: { limit: 200 } });
-      const orders = Array.isArray(ordersRes.data) ? ordersRes.data : (ordersRes.data?.orders || []);
-      const sellerIdStr = String(seller._id);
+  const handleViewSellerHistory = (seller) => {
+    setViewingSellerHistory(seller);
+    setViewingSellerProducts(null);
+    setSellerHistorySearch('');
+    setSellerHistoryCategory('all');
+    setSellerHistoryStatus('');
+    setSellerHistoryStartDate('');
+    setSellerHistoryEndDate('');
+    setSellerHistoryPage(1);
+    fetchSellerHistory(seller, { category: 'all', search: '', status: '', startDate: '', endDate: '', page: 1 });
+  };
 
-      const matchedOrders = orders.filter(o => {
-        const hasItem = (o.items || []).some(it => {
-          const sId = it.seller?.sellerId || it.sellerId || it.seller?._id || it.seller;
-          return sId && String(sId) === sellerIdStr;
-        });
-        const hasPickup = (o.sellerPickups || []).some(sp => sp.sellerId && String(sp.sellerId) === sellerIdStr);
-        return hasItem || hasPickup;
-      });
-
-      const rows = matchedOrders.map(order => {
-        const sellerItems = (order.items || []).filter(it => {
-          const sId = it.seller?.sellerId || it.sellerId || it.seller?._id || it.seller;
-          return sId && String(sId) === sellerIdStr;
-        });
-        const sellerPickup = (order.sellerPickups || []).find(sp => sp.sellerId && String(sp.sellerId) === sellerIdStr);
-        const orderTotal = sellerItems.reduce((acc, it) => {
-          const lineTotal = it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0
-            ? Number(it.totalSellerAmount)
-            : ((Number(it.normalPrice ?? it.netPrice ?? it.price ?? 0)) * (Number(it.quantity) || 1));
-          const lineGst = Number(it.gstAmount ?? it.totalGst ?? 0);
-          return acc + lineTotal + lineGst;
-        }, 0) || Number(order.totalAmount || 0);
-
-        const ref = order.orderNumber ? `#${String(order.orderNumber).padStart(5, '0')}` : (order.orderRef || String(order._id).slice(-6));
-        const status = order.orderStatus || 'Pending';
-
-        return {
-          id: `order:${order._id}`,
-          orderId: order._id,
-          referenceId: ref,
-          activity: `Order ${status}`,
-          activityType: 'orders',
-          occurredAt: order.createdAt,
-          createdAt: order.createdAt,
-          customer: {
-            name: order.userId?.name || order.shippingAddress?.fullName || 'Customer',
-            phone: order.userId?.phone || order.shippingAddress?.phone || '',
-            address: [order.shippingAddress?.address, order.shippingAddress?.city, order.shippingAddress?.pincode].filter(Boolean).join(', ')
-          },
-          description: sellerItems.map(it => `${it.name || 'Product'} (x${it.quantity || 1})`).join(', ') || 'Order record',
-          amount: orderTotal,
-          status: status,
-          paymentStatus: order.paymentStatus || 'Pending',
-          paymentMethod: order.paymentMethod || 'COD',
-          items: sellerItems.map(it => ({
-            name: it.name || it.title || 'Product',
-            quantity: it.quantity || 1,
-            unitPrice: it.normalPrice ?? it.price ?? 0,
-            amount: it.totalSellerAmount ?? ((Number(it.normalPrice ?? it.price ?? 0)) * (Number(it.quantity) || 1)),
-            unit: it.unit || it.measurement || ''
-          })),
-          pickup: sellerPickup ? [{
-            status: sellerPickup.status,
-            pickupCode: sellerPickup.pickupCode,
-            scheduledDate: sellerPickup.scheduledDate || sellerPickup.pickupDate
-          }] : [],
-          driver: order.driverId ? {
-            name: order.driverId.name || '',
-            phone: order.driverId.phone || ''
-          } : null,
-          activities: [
-            {
-              id: `act-1-${order._id}`,
-              activity: `Order Placed`,
-              status: 'Placed',
-              occurredAt: order.createdAt,
-              description: 'Customer order placed successfully'
-            },
-            ...(status !== 'Pending' && status !== 'Placed' ? [{
-              id: `act-2-${order._id}`,
-              activity: `Order ${status}`,
-              status: status,
-              occurredAt: order.updatedAt || order.createdAt,
-              description: `Status updated to ${status}`
-            }] : [])
-          ]
-        };
-      });
-
-      setSellerHistoryRows(rows);
-    } catch (fallbackErr) {
-      console.error('Failed to load seller orders fallback:', fallbackErr);
-      setSellerHistoryRows([]);
+  const refreshSellerHistory = () => {
+    if (viewingSellerHistory) {
+      fetchSellerHistory(viewingSellerHistory);
     }
   };
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sellerId = params.get('sellerId');
-    const tab = params.get('tab');
-    const isHistoryRoute = window.location.pathname.endsWith('/history') || tab === 'history';
-
-    if (isHistoryRoute && sellers.length > 0 && !viewingSellerHistory) {
-      const targetSeller = sellerId 
-        ? sellers.find(s => String(s._id) === String(sellerId))
-        : sellers[0];
-      if (targetSeller) {
-        handleViewSellerHistory(targetSeller);
+  const handleViewHistoryDetails = async (row) => {
+    setSelectedHistoryOrder(row);
+    setHistoryDetailsLoading(true);
+    setHistoryOrderDetails(null);
+    try {
+      if (viewingSellerHistory?._id) {
+        const res = await api.get('/sellers/history/details', {
+          params: { id: row.id, sellerId: viewingSellerHistory._id }
+        });
+        if (res.data?.success && res.data.data) {
+          setHistoryOrderDetails(res.data.data);
+          return;
+        }
       }
+      setHistoryOrderDetails({
+        activity: row,
+        details: row.details || {},
+        activities: [row],
+        relatedTransactions: []
+      });
+    } catch (err) {
+      console.warn('Failed to fetch full history details:', err);
+      setHistoryOrderDetails({
+        activity: row,
+        details: row.details || {},
+        activities: [row],
+        relatedTransactions: []
+      });
+    } finally {
+      setHistoryDetailsLoading(false);
+    }
+  };
+
+  const exportSellerHistory = (format = 'xlsx') => {
+    if (!sellerHistoryRows.length) {
+      toast.error('No history records to export');
+      return;
+    }
+    const exportData = sellerHistoryRows.map(row => ({
+      'Date & Time': row.occurredAt ? new Date(row.occurredAt).toLocaleString() : '—',
+      'Order ID / Ref': row.referenceId || row.orderId || '—',
+      'Customer Name': row.customer?.name || '—',
+      'Customer Phone': row.customer?.phone || '—',
+      'Activity / Description': row.activity || '—',
+      'Total Amount (₹)': row.amount !== undefined ? Number(row.amount) : 0,
+      'Order Status': row.status || '—',
+      'Activity Type': row.activityType || '—'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'History');
+    const sellerTag = (viewingSellerHistory?.businessName || viewingSellerHistory?.name || 'Seller').replace(/[^a-zA-Z0-9]/g, '_');
+    XLSX.writeFile(wb, `${sellerTag}_History.${format === 'csv' ? 'csv' : 'xlsx'}`);
+  };
+
+  // Auto-open seller history if URL indicates /sellers/history, /history or has sellerId query param
+  useEffect(() => {
+    if (sellers.length === 0) return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const querySellerId = searchParams.get('sellerId');
+    const pathname = window.location.pathname;
+
+    if (querySellerId) {
+      const foundSeller = sellers.find(s => s._id === querySellerId || s._id?.slice(-8).toUpperCase() === querySellerId.toUpperCase());
+      if (foundSeller && (!viewingSellerHistory || viewingSellerHistory._id !== foundSeller._id)) {
+        handleViewSellerHistory(foundSeller);
+      }
+    } else if ((pathname === '/sellers/history' || pathname === '/history') && !viewingSellerHistory && sellers.length > 0) {
+      handleViewSellerHistory(sellers[0]);
     }
   }, [sellers]);
 
@@ -536,547 +574,7 @@ const Sellers = () => {
                     }}>
                       <EyeOff size={12} /> PRODUCTS HIDDEN
                     </span>
-                  ) : viewingSellerHistory ? (
-        /* VIEW: SELLER-WISE ORDER & BUSINESS HISTORY */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Header & Back Button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <button
-                type="button"
-                onClick={() => setViewingSellerHistory(null)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                <ArrowLeft size={16} /> Back to Sellers
-              </button>
-              <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>
-                  {viewingSellerHistory.businessName || viewingSellerHistory.name}'s History
-                </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-dim)' }}>
-                  View order records, delivery activities, and transaction logs for this seller.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleViewSellerHistory(viewingSellerHistory)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-              >
-                <RefreshCw size={14} className={sellerHistoryLoading ? 'animate-spin' : ''} /> Refresh
-              </button>
-            </div>
-          </div>
-
-          {/* Seller Profile Summary Banner */}
-          <div className="glass-card" style={{ padding: '20px 24px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6366f1'
-              }}>
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    {viewingSellerHistory.businessName || viewingSellerHistory.name}
-                  </h3>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: viewingSellerHistory.status === 'approved' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                    color: viewingSellerHistory.status === 'approved' ? '#22c55e' : '#f59e0b',
-                    textTransform: 'uppercase'
-                  }}>
-                    {viewingSellerHistory.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                  <span>{viewingSellerHistory.email}</span>
-                  {viewingSellerHistory.phone && <span>• {viewingSellerHistory.phone}</span>}
-                  <span>• ID: {viewingSellerHistory._id}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Total Records</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)' }}>
-                  {sellerHistoryRows.length}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-            {[
-              { id: 'all', label: 'All Records' },
-              { id: 'orders', label: 'Orders' },
-              { id: 'delivered', label: 'Delivered' },
-              { id: 'pickups', label: 'Pickups' },
-              { id: 'returns', label: 'Returns' },
-              { id: 'payments', label: 'Payments' },
-              { id: 'invoices', label: 'Invoices' },
-              { id: 'statusUpdates', label: 'Status Updates' }
-            ].map(cat => {
-              const count = cat.id === 'all'
-                ? sellerHistoryRows.length
-                : sellerHistoryRows.filter(r => Array.isArray(r.categories) ? r.categories.includes(cat.id) : r.activityType === cat.id).length;
-              const isActive = sellerHistoryCategory === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSellerHistoryCategory(cat.id)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
-                    color: isActive ? '#6366f1' : 'var(--text-dim)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>{cat.label}</span>
-                  <span style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    background: isActive ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#fff' : 'inherit'
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search Bar & Filters */}
-          <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-              <input
-                type="text"
-                value={sellerHistorySearch}
-                onChange={(e) => setSellerHistorySearch(e.target.value)}
-                placeholder="Search order ID, customer name, phone, or description..."
-                style={{
-                  width: '100%',
-                  padding: '9px 14px 9px 38px',
-                  borderRadius: '10px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <select
-              value={sellerHistoryStatus}
-              onChange={(e) => setSellerHistoryStatus(e.target.value)}
-              style={{
-                padding: '9px 14px',
-                borderRadius: '10px',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--glass-border)',
-                color: 'var(--text-main)',
-                fontSize: '13px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="packed">Packed</option>
-              <option value="out for delivery">Out for Delivery</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            {(sellerHistorySearch || sellerHistoryStatus || sellerHistoryCategory !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSellerHistorySearch('');
-                  setSellerHistoryStatus('');
-                  setSellerHistoryCategory('all');
-                }}
-                className="btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '12px', borderRadius: '10px' }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-
-          {/* History Records Table */}
-          <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-            {sellerHistoryLoading ? (
-              <div style={{ padding: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-                <Loader2 className="animate-spin" size={36} color="#6366f1" />
-                <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                  Loading history for {viewingSellerHistory.businessName || viewingSellerHistory.name}...
-                </span>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(99, 102, 241, 0.04)' }}>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>DATE & TIME</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER ID</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>CUSTOMER</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PRODUCTS / ITEMS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>TOTAL AMOUNT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PAYMENT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER STATUS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textAlign: 'right' }}>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sellerHistoryRows
-                      .filter(row => {
-                        const needle = sellerHistorySearch.toLowerCase();
-                        const matchesSearch = !needle ||
-                          (row.referenceId && String(row.referenceId).toLowerCase().includes(needle)) ||
-                          (row.customer?.name && row.customer.name.toLowerCase().includes(needle)) ||
-                          (row.customer?.phone && String(row.customer.phone).includes(needle)) ||
-                          (row.description && row.description.toLowerCase().includes(needle));
-
-                        const matchesStatus = !sellerHistoryStatus ||
-                          (row.status && row.status.toLowerCase() === sellerHistoryStatus.toLowerCase());
-
-                        const matchesCategory = sellerHistoryCategory === 'all' ||
-                          (Array.isArray(row.categories) ? row.categories.includes(sellerHistoryCategory) : row.activityType === sellerHistoryCategory);
-
-                        return matchesSearch && matchesStatus && matchesCategory;
-                      })
-                      .map((row) => (
-                        <tr
-                          key={row.id}
-                          style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s', cursor: 'pointer' }}
-                          onClick={() => setSelectedHistoryOrder(row)}
-                          className="table-row-hover"
-                        >
-                          <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleDateString()}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#6366f1', fontFamily: 'monospace' }}>
-                              {row.referenceId || '—'}
-                            </div>
-                            {row.activities?.length > 1 && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'rgba(99, 102, 241, 0.08)', padding: '2px 6px', borderRadius: '6px', fontWeight: 600 }}>
-                                {row.activities.length} updates
-                              </span>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.customer?.name || 'Customer'}
-                            </div>
-                            {row.customer?.phone && (
-                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                                {row.customer.phone}
-                              </div>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px', maxWidth: '280px' }}>
-                            <div style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {row.description || '—'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            ₹{Number(row.amount || 0).toLocaleString()}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.paymentMethod || row.details?.paymentMethod || 'COD'}
-                            </div>
-                            <div style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              color: ['Paid', 'Completed'].includes(row.paymentStatus || row.details?.paymentStatus) ? '#22c55e' : '#f59e0b',
-                              marginTop: '2px'
-                            }}>
-                              {row.paymentStatus || row.details?.paymentStatus || 'Pending'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '4px 10px',
-                              borderRadius: '8px',
-                              textTransform: 'uppercase',
-                              background: row.status === 'Delivered'
-                                ? 'rgba(34, 197, 94, 0.12)'
-                                : row.status === 'Out for Delivery'
-                                  ? 'rgba(168, 85, 247, 0.14)'
-                                  : row.status === 'Packed'
-                                    ? 'rgba(6, 182, 212, 0.14)'
-                                    : row.status === 'Cancelled'
-                                      ? 'rgba(239, 68, 68, 0.12)'
-                                      : 'rgba(245, 158, 11, 0.12)',
-                              color: row.status === 'Delivered'
-                                ? '#22c55e'
-                                : row.status === 'Out for Delivery'
-                                  ? '#9333ea'
-                                  : row.status === 'Packed'
-                                    ? '#0891b2'
-                                    : row.status === 'Cancelled'
-                                      ? '#ef4444'
-                                      : '#f59e0b'
-                            }}>
-                              {row.status || 'Pending'}
-                            </span>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedHistoryOrder(row)}
-                              className="btn-secondary"
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '11px',
-                                borderRadius: '8px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}
-                            >
-                              <Eye size={12} /> View Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {sellerHistoryRows.length === 0 && (
-                      <tr>
-                        <td colSpan="8" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                          No history records found for this seller.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* View Details Order Modal */}
-          {selectedHistoryOrder && (
-            <div style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 1000,
-              background: 'rgba(0,0,0,0.6)',
-              backdropFilter: 'blur(8px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}>
-              <div style={{
-                width: 'min(800px, 100%)',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                background: 'var(--card-bg)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '24px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                      Order {selectedHistoryOrder.referenceId}
-                    </h3>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-dim)' }}>
-                      Placed on {new Date(selectedHistoryOrder.createdAt || selectedHistoryOrder.occurredAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    style={{
-                      padding: '8px',
-                      borderRadius: '10px',
-                      background: 'var(--glass-bg)',
-                      border: '1px solid var(--glass-border)',
-                      cursor: 'pointer',
-                      color: 'var(--text-main)'
-                    }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* 4 Cards Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Amount</span>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
-                      ₹{Number(selectedHistoryOrder.amount || 0).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Payment</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.paymentMethod || 'COD'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      Status: {selectedHistoryOrder.paymentStatus || 'Pending'}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Customer</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.customer?.name || 'Customer'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      {selectedHistoryOrder.customer?.phone || ''}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Status</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1', marginTop: '4px' }}>
-                      {selectedHistoryOrder.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Ordered Table */}
-                {selectedHistoryOrder.items && selectedHistoryOrder.items.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
-                      Products Ordered from this Seller
-                    </h4>
-                    <div style={{ borderRadius: '12px', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--input-bg)', color: 'var(--text-dim)' }}>
-                            <th style={{ padding: '10px 14px' }}>Product</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Unit Price</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedHistoryOrder.items.map((it, idx) => (
-                            <tr key={idx} style={{ borderTop: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '10px 14px', fontWeight: 600 }}>{it.name}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>{it.quantity}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>₹{it.unitPrice}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>₹{it.amount}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Activity Timeline */}
-                {selectedHistoryOrder.activities && selectedHistoryOrder.activities.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-main)' }}>
-                      Activity Timeline & Updates ({selectedHistoryOrder.activities.length})
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '14px', borderLeft: '2px solid rgba(99,102,241,0.2)' }}>
-                      {selectedHistoryOrder.activities.map((act, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{act.activity}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{act.description}</div>
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                            {new Date(act.occurredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    className="btn-primary"
-                    style={{ padding: '8px 20px', fontSize: '13px' }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
+                  ) : (
                     <span style={{ 
                       background: 'rgba(34, 197, 94, 0.12)', 
                       color: '#22c55e', 
@@ -1266,547 +764,7 @@ const Sellers = () => {
                 <Loader2 className="animate-spin" size={36} color="#6366f1" />
                 <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 500 }}>Loading products uploaded by {viewingSellerProducts.businessName || viewingSellerProducts.name}...</span>
               </div>
-            ) : viewingSellerHistory ? (
-        /* VIEW: SELLER-WISE ORDER & BUSINESS HISTORY */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Header & Back Button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <button
-                type="button"
-                onClick={() => setViewingSellerHistory(null)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                <ArrowLeft size={16} /> Back to Sellers
-              </button>
-              <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>
-                  {viewingSellerHistory.businessName || viewingSellerHistory.name}'s History
-                </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-dim)' }}>
-                  View order records, delivery activities, and transaction logs for this seller.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleViewSellerHistory(viewingSellerHistory)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-              >
-                <RefreshCw size={14} className={sellerHistoryLoading ? 'animate-spin' : ''} /> Refresh
-              </button>
-            </div>
-          </div>
-
-          {/* Seller Profile Summary Banner */}
-          <div className="glass-card" style={{ padding: '20px 24px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6366f1'
-              }}>
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    {viewingSellerHistory.businessName || viewingSellerHistory.name}
-                  </h3>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: viewingSellerHistory.status === 'approved' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                    color: viewingSellerHistory.status === 'approved' ? '#22c55e' : '#f59e0b',
-                    textTransform: 'uppercase'
-                  }}>
-                    {viewingSellerHistory.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                  <span>{viewingSellerHistory.email}</span>
-                  {viewingSellerHistory.phone && <span>• {viewingSellerHistory.phone}</span>}
-                  <span>• ID: {viewingSellerHistory._id}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Total Records</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)' }}>
-                  {sellerHistoryRows.length}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-            {[
-              { id: 'all', label: 'All Records' },
-              { id: 'orders', label: 'Orders' },
-              { id: 'delivered', label: 'Delivered' },
-              { id: 'pickups', label: 'Pickups' },
-              { id: 'returns', label: 'Returns' },
-              { id: 'payments', label: 'Payments' },
-              { id: 'invoices', label: 'Invoices' },
-              { id: 'statusUpdates', label: 'Status Updates' }
-            ].map(cat => {
-              const count = cat.id === 'all'
-                ? sellerHistoryRows.length
-                : sellerHistoryRows.filter(r => Array.isArray(r.categories) ? r.categories.includes(cat.id) : r.activityType === cat.id).length;
-              const isActive = sellerHistoryCategory === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSellerHistoryCategory(cat.id)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
-                    color: isActive ? '#6366f1' : 'var(--text-dim)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>{cat.label}</span>
-                  <span style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    background: isActive ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#fff' : 'inherit'
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search Bar & Filters */}
-          <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-              <input
-                type="text"
-                value={sellerHistorySearch}
-                onChange={(e) => setSellerHistorySearch(e.target.value)}
-                placeholder="Search order ID, customer name, phone, or description..."
-                style={{
-                  width: '100%',
-                  padding: '9px 14px 9px 38px',
-                  borderRadius: '10px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <select
-              value={sellerHistoryStatus}
-              onChange={(e) => setSellerHistoryStatus(e.target.value)}
-              style={{
-                padding: '9px 14px',
-                borderRadius: '10px',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--glass-border)',
-                color: 'var(--text-main)',
-                fontSize: '13px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="packed">Packed</option>
-              <option value="out for delivery">Out for Delivery</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            {(sellerHistorySearch || sellerHistoryStatus || sellerHistoryCategory !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSellerHistorySearch('');
-                  setSellerHistoryStatus('');
-                  setSellerHistoryCategory('all');
-                }}
-                className="btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '12px', borderRadius: '10px' }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-
-          {/* History Records Table */}
-          <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-            {sellerHistoryLoading ? (
-              <div style={{ padding: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-                <Loader2 className="animate-spin" size={36} color="#6366f1" />
-                <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                  Loading history for {viewingSellerHistory.businessName || viewingSellerHistory.name}...
-                </span>
-              </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(99, 102, 241, 0.04)' }}>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>DATE & TIME</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER ID</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>CUSTOMER</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PRODUCTS / ITEMS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>TOTAL AMOUNT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PAYMENT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER STATUS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textAlign: 'right' }}>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sellerHistoryRows
-                      .filter(row => {
-                        const needle = sellerHistorySearch.toLowerCase();
-                        const matchesSearch = !needle ||
-                          (row.referenceId && String(row.referenceId).toLowerCase().includes(needle)) ||
-                          (row.customer?.name && row.customer.name.toLowerCase().includes(needle)) ||
-                          (row.customer?.phone && String(row.customer.phone).includes(needle)) ||
-                          (row.description && row.description.toLowerCase().includes(needle));
-
-                        const matchesStatus = !sellerHistoryStatus ||
-                          (row.status && row.status.toLowerCase() === sellerHistoryStatus.toLowerCase());
-
-                        const matchesCategory = sellerHistoryCategory === 'all' ||
-                          (Array.isArray(row.categories) ? row.categories.includes(sellerHistoryCategory) : row.activityType === sellerHistoryCategory);
-
-                        return matchesSearch && matchesStatus && matchesCategory;
-                      })
-                      .map((row) => (
-                        <tr
-                          key={row.id}
-                          style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s', cursor: 'pointer' }}
-                          onClick={() => setSelectedHistoryOrder(row)}
-                          className="table-row-hover"
-                        >
-                          <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleDateString()}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#6366f1', fontFamily: 'monospace' }}>
-                              {row.referenceId || '—'}
-                            </div>
-                            {row.activities?.length > 1 && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'rgba(99, 102, 241, 0.08)', padding: '2px 6px', borderRadius: '6px', fontWeight: 600 }}>
-                                {row.activities.length} updates
-                              </span>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.customer?.name || 'Customer'}
-                            </div>
-                            {row.customer?.phone && (
-                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                                {row.customer.phone}
-                              </div>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px', maxWidth: '280px' }}>
-                            <div style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {row.description || '—'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            ₹{Number(row.amount || 0).toLocaleString()}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.paymentMethod || row.details?.paymentMethod || 'COD'}
-                            </div>
-                            <div style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              color: ['Paid', 'Completed'].includes(row.paymentStatus || row.details?.paymentStatus) ? '#22c55e' : '#f59e0b',
-                              marginTop: '2px'
-                            }}>
-                              {row.paymentStatus || row.details?.paymentStatus || 'Pending'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '4px 10px',
-                              borderRadius: '8px',
-                              textTransform: 'uppercase',
-                              background: row.status === 'Delivered'
-                                ? 'rgba(34, 197, 94, 0.12)'
-                                : row.status === 'Out for Delivery'
-                                  ? 'rgba(168, 85, 247, 0.14)'
-                                  : row.status === 'Packed'
-                                    ? 'rgba(6, 182, 212, 0.14)'
-                                    : row.status === 'Cancelled'
-                                      ? 'rgba(239, 68, 68, 0.12)'
-                                      : 'rgba(245, 158, 11, 0.12)',
-                              color: row.status === 'Delivered'
-                                ? '#22c55e'
-                                : row.status === 'Out for Delivery'
-                                  ? '#9333ea'
-                                  : row.status === 'Packed'
-                                    ? '#0891b2'
-                                    : row.status === 'Cancelled'
-                                      ? '#ef4444'
-                                      : '#f59e0b'
-                            }}>
-                              {row.status || 'Pending'}
-                            </span>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedHistoryOrder(row)}
-                              className="btn-secondary"
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '11px',
-                                borderRadius: '8px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}
-                            >
-                              <Eye size={12} /> View Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {sellerHistoryRows.length === 0 && (
-                      <tr>
-                        <td colSpan="8" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                          No history records found for this seller.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* View Details Order Modal */}
-          {selectedHistoryOrder && (
-            <div style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 1000,
-              background: 'rgba(0,0,0,0.6)',
-              backdropFilter: 'blur(8px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}>
-              <div style={{
-                width: 'min(800px, 100%)',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                background: 'var(--card-bg)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '24px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                      Order {selectedHistoryOrder.referenceId}
-                    </h3>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-dim)' }}>
-                      Placed on {new Date(selectedHistoryOrder.createdAt || selectedHistoryOrder.occurredAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    style={{
-                      padding: '8px',
-                      borderRadius: '10px',
-                      background: 'var(--glass-bg)',
-                      border: '1px solid var(--glass-border)',
-                      cursor: 'pointer',
-                      color: 'var(--text-main)'
-                    }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* 4 Cards Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Amount</span>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
-                      ₹{Number(selectedHistoryOrder.amount || 0).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Payment</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.paymentMethod || 'COD'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      Status: {selectedHistoryOrder.paymentStatus || 'Pending'}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Customer</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.customer?.name || 'Customer'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      {selectedHistoryOrder.customer?.phone || ''}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Status</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1', marginTop: '4px' }}>
-                      {selectedHistoryOrder.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Ordered Table */}
-                {selectedHistoryOrder.items && selectedHistoryOrder.items.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
-                      Products Ordered from this Seller
-                    </h4>
-                    <div style={{ borderRadius: '12px', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--input-bg)', color: 'var(--text-dim)' }}>
-                            <th style={{ padding: '10px 14px' }}>Product</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Unit Price</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedHistoryOrder.items.map((it, idx) => (
-                            <tr key={idx} style={{ borderTop: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '10px 14px', fontWeight: 600 }}>{it.name}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>{it.quantity}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>₹{it.unitPrice}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>₹{it.amount}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Activity Timeline */}
-                {selectedHistoryOrder.activities && selectedHistoryOrder.activities.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-main)' }}>
-                      Activity Timeline & Updates ({selectedHistoryOrder.activities.length})
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '14px', borderLeft: '2px solid rgba(99,102,241,0.2)' }}>
-                      {selectedHistoryOrder.activities.map((act, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{act.activity}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{act.description}</div>
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                            {new Date(act.occurredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    className="btn-primary"
-                    style={{ padding: '8px 20px', fontSize: '13px' }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
@@ -1839,547 +797,7 @@ const Sellers = () => {
                           </p>
                         </td>
                       </tr>
-                    ) : viewingSellerHistory ? (
-        /* VIEW: SELLER-WISE ORDER & BUSINESS HISTORY */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Header & Back Button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <button
-                type="button"
-                onClick={() => setViewingSellerHistory(null)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                <ArrowLeft size={16} /> Back to Sellers
-              </button>
-              <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>
-                  {viewingSellerHistory.businessName || viewingSellerHistory.name}'s History
-                </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-dim)' }}>
-                  View order records, delivery activities, and transaction logs for this seller.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleViewSellerHistory(viewingSellerHistory)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-              >
-                <RefreshCw size={14} className={sellerHistoryLoading ? 'animate-spin' : ''} /> Refresh
-              </button>
-            </div>
-          </div>
-
-          {/* Seller Profile Summary Banner */}
-          <div className="glass-card" style={{ padding: '20px 24px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6366f1'
-              }}>
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    {viewingSellerHistory.businessName || viewingSellerHistory.name}
-                  </h3>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: viewingSellerHistory.status === 'approved' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                    color: viewingSellerHistory.status === 'approved' ? '#22c55e' : '#f59e0b',
-                    textTransform: 'uppercase'
-                  }}>
-                    {viewingSellerHistory.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                  <span>{viewingSellerHistory.email}</span>
-                  {viewingSellerHistory.phone && <span>• {viewingSellerHistory.phone}</span>}
-                  <span>• ID: {viewingSellerHistory._id}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Total Records</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)' }}>
-                  {sellerHistoryRows.length}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-            {[
-              { id: 'all', label: 'All Records' },
-              { id: 'orders', label: 'Orders' },
-              { id: 'delivered', label: 'Delivered' },
-              { id: 'pickups', label: 'Pickups' },
-              { id: 'returns', label: 'Returns' },
-              { id: 'payments', label: 'Payments' },
-              { id: 'invoices', label: 'Invoices' },
-              { id: 'statusUpdates', label: 'Status Updates' }
-            ].map(cat => {
-              const count = cat.id === 'all'
-                ? sellerHistoryRows.length
-                : sellerHistoryRows.filter(r => Array.isArray(r.categories) ? r.categories.includes(cat.id) : r.activityType === cat.id).length;
-              const isActive = sellerHistoryCategory === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSellerHistoryCategory(cat.id)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
-                    color: isActive ? '#6366f1' : 'var(--text-dim)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>{cat.label}</span>
-                  <span style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    background: isActive ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#fff' : 'inherit'
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search Bar & Filters */}
-          <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-              <input
-                type="text"
-                value={sellerHistorySearch}
-                onChange={(e) => setSellerHistorySearch(e.target.value)}
-                placeholder="Search order ID, customer name, phone, or description..."
-                style={{
-                  width: '100%',
-                  padding: '9px 14px 9px 38px',
-                  borderRadius: '10px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <select
-              value={sellerHistoryStatus}
-              onChange={(e) => setSellerHistoryStatus(e.target.value)}
-              style={{
-                padding: '9px 14px',
-                borderRadius: '10px',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--glass-border)',
-                color: 'var(--text-main)',
-                fontSize: '13px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="packed">Packed</option>
-              <option value="out for delivery">Out for Delivery</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            {(sellerHistorySearch || sellerHistoryStatus || sellerHistoryCategory !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSellerHistorySearch('');
-                  setSellerHistoryStatus('');
-                  setSellerHistoryCategory('all');
-                }}
-                className="btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '12px', borderRadius: '10px' }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-
-          {/* History Records Table */}
-          <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-            {sellerHistoryLoading ? (
-              <div style={{ padding: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-                <Loader2 className="animate-spin" size={36} color="#6366f1" />
-                <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                  Loading history for {viewingSellerHistory.businessName || viewingSellerHistory.name}...
-                </span>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(99, 102, 241, 0.04)' }}>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>DATE & TIME</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER ID</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>CUSTOMER</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PRODUCTS / ITEMS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>TOTAL AMOUNT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PAYMENT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER STATUS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textAlign: 'right' }}>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sellerHistoryRows
-                      .filter(row => {
-                        const needle = sellerHistorySearch.toLowerCase();
-                        const matchesSearch = !needle ||
-                          (row.referenceId && String(row.referenceId).toLowerCase().includes(needle)) ||
-                          (row.customer?.name && row.customer.name.toLowerCase().includes(needle)) ||
-                          (row.customer?.phone && String(row.customer.phone).includes(needle)) ||
-                          (row.description && row.description.toLowerCase().includes(needle));
-
-                        const matchesStatus = !sellerHistoryStatus ||
-                          (row.status && row.status.toLowerCase() === sellerHistoryStatus.toLowerCase());
-
-                        const matchesCategory = sellerHistoryCategory === 'all' ||
-                          (Array.isArray(row.categories) ? row.categories.includes(sellerHistoryCategory) : row.activityType === sellerHistoryCategory);
-
-                        return matchesSearch && matchesStatus && matchesCategory;
-                      })
-                      .map((row) => (
-                        <tr
-                          key={row.id}
-                          style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s', cursor: 'pointer' }}
-                          onClick={() => setSelectedHistoryOrder(row)}
-                          className="table-row-hover"
-                        >
-                          <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleDateString()}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#6366f1', fontFamily: 'monospace' }}>
-                              {row.referenceId || '—'}
-                            </div>
-                            {row.activities?.length > 1 && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'rgba(99, 102, 241, 0.08)', padding: '2px 6px', borderRadius: '6px', fontWeight: 600 }}>
-                                {row.activities.length} updates
-                              </span>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.customer?.name || 'Customer'}
-                            </div>
-                            {row.customer?.phone && (
-                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                                {row.customer.phone}
-                              </div>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px', maxWidth: '280px' }}>
-                            <div style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {row.description || '—'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            ₹{Number(row.amount || 0).toLocaleString()}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.paymentMethod || row.details?.paymentMethod || 'COD'}
-                            </div>
-                            <div style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              color: ['Paid', 'Completed'].includes(row.paymentStatus || row.details?.paymentStatus) ? '#22c55e' : '#f59e0b',
-                              marginTop: '2px'
-                            }}>
-                              {row.paymentStatus || row.details?.paymentStatus || 'Pending'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '4px 10px',
-                              borderRadius: '8px',
-                              textTransform: 'uppercase',
-                              background: row.status === 'Delivered'
-                                ? 'rgba(34, 197, 94, 0.12)'
-                                : row.status === 'Out for Delivery'
-                                  ? 'rgba(168, 85, 247, 0.14)'
-                                  : row.status === 'Packed'
-                                    ? 'rgba(6, 182, 212, 0.14)'
-                                    : row.status === 'Cancelled'
-                                      ? 'rgba(239, 68, 68, 0.12)'
-                                      : 'rgba(245, 158, 11, 0.12)',
-                              color: row.status === 'Delivered'
-                                ? '#22c55e'
-                                : row.status === 'Out for Delivery'
-                                  ? '#9333ea'
-                                  : row.status === 'Packed'
-                                    ? '#0891b2'
-                                    : row.status === 'Cancelled'
-                                      ? '#ef4444'
-                                      : '#f59e0b'
-                            }}>
-                              {row.status || 'Pending'}
-                            </span>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedHistoryOrder(row)}
-                              className="btn-secondary"
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '11px',
-                                borderRadius: '8px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}
-                            >
-                              <Eye size={12} /> View Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {sellerHistoryRows.length === 0 && (
-                      <tr>
-                        <td colSpan="8" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                          No history records found for this seller.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* View Details Order Modal */}
-          {selectedHistoryOrder && (
-            <div style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 1000,
-              background: 'rgba(0,0,0,0.6)',
-              backdropFilter: 'blur(8px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}>
-              <div style={{
-                width: 'min(800px, 100%)',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                background: 'var(--card-bg)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '24px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                      Order {selectedHistoryOrder.referenceId}
-                    </h3>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-dim)' }}>
-                      Placed on {new Date(selectedHistoryOrder.createdAt || selectedHistoryOrder.occurredAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    style={{
-                      padding: '8px',
-                      borderRadius: '10px',
-                      background: 'var(--glass-bg)',
-                      border: '1px solid var(--glass-border)',
-                      cursor: 'pointer',
-                      color: 'var(--text-main)'
-                    }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* 4 Cards Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Amount</span>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
-                      ₹{Number(selectedHistoryOrder.amount || 0).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Payment</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.paymentMethod || 'COD'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      Status: {selectedHistoryOrder.paymentStatus || 'Pending'}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Customer</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.customer?.name || 'Customer'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      {selectedHistoryOrder.customer?.phone || ''}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Status</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1', marginTop: '4px' }}>
-                      {selectedHistoryOrder.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Ordered Table */}
-                {selectedHistoryOrder.items && selectedHistoryOrder.items.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
-                      Products Ordered from this Seller
-                    </h4>
-                    <div style={{ borderRadius: '12px', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--input-bg)', color: 'var(--text-dim)' }}>
-                            <th style={{ padding: '10px 14px' }}>Product</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Unit Price</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedHistoryOrder.items.map((it, idx) => (
-                            <tr key={idx} style={{ borderTop: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '10px 14px', fontWeight: 600 }}>{it.name}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>{it.quantity}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>₹{it.unitPrice}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>₹{it.amount}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Activity Timeline */}
-                {selectedHistoryOrder.activities && selectedHistoryOrder.activities.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-main)' }}>
-                      Activity Timeline & Updates ({selectedHistoryOrder.activities.length})
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '14px', borderLeft: '2px solid rgba(99,102,241,0.2)' }}>
-                      {selectedHistoryOrder.activities.map((act, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{act.activity}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{act.description}</div>
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                            {new Date(act.occurredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    className="btn-primary"
-                    style={{ padding: '8px 20px', fontSize: '13px' }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
+                    ) : (
                       filteredSellerProducts.map(p => {
                         const inStock = (p.stock > 0) && (p.stockStatus !== 'Out of Stock');
                         const stockCount = p.stock !== undefined ? p.stock : 0;
@@ -2470,547 +888,7 @@ const Sellers = () => {
                                 }}>
                                   B2B: ₹{b2bPrice.toLocaleString()}
                                 </div>
-                              ) : viewingSellerHistory ? (
-        /* VIEW: SELLER-WISE ORDER & BUSINESS HISTORY */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Header & Back Button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <button
-                type="button"
-                onClick={() => setViewingSellerHistory(null)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                <ArrowLeft size={16} /> Back to Sellers
-              </button>
-              <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>
-                  {viewingSellerHistory.businessName || viewingSellerHistory.name}'s History
-                </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-dim)' }}>
-                  View order records, delivery activities, and transaction logs for this seller.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleViewSellerHistory(viewingSellerHistory)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-              >
-                <RefreshCw size={14} className={sellerHistoryLoading ? 'animate-spin' : ''} /> Refresh
-              </button>
-            </div>
-          </div>
-
-          {/* Seller Profile Summary Banner */}
-          <div className="glass-card" style={{ padding: '20px 24px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6366f1'
-              }}>
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    {viewingSellerHistory.businessName || viewingSellerHistory.name}
-                  </h3>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: viewingSellerHistory.status === 'approved' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                    color: viewingSellerHistory.status === 'approved' ? '#22c55e' : '#f59e0b',
-                    textTransform: 'uppercase'
-                  }}>
-                    {viewingSellerHistory.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                  <span>{viewingSellerHistory.email}</span>
-                  {viewingSellerHistory.phone && <span>• {viewingSellerHistory.phone}</span>}
-                  <span>• ID: {viewingSellerHistory._id}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Total Records</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)' }}>
-                  {sellerHistoryRows.length}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-            {[
-              { id: 'all', label: 'All Records' },
-              { id: 'orders', label: 'Orders' },
-              { id: 'delivered', label: 'Delivered' },
-              { id: 'pickups', label: 'Pickups' },
-              { id: 'returns', label: 'Returns' },
-              { id: 'payments', label: 'Payments' },
-              { id: 'invoices', label: 'Invoices' },
-              { id: 'statusUpdates', label: 'Status Updates' }
-            ].map(cat => {
-              const count = cat.id === 'all'
-                ? sellerHistoryRows.length
-                : sellerHistoryRows.filter(r => Array.isArray(r.categories) ? r.categories.includes(cat.id) : r.activityType === cat.id).length;
-              const isActive = sellerHistoryCategory === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSellerHistoryCategory(cat.id)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
-                    color: isActive ? '#6366f1' : 'var(--text-dim)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>{cat.label}</span>
-                  <span style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    background: isActive ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#fff' : 'inherit'
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search Bar & Filters */}
-          <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-              <input
-                type="text"
-                value={sellerHistorySearch}
-                onChange={(e) => setSellerHistorySearch(e.target.value)}
-                placeholder="Search order ID, customer name, phone, or description..."
-                style={{
-                  width: '100%',
-                  padding: '9px 14px 9px 38px',
-                  borderRadius: '10px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <select
-              value={sellerHistoryStatus}
-              onChange={(e) => setSellerHistoryStatus(e.target.value)}
-              style={{
-                padding: '9px 14px',
-                borderRadius: '10px',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--glass-border)',
-                color: 'var(--text-main)',
-                fontSize: '13px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="packed">Packed</option>
-              <option value="out for delivery">Out for Delivery</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            {(sellerHistorySearch || sellerHistoryStatus || sellerHistoryCategory !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSellerHistorySearch('');
-                  setSellerHistoryStatus('');
-                  setSellerHistoryCategory('all');
-                }}
-                className="btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '12px', borderRadius: '10px' }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-
-          {/* History Records Table */}
-          <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-            {sellerHistoryLoading ? (
-              <div style={{ padding: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-                <Loader2 className="animate-spin" size={36} color="#6366f1" />
-                <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                  Loading history for {viewingSellerHistory.businessName || viewingSellerHistory.name}...
-                </span>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(99, 102, 241, 0.04)' }}>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>DATE & TIME</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER ID</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>CUSTOMER</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PRODUCTS / ITEMS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>TOTAL AMOUNT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PAYMENT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER STATUS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textAlign: 'right' }}>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sellerHistoryRows
-                      .filter(row => {
-                        const needle = sellerHistorySearch.toLowerCase();
-                        const matchesSearch = !needle ||
-                          (row.referenceId && String(row.referenceId).toLowerCase().includes(needle)) ||
-                          (row.customer?.name && row.customer.name.toLowerCase().includes(needle)) ||
-                          (row.customer?.phone && String(row.customer.phone).includes(needle)) ||
-                          (row.description && row.description.toLowerCase().includes(needle));
-
-                        const matchesStatus = !sellerHistoryStatus ||
-                          (row.status && row.status.toLowerCase() === sellerHistoryStatus.toLowerCase());
-
-                        const matchesCategory = sellerHistoryCategory === 'all' ||
-                          (Array.isArray(row.categories) ? row.categories.includes(sellerHistoryCategory) : row.activityType === sellerHistoryCategory);
-
-                        return matchesSearch && matchesStatus && matchesCategory;
-                      })
-                      .map((row) => (
-                        <tr
-                          key={row.id}
-                          style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s', cursor: 'pointer' }}
-                          onClick={() => setSelectedHistoryOrder(row)}
-                          className="table-row-hover"
-                        >
-                          <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleDateString()}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#6366f1', fontFamily: 'monospace' }}>
-                              {row.referenceId || '—'}
-                            </div>
-                            {row.activities?.length > 1 && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'rgba(99, 102, 241, 0.08)', padding: '2px 6px', borderRadius: '6px', fontWeight: 600 }}>
-                                {row.activities.length} updates
-                              </span>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.customer?.name || 'Customer'}
-                            </div>
-                            {row.customer?.phone && (
-                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                                {row.customer.phone}
-                              </div>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px', maxWidth: '280px' }}>
-                            <div style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {row.description || '—'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            ₹{Number(row.amount || 0).toLocaleString()}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.paymentMethod || row.details?.paymentMethod || 'COD'}
-                            </div>
-                            <div style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              color: ['Paid', 'Completed'].includes(row.paymentStatus || row.details?.paymentStatus) ? '#22c55e' : '#f59e0b',
-                              marginTop: '2px'
-                            }}>
-                              {row.paymentStatus || row.details?.paymentStatus || 'Pending'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '4px 10px',
-                              borderRadius: '8px',
-                              textTransform: 'uppercase',
-                              background: row.status === 'Delivered'
-                                ? 'rgba(34, 197, 94, 0.12)'
-                                : row.status === 'Out for Delivery'
-                                  ? 'rgba(168, 85, 247, 0.14)'
-                                  : row.status === 'Packed'
-                                    ? 'rgba(6, 182, 212, 0.14)'
-                                    : row.status === 'Cancelled'
-                                      ? 'rgba(239, 68, 68, 0.12)'
-                                      : 'rgba(245, 158, 11, 0.12)',
-                              color: row.status === 'Delivered'
-                                ? '#22c55e'
-                                : row.status === 'Out for Delivery'
-                                  ? '#9333ea'
-                                  : row.status === 'Packed'
-                                    ? '#0891b2'
-                                    : row.status === 'Cancelled'
-                                      ? '#ef4444'
-                                      : '#f59e0b'
-                            }}>
-                              {row.status || 'Pending'}
-                            </span>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedHistoryOrder(row)}
-                              className="btn-secondary"
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '11px',
-                                borderRadius: '8px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}
-                            >
-                              <Eye size={12} /> View Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {sellerHistoryRows.length === 0 && (
-                      <tr>
-                        <td colSpan="8" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                          No history records found for this seller.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* View Details Order Modal */}
-          {selectedHistoryOrder && (
-            <div style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 1000,
-              background: 'rgba(0,0,0,0.6)',
-              backdropFilter: 'blur(8px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}>
-              <div style={{
-                width: 'min(800px, 100%)',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                background: 'var(--card-bg)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '24px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                      Order {selectedHistoryOrder.referenceId}
-                    </h3>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-dim)' }}>
-                      Placed on {new Date(selectedHistoryOrder.createdAt || selectedHistoryOrder.occurredAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    style={{
-                      padding: '8px',
-                      borderRadius: '10px',
-                      background: 'var(--glass-bg)',
-                      border: '1px solid var(--glass-border)',
-                      cursor: 'pointer',
-                      color: 'var(--text-main)'
-                    }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* 4 Cards Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Amount</span>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
-                      ₹{Number(selectedHistoryOrder.amount || 0).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Payment</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.paymentMethod || 'COD'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      Status: {selectedHistoryOrder.paymentStatus || 'Pending'}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Customer</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.customer?.name || 'Customer'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      {selectedHistoryOrder.customer?.phone || ''}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Status</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1', marginTop: '4px' }}>
-                      {selectedHistoryOrder.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Ordered Table */}
-                {selectedHistoryOrder.items && selectedHistoryOrder.items.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
-                      Products Ordered from this Seller
-                    </h4>
-                    <div style={{ borderRadius: '12px', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--input-bg)', color: 'var(--text-dim)' }}>
-                            <th style={{ padding: '10px 14px' }}>Product</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Unit Price</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedHistoryOrder.items.map((it, idx) => (
-                            <tr key={idx} style={{ borderTop: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '10px 14px', fontWeight: 600 }}>{it.name}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>{it.quantity}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>₹{it.unitPrice}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>₹{it.amount}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Activity Timeline */}
-                {selectedHistoryOrder.activities && selectedHistoryOrder.activities.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-main)' }}>
-                      Activity Timeline & Updates ({selectedHistoryOrder.activities.length})
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '14px', borderLeft: '2px solid rgba(99,102,241,0.2)' }}>
-                      {selectedHistoryOrder.activities.map((act, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{act.activity}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{act.description}</div>
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                            {new Date(act.occurredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    className="btn-primary"
-                    style={{ padding: '8px 20px', fontSize: '13px' }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
+                              ) : (
                                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>Standard</div>
                               )}
                             </td>
@@ -3117,541 +995,762 @@ const Sellers = () => {
           </div>
         </div>
       ) : viewingSellerHistory ? (
-        /* VIEW: SELLER-WISE ORDER & BUSINESS HISTORY */
+        /* VIEW: SELLER-WISE HISTORY & AUDIT */
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Header & Back Button */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <button
-                type="button"
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <button 
                 onClick={() => setViewingSellerHistory(null)}
-                className="btn-primary"
+                className="glass-card"
                 style={{
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
+                  padding: '10px 18px',
+                  borderRadius: '14px',
+                  display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
+                  color: 'var(--text-main)',
+                  fontWeight: 700,
                   fontSize: '13px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  border: '1px solid var(--glass-border)',
+                  background: 'var(--card-bg)',
+                  transition: '0.2s'
                 }}
               >
                 <ArrowLeft size={16} /> Back to Sellers
               </button>
+              
               <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>
-                  {viewingSellerHistory.businessName || viewingSellerHistory.name}'s History
-                </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-dim)' }}>
-                  View order records, delivery activities, and transaction logs for this seller.
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <h2 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '-0.5px' }}>
+                    {viewingSellerHistory.businessName || viewingSellerHistory.storeName || viewingSellerHistory.name}'s Business History
+                  </h2>
+                  <span style={{ 
+                    background: 'rgba(16, 185, 129, 0.1)', 
+                    color: '#10b981', 
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    padding: '4px 12px', 
+                    borderRadius: '20px', 
+                    fontSize: '12px', 
+                    fontWeight: 700 
+                  }}>
+                    {sellerHistoryCounts.all || sellerHistoryRows.length} Total Records
+                  </span>
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span>Owner: <strong style={{ color: 'var(--text-main)' }}>{viewingSellerHistory.name}</strong></span>
+                  <span>•</span>
+                  <span>Email: {viewingSellerHistory.email}</span>
+                  <span>•</span>
+                  <span>Phone: {viewingSellerHistory.phone || 'No phone'}</span>
+                  <span>•</span>
+                  <span>Seller ID: <strong style={{ fontFamily: 'monospace', color: '#10b981' }}>#{viewingSellerHistory._id.slice(-8).toUpperCase()}</strong></span>
+                </div>
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleViewSellerHistory(viewingSellerHistory)}
+              <button 
+                onClick={refreshSellerHistory}
                 className="btn-primary"
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
+                style={{ 
+                  background: 'var(--glass-bg)', 
+                  color: 'var(--text-main)', 
+                  border: '1px solid var(--glass-border)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  height: '42px', 
+                  padding: '0 16px', 
+                  borderRadius: '12px',
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+                title="Refresh history records"
+              >
+                <RefreshCw size={15} className={sellerHistoryLoading ? 'animate-spin' : ''} /> Refresh
+              </button>
+              <button 
+                onClick={() => exportSellerHistory('csv')} 
+                className="btn-primary" 
+                style={{ 
+                  background: 'var(--glass-bg)', 
+                  color: 'var(--text-main)', 
+                  border: '1px solid var(--glass-border)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  height: '42px', 
+                  padding: '0 18px', 
+                  borderRadius: '12px',
+                  fontSize: '13px',
                   cursor: 'pointer'
                 }}
               >
-                <RefreshCw size={14} className={sellerHistoryLoading ? 'animate-spin' : ''} /> Refresh
+                <Download size={15} /> Export CSV
+              </button>
+              <button 
+                onClick={() => exportSellerHistory('xlsx')} 
+                className="btn-primary" 
+                style={{ 
+                  background: 'var(--glass-bg)', 
+                  color: 'var(--text-main)', 
+                  border: '1px solid var(--glass-border)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  height: '42px', 
+                  padding: '0 18px', 
+                  borderRadius: '12px',
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Download size={15} /> Export Excel
               </button>
             </div>
           </div>
 
-          {/* Seller Profile Summary Banner */}
-          <div className="glass-card" style={{ padding: '20px 24px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6366f1'
-              }}>
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    {viewingSellerHistory.businessName || viewingSellerHistory.name}
-                  </h3>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: viewingSellerHistory.status === 'approved' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                    color: viewingSellerHistory.status === 'approved' ? '#22c55e' : '#f59e0b',
-                    textTransform: 'uppercase'
-                  }}>
-                    {viewingSellerHistory.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                  <span>{viewingSellerHistory.email}</span>
-                  {viewingSellerHistory.phone && <span>• {viewingSellerHistory.phone}</span>}
-                  <span>• ID: {viewingSellerHistory._id}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Total Records</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)' }}>
-                  {sellerHistoryRows.length}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+          {/* Category Filter Tabs */}
+          <div className="glass-card" style={{ padding: '8px 16px', borderRadius: '16px', overflowX: 'auto', display: 'flex', gap: '8px' }}>
             {[
-              { id: 'all', label: 'All Records' },
-              { id: 'orders', label: 'Orders' },
-              { id: 'delivered', label: 'Delivered' },
-              { id: 'pickups', label: 'Pickups' },
-              { id: 'returns', label: 'Returns' },
-              { id: 'payments', label: 'Payments' },
-              { id: 'invoices', label: 'Invoices' },
-              { id: 'statusUpdates', label: 'Status Updates' }
-            ].map(cat => {
-              const count = cat.id === 'all'
-                ? sellerHistoryRows.length
-                : sellerHistoryRows.filter(r => Array.isArray(r.categories) ? r.categories.includes(cat.id) : r.activityType === cat.id).length;
-              const isActive = sellerHistoryCategory === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSellerHistoryCategory(cat.id)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
-                    color: isActive ? '#6366f1' : 'var(--text-dim)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>{cat.label}</span>
-                  <span style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    background: isActive ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#fff' : 'inherit'
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+              { id: 'all', label: 'All Orders', count: sellerHistoryCounts.all },
+              { id: 'orders', label: 'Orders', count: sellerHistoryCounts.orders },
+              { id: 'delivered', label: 'Delivered', count: sellerHistoryCounts.delivered },
+              { id: 'pickups', label: 'Pickup', count: sellerHistoryCounts.pickups },
+              { id: 'returns', label: 'Returned', count: sellerHistoryCounts.returns },
+              { id: 'payments', label: 'Payments', count: sellerHistoryCounts.payments },
+              { id: 'invoices', label: 'Invoices', count: sellerHistoryCounts.invoices },
+              { id: 'statusUpdates', label: 'Status Updates', count: sellerHistoryCounts.statusUpdates }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setSellerHistoryCategory(tab.id);
+                  setSellerHistoryPage(1);
+                  fetchSellerHistory(viewingSellerHistory, { category: tab.id, page: 1 });
+                }}
+                style={{
+                  background: sellerHistoryCategory === tab.id ? 'var(--primary)' : 'transparent',
+                  color: sellerHistoryCategory === tab.id ? '#fff' : 'var(--text-dim)',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: '0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>{tab.label}</span>
+                <span style={{ 
+                  background: sellerHistoryCategory === tab.id ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)',
+                  padding: '2px 7px',
+                  borderRadius: '10px',
+                  fontSize: '11px',
+                  fontWeight: 700
+                }}>
+                  {tab.count ?? 0}
+                </span>
+              </button>
+            ))}
           </div>
 
-          {/* Search Bar & Filters */}
-          <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+          {/* Search & Filter Controls */}
+          <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '20px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ flex: 1, minWidth: '220px', position: 'relative' }}>
               <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-              <input
-                type="text"
+              <input 
+                type="text" 
+                placeholder="Search Order ID, customer, phone, or activity..." 
+                className="input-field" 
                 value={sellerHistorySearch}
-                onChange={(e) => setSellerHistorySearch(e.target.value)}
-                placeholder="Search order ID, customer name, phone, or description..."
-                style={{
-                  width: '100%',
-                  padding: '9px 14px 9px 38px',
-                  borderRadius: '10px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                  outline: 'none'
+                onChange={e => setSellerHistorySearch(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    fetchSellerHistory(viewingSellerHistory, { search: e.target.value, page: 1 });
+                  }
                 }}
+                style={{ width: '100%', paddingLeft: '40px', height: '42px', borderRadius: '12px', fontSize: '13px' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="date"
+                value={sellerHistoryStartDate}
+                onChange={e => setSellerHistoryStartDate(e.target.value)}
+                className="input-field"
+                style={{ height: '42px', borderRadius: '12px', fontSize: '12px', padding: '0 10px' }}
+                title="Start Date"
+              />
+              <span style={{ color: 'var(--text-dim)' }}>to</span>
+              <input
+                type="date"
+                value={sellerHistoryEndDate}
+                onChange={e => setSellerHistoryEndDate(e.target.value)}
+                className="input-field"
+                style={{ height: '42px', borderRadius: '12px', fontSize: '12px', padding: '0 10px' }}
+                title="End Date"
               />
             </div>
 
             <select
               value={sellerHistoryStatus}
-              onChange={(e) => setSellerHistoryStatus(e.target.value)}
-              style={{
-                padding: '9px 14px',
-                borderRadius: '10px',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--glass-border)',
-                color: 'var(--text-main)',
-                fontSize: '13px',
-                outline: 'none',
-                cursor: 'pointer'
+              onChange={e => {
+                setSellerHistoryStatus(e.target.value);
+                fetchSellerHistory(viewingSellerHistory, { status: e.target.value, page: 1 });
               }}
+              className="input-field"
+              style={{ height: '42px', borderRadius: '12px', fontSize: '13px', padding: '0 14px' }}
             >
-              <option value="">All Statuses</option>
+              <option value="">All statuses</option>
               <option value="pending">Pending</option>
               <option value="packed">Packed</option>
               <option value="out for delivery">Out for Delivery</option>
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
+              <option value="returned">Returned</option>
             </select>
 
-            {(sellerHistorySearch || sellerHistoryStatus || sellerHistoryCategory !== 'all') && (
+            <button
+              onClick={() => fetchSellerHistory(viewingSellerHistory, { page: 1 })}
+              className="btn-primary"
+              style={{ height: '42px', padding: '0 16px', borderRadius: '12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+            >
+              <Filter size={14} /> Apply Filters
+            </button>
+            <button
+              onClick={() => {
+                setSellerHistorySearch('');
+                setSellerHistoryStatus('');
+                setSellerHistoryStartDate('');
+                setSellerHistoryEndDate('');
+                setSellerHistoryPage(1);
+                fetchSellerHistory(viewingSellerHistory, { search: '', status: '', startDate: '', endDate: '', page: 1 });
+              }}
+              className="glass-card"
+              style={{ height: '42px', padding: '0 16px', borderRadius: '12px', fontSize: '13px', border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer' }}
+            >
+              Reset
+            </button>
+          </div>
+
+          {/* Quick Date Range Filters */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '-12px' }}>
+            {[
+              { label: 'Today', days: 0 },
+              { label: 'Yesterday', days: 1 },
+              { label: 'Last 7 Days', days: 7 },
+              { label: 'Last 30 Days', days: 30 },
+              { label: 'This Month', type: 'month' }
+            ].map(q => (
               <button
-                type="button"
+                key={q.label}
                 onClick={() => {
-                  setSellerHistorySearch('');
-                  setSellerHistoryStatus('');
-                  setSellerHistoryCategory('all');
+                  const now = new Date();
+                  let start = '';
+                  let end = now.toISOString().split('T')[0];
+                  if (q.days === 0) {
+                    start = end;
+                  } else if (q.days === 1) {
+                    const yesterday = new Date(Date.now() - 86400000);
+                    start = yesterday.toISOString().split('T')[0];
+                    end = start;
+                  } else if (q.days) {
+                    const past = new Date(Date.now() - q.days * 86400000);
+                    start = past.toISOString().split('T')[0];
+                  } else if (q.type === 'month') {
+                    start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                  }
+                  setSellerHistoryStartDate(start);
+                  setSellerHistoryEndDate(end);
+                  fetchSellerHistory(viewingSellerHistory, { startDate: start, endDate: end, page: 1 });
                 }}
-                className="btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '12px', borderRadius: '10px' }}
+                className="glass-card"
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  border: '1px solid var(--glass-border)',
+                  background: 'var(--card-bg)',
+                  color: 'var(--text-dim)',
+                  cursor: 'pointer'
+                }}
               >
-                Reset Filters
+                {q.label}
               </button>
-            )}
+            ))}
           </div>
 
           {/* History Records Table */}
-          <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-            {sellerHistoryLoading ? (
-              <div style={{ padding: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-                <Loader2 className="animate-spin" size={36} color="#6366f1" />
-                <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                  Loading history for {viewingSellerHistory.businessName || viewingSellerHistory.name}...
-                </span>
+          <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--glass-border)' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShoppingBag size={18} color="var(--primary)" />
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>Order History Records</h3>
               </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(99, 102, 241, 0.04)' }}>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>DATE & TIME</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER ID</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>CUSTOMER</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PRODUCTS / ITEMS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>TOTAL AMOUNT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PAYMENT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER STATUS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textAlign: 'right' }}>ACTION</th>
+              <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>
+                {sellerHistoryRows.length} {sellerHistoryRows.length === 1 ? 'record' : 'records'}
+              </span>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ background: 'var(--input-bg)', borderBottom: '1px solid var(--border-color)' }}>
+                    <th style={{ padding: '16px 20px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Date & Time</th>
+                    <th style={{ padding: '16px 20px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Order ID</th>
+                    <th style={{ padding: '16px 20px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Customer</th>
+                    <th style={{ padding: '16px 20px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Activity / Items</th>
+                    <th style={{ padding: '16px 20px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Total Amount</th>
+                    <th style={{ padding: '16px 20px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Payment</th>
+                    <th style={{ padding: '16px 20px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Order Status</th>
+                    <th style={{ padding: '16px 24px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.8px', textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sellerHistoryLoading ? (
+                    <tr>
+                      <td colSpan="8" style={{ padding: '80px 24px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                          <Loader2 size={32} className="animate-spin" color="var(--primary)" />
+                          <p style={{ margin: 0, fontSize: '14px' }}>Loading business history records...</p>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {sellerHistoryRows
-                      .filter(row => {
-                        const needle = sellerHistorySearch.toLowerCase();
-                        const matchesSearch = !needle ||
-                          (row.referenceId && String(row.referenceId).toLowerCase().includes(needle)) ||
-                          (row.customer?.name && row.customer.name.toLowerCase().includes(needle)) ||
-                          (row.customer?.phone && String(row.customer.phone).includes(needle)) ||
-                          (row.description && row.description.toLowerCase().includes(needle));
+                  ) : sellerHistoryRows.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" style={{ padding: '80px 24px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                        <div style={{ opacity: 0.4, marginBottom: '14px' }}>
+                          <Clock size={48} style={{ margin: '0 auto' }} />
+                        </div>
+                        <p style={{ fontWeight: 600, fontSize: '16px', color: 'var(--text-main)', marginBottom: '4px' }}>
+                          No history records found
+                        </p>
+                        <p style={{ fontSize: '13px' }}>
+                          No orders, status updates, or transactions match the selected filters for this seller.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    sellerHistoryRows.map(row => {
+                      const isDelivered = /delivered/i.test(row.status);
+                      const isCancelled = /cancel/i.test(row.status);
+                      const isPacked = /packed/i.test(row.status);
+                      const isOutForDelivery = /out for delivery/i.test(row.status);
+                      const isReturned = /return/i.test(row.status);
 
-                        const matchesStatus = !sellerHistoryStatus ||
-                          (row.status && row.status.toLowerCase() === sellerHistoryStatus.toLowerCase());
+                      const statusBg = isDelivered ? 'rgba(34, 197, 94, 0.12)'
+                        : isCancelled ? 'rgba(239, 68, 68, 0.12)'
+                        : isOutForDelivery ? 'rgba(59, 130, 246, 0.12)'
+                        : isPacked ? 'rgba(6, 182, 212, 0.12)'
+                        : isReturned ? 'rgba(168, 85, 247, 0.12)'
+                        : 'rgba(245, 158, 11, 0.12)';
 
-                        const matchesCategory = sellerHistoryCategory === 'all' ||
-                          (Array.isArray(row.categories) ? row.categories.includes(sellerHistoryCategory) : row.activityType === sellerHistoryCategory);
+                      const statusColor = isDelivered ? '#22c55e'
+                        : isCancelled ? '#ef4444'
+                        : isOutForDelivery ? '#3b82f6'
+                        : isPacked ? '#06b6d4'
+                        : isReturned ? '#a855f7'
+                        : '#f59e0b';
 
-                        return matchesSearch && matchesStatus && matchesCategory;
-                      })
-                      .map((row) => (
-                        <tr
-                          key={row.id}
-                          style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s', cursor: 'pointer' }}
-                          onClick={() => setSelectedHistoryOrder(row)}
-                          className="table-row-hover"
-                        >
-                          <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleDateString()}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      return (
+                        <tr key={row.id} style={{ borderBottom: '1px solid var(--border-color)', transition: '0.2s' }}>
+                          {/* Date & Time */}
+                          <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-main)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Clock size={13} color="var(--text-dim)" />
+                              <span>{row.occurredAt ? new Date(row.occurredAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</span>
                             </div>
                           </td>
 
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#6366f1', fontFamily: 'monospace' }}>
-                              {row.referenceId || '—'}
+                          {/* Order ID */}
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--primary)', fontFamily: 'monospace' }}>
+                              {row.referenceId || (row.orderId ? `#${String(row.orderId).slice(-6)}` : '—')}
                             </div>
-                            {row.activities?.length > 1 && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'rgba(99, 102, 241, 0.08)', padding: '2px 6px', borderRadius: '6px', fontWeight: 600 }}>
-                                {row.activities.length} updates
-                              </span>
+                            {row.updateCount > 1 && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{row.updateCount} updates</div>
                             )}
                           </td>
 
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.customer?.name || 'Customer'}
+                          {/* Customer */}
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-main)' }}>
+                              {row.customer?.name || '—'}
                             </div>
                             {row.customer?.phone && (
-                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                                {row.customer.phone}
-                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{row.customer.phone}</div>
                             )}
                           </td>
 
-                          <td style={{ padding: '14px 20px', maxWidth: '280px' }}>
-                            <div style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {row.description || '—'}
+                          {/* Activity / Items */}
+                          <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-main)', maxWidth: '280px' }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.activity}>
+                              {row.activity || 'Order activity recorded'}
                             </div>
                           </td>
 
-                          <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            ₹{Number(row.amount || 0).toLocaleString()}
+                          {/* Total Amount */}
+                          <td style={{ padding: '16px 20px', fontWeight: 700, fontSize: '14px', color: 'var(--text-main)' }}>
+                            {row.amount !== undefined && row.amount !== null
+                              ? `₹${Number(row.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : '—'}
                           </td>
 
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.paymentMethod || row.details?.paymentMethod || 'COD'}
+                          {/* Payment */}
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: /paid/i.test(row.details?.paymentStatus || '') ? '#22c55e' : '#f59e0b' }}>
+                              {row.details?.paymentMethod || '—'}
                             </div>
-                            <div style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              color: ['Paid', 'Completed'].includes(row.paymentStatus || row.details?.paymentStatus) ? '#22c55e' : '#f59e0b',
-                              marginTop: '2px'
-                            }}>
-                              {row.paymentStatus || row.details?.paymentStatus || 'Pending'}
+                            <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                              {row.details?.paymentStatus || 'Pending'}
                             </div>
                           </td>
 
-                          <td style={{ padding: '14px 20px' }}>
+                          {/* Order Status */}
+                          <td style={{ padding: '16px 20px' }}>
                             <span style={{
+                              padding: '5px 12px',
+                              borderRadius: '12px',
                               fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '4px 10px',
-                              borderRadius: '8px',
+                              fontWeight: 800,
                               textTransform: 'uppercase',
-                              background: row.status === 'Delivered'
-                                ? 'rgba(34, 197, 94, 0.12)'
-                                : row.status === 'Out for Delivery'
-                                  ? 'rgba(168, 85, 247, 0.14)'
-                                  : row.status === 'Packed'
-                                    ? 'rgba(6, 182, 212, 0.14)'
-                                    : row.status === 'Cancelled'
-                                      ? 'rgba(239, 68, 68, 0.12)'
-                                      : 'rgba(245, 158, 11, 0.12)',
-                              color: row.status === 'Delivered'
-                                ? '#22c55e'
-                                : row.status === 'Out for Delivery'
-                                  ? '#9333ea'
-                                  : row.status === 'Packed'
-                                    ? '#0891b2'
-                                    : row.status === 'Cancelled'
-                                      ? '#ef4444'
-                                      : '#f59e0b'
+                              letterSpacing: '0.4px',
+                              background: statusBg,
+                              color: statusColor,
+                              display: 'inline-block'
                             }}>
                               {row.status || 'Pending'}
                             </span>
                           </td>
 
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                          {/* Action */}
+                          <td style={{ padding: '16px 24px', textAlign: 'right' }}>
                             <button
-                              type="button"
-                              onClick={() => setSelectedHistoryOrder(row)}
-                              className="btn-secondary"
+                              onClick={() => handleViewHistoryDetails(row)}
                               style={{
-                                padding: '6px 12px',
+                                background: 'rgba(99, 102, 241, 0.1)',
+                                border: '1px solid rgba(99, 102, 241, 0.25)',
+                                color: '#6366f1',
+                                padding: '7px 12px',
+                                borderRadius: '9px',
+                                cursor: 'pointer',
                                 fontSize: '11px',
-                                borderRadius: '8px',
+                                fontWeight: 700,
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '5px'
+                                gap: '5px',
+                                transition: '0.2s'
                               }}
+                              title="View full order activity timeline"
                             >
                               <Eye size={12} /> View Details
                             </button>
                           </td>
                         </tr>
-                      ))}
-                    {sellerHistoryRows.length === 0 && (
-                      <tr>
-                        <td colSpan="8" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                          No history records found for this seller.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination footer */}
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>
+                Page {sellerHistoryPage} of {Math.max(1, sellerHistoryTotalPages)}
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  disabled={sellerHistoryPage <= 1 || sellerHistoryLoading}
+                  onClick={() => {
+                    const newPage = sellerHistoryPage - 1;
+                    setSellerHistoryPage(newPage);
+                    fetchSellerHistory(viewingSellerHistory, { page: newPage });
+                  }}
+                  className="glass-card"
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: sellerHistoryPage <= 1 ? 'not-allowed' : 'pointer',
+                    opacity: sellerHistoryPage <= 1 ? 0.5 : 1,
+                    border: '1px solid var(--glass-border)',
+                    background: 'var(--card-bg)',
+                    color: 'var(--text-main)'
+                  }}
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={sellerHistoryPage >= sellerHistoryTotalPages || sellerHistoryLoading}
+                  onClick={() => {
+                    const newPage = sellerHistoryPage + 1;
+                    setSellerHistoryPage(newPage);
+                    fetchSellerHistory(viewingSellerHistory, { page: newPage });
+                  }}
+                  className="glass-card"
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: sellerHistoryPage >= sellerHistoryTotalPages ? 'not-allowed' : 'pointer',
+                    opacity: sellerHistoryPage >= sellerHistoryTotalPages ? 0.5 : 1,
+                    border: '1px solid var(--glass-border)',
+                    background: 'var(--card-bg)',
+                    color: 'var(--text-main)'
+                  }}
+                >
+                  Next
+                </button>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* View Details Order Modal */}
+          {/* ORDER HISTORY DETAILS MODAL */}
           {selectedHistoryOrder && (
             <div style={{
               position: 'fixed',
               inset: 0,
-              zIndex: 1000,
-              background: 'rgba(0,0,0,0.6)',
+              background: 'rgba(0, 0, 0, 0.7)',
               backdropFilter: 'blur(8px)',
+              zIndex: 1000,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '16px'
+              padding: '20px'
             }}>
-              <div style={{
-                width: 'min(800px, 100%)',
+              <div className="glass-card" style={{
+                width: '100%',
+                maxWidth: '820px',
                 maxHeight: '90vh',
                 overflowY: 'auto',
+                borderRadius: '24px',
+                padding: '28px',
                 background: 'var(--card-bg)',
                 border: '1px solid var(--glass-border)',
-                borderRadius: '24px',
-                padding: '24px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '20px'
+                gap: '24px',
+                boxShadow: '0 25px 60px rgba(0,0,0,0.4)'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                      Order {selectedHistoryOrder.referenceId}
-                    </h3>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-dim)' }}>
-                      Placed on {new Date(selectedHistoryOrder.createdAt || selectedHistoryOrder.occurredAt).toLocaleString()}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <h2 style={{ fontSize: '22px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+                        Order {selectedHistoryOrder.referenceId || (selectedHistoryOrder.orderId ? `#${String(selectedHistoryOrder.orderId).slice(-6)}` : '')}
+                      </h2>
+                      <span style={{
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        background: 'rgba(6, 182, 212, 0.12)',
+                        color: '#06b6d4'
+                      }}>
+                        {selectedHistoryOrder.status || 'Pending'}
+                      </span>
+                      <span style={{
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        background: 'rgba(245, 158, 11, 0.12)',
+                        color: '#f59e0b'
+                      }}>
+                        {selectedHistoryOrder.details?.paymentStatus || 'Payment Pending'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-dim)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Calendar size={13} />
+                      <span>Placed on {selectedHistoryOrder.occurredAt ? new Date(selectedHistoryOrder.occurredAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</span>
+                    </div>
                   </div>
                   <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
+                    onClick={() => { setSelectedHistoryOrder(null); setHistoryOrderDetails(null); }}
                     style={{
-                      padding: '8px',
-                      borderRadius: '10px',
-                      background: 'var(--glass-bg)',
-                      border: '1px solid var(--glass-border)',
+                      background: 'rgba(0,0,0,0.06)',
+                      border: 'none',
+                      color: 'var(--text-dim)',
                       cursor: 'pointer',
-                      color: 'var(--text-main)'
+                      padding: '8px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
                     }}
                   >
                     <X size={18} />
                   </button>
                 </div>
 
-                {/* 4 Cards Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Amount</span>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
-                      ₹{Number(selectedHistoryOrder.amount || 0).toLocaleString()}
-                    </div>
+                {historyDetailsLoading ? (
+                  <div style={{ padding: '60px 0', textAlign: 'center' }}>
+                    <Loader2 size={32} className="animate-spin" color="var(--primary)" style={{ margin: '0 auto 12px' }} />
+                    <p style={{ color: 'var(--text-dim)', fontSize: '14px', margin: 0 }}>Loading order details and timeline...</p>
                   </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Payment</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.paymentMethod || 'COD'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      Status: {selectedHistoryOrder.paymentStatus || 'Pending'}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Customer</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.customer?.name || 'Customer'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      {selectedHistoryOrder.customer?.phone || ''}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Status</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1', marginTop: '4px' }}>
-                      {selectedHistoryOrder.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Ordered Table */}
-                {selectedHistoryOrder.items && selectedHistoryOrder.items.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
-                      Products Ordered from this Seller
-                    </h4>
-                    <div style={{ borderRadius: '12px', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--input-bg)', color: 'var(--text-dim)' }}>
-                            <th style={{ padding: '10px 14px' }}>Product</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Unit Price</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedHistoryOrder.items.map((it, idx) => (
-                            <tr key={idx} style={{ borderTop: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '10px 14px', fontWeight: 600 }}>{it.name}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>{it.quantity}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>₹{it.unitPrice}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>₹{it.amount}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Activity Timeline */}
-                {selectedHistoryOrder.activities && selectedHistoryOrder.activities.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-main)' }}>
-                      Activity Timeline & Updates ({selectedHistoryOrder.activities.length})
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '14px', borderLeft: '2px solid rgba(99,102,241,0.2)' }}>
-                      {selectedHistoryOrder.activities.map((act, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{act.activity}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{act.description}</div>
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                            {new Date(act.occurredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
+                ) : (
+                  <>
+                    {/* Summary 4-Grid Cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                      {/* Total Amount */}
+                      <div className="glass-card" style={{ padding: '16px', borderRadius: '16px', border: '1px solid var(--border-color)', background: 'var(--input-bg)' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <DollarSign size={13} color="var(--primary)" /> Total Order Amount
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                        <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>
+                          ₹{Number(selectedHistoryOrder.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                          {(historyOrderDetails?.details?.items || selectedHistoryOrder.details?.items || []).length} items from this store
+                        </div>
+                      </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    className="btn-primary"
-                    style={{ padding: '8px 20px', fontSize: '13px' }}
-                  >
-                    Close
-                  </button>
-                </div>
+                      {/* Payment Info */}
+                      <div className="glass-card" style={{ padding: '16px', borderRadius: '16px', border: '1px solid var(--border-color)', background: 'var(--input-bg)' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CreditCard size={13} color="#f59e0b" /> Payment Info
+                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
+                          {historyOrderDetails?.details?.paymentMethod || selectedHistoryOrder.details?.paymentMethod || 'Cash on Delivery'}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                          Status: {historyOrderDetails?.details?.paymentStatus || selectedHistoryOrder.details?.paymentStatus || 'Pending'}
+                        </div>
+                      </div>
+
+                      {/* Customer */}
+                      <div className="glass-card" style={{ padding: '16px', borderRadius: '16px', border: '1px solid var(--border-color)', background: 'var(--input-bg)' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <User size={13} color="#10b981" /> Customer
+                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
+                          {selectedHistoryOrder.customer?.name || 'Customer'}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                          {selectedHistoryOrder.customer?.phone || '—'}
+                        </div>
+                      </div>
+
+                      {/* Pickup / Dispatch */}
+                      <div className="glass-card" style={{ padding: '16px', borderRadius: '16px', border: '1px solid var(--border-color)', background: 'var(--input-bg)' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Truck size={13} color="#3b82f6" /> Pickup / Dispatch
+                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
+                          {selectedHistoryOrder.status || 'Packed'}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                          {selectedHistoryOrder.details?.pickupCode ? `OTP / Code: ${selectedHistoryOrder.details.pickupCode}` : 'Standard Pickup'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Products Ordered from this Store */}
+                    {Array.isArray(historyOrderDetails?.details?.items || selectedHistoryOrder.details?.items) && (historyOrderDetails?.details?.items || selectedHistoryOrder.details?.items).length > 0 && (
+                      <div className="glass-card" style={{ padding: '18px 20px', borderRadius: '18px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Package size={16} color="var(--primary)" /> Products Ordered from Your Store
+                        </div>
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Product</th>
+                                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', textAlign: 'center' }}>Qty</th>
+                                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', textAlign: 'right' }}>Unit Price</th>
+                                <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', textAlign: 'right' }}>Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(historyOrderDetails?.details?.items || selectedHistoryOrder.details?.items).map((item, idx) => (
+                                <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                  <td style={{ padding: '12px', fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                                    {item.name || item.productName || 'Product item'}
+                                  </td>
+                                  <td style={{ padding: '12px', fontSize: '13px', textAlign: 'center', color: 'var(--text-main)' }}>
+                                    {item.quantity || 1}
+                                  </td>
+                                  <td style={{ padding: '12px', fontSize: '13px', textAlign: 'right', color: 'var(--text-main)' }}>
+                                    ₹{Number(item.price || item.unitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td style={{ padding: '12px', fontSize: '13px', fontWeight: 700, textAlign: 'right', color: 'var(--text-main)' }}>
+                                    ₹{Number(item.total || (item.price * (item.quantity || 1)) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Timeline & Updates */}
+                    <div className="glass-card" style={{ padding: '20px', borderRadius: '18px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Clock size={16} color="var(--primary)" /> Complete Order Activity Timeline & Updates
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '24px' }}>
+                        <div style={{ position: 'absolute', left: '7px', top: '8px', bottom: '8px', width: '2px', background: 'var(--border-color)' }} />
+                        {((historyOrderDetails?.activities && historyOrderDetails.activities.length > 0)
+                          ? historyOrderDetails.activities
+                          : [selectedHistoryOrder]
+                        ).map((act, aIdx) => (
+                          <div key={aIdx} style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                            <div style={{
+                              position: 'absolute',
+                              left: '-24px',
+                              top: '4px',
+                              width: '14px',
+                              height: '14px',
+                              borderRadius: '50%',
+                              background: aIdx === 0 ? 'var(--primary)' : 'var(--border-color)',
+                              border: '2px solid var(--card-bg)'
+                            }} />
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-main)' }}>
+                                  {act.activity || 'Status updated'}
+                                </span>
+                                {act.status && (
+                                  <span style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '8px',
+                                    fontSize: '10px',
+                                    fontWeight: 800,
+                                    textTransform: 'uppercase',
+                                    background: 'rgba(99, 102, 241, 0.1)',
+                                    color: '#6366f1'
+                                  }}>
+                                    {act.status}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                                {act.details?.note || act.activity || 'Activity logged'}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                              {act.occurredAt ? new Date(act.occurredAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -3808,547 +1907,7 @@ const Sellers = () => {
               <div style={{ padding: '100px', display: 'flex', justifyContent: 'center' }}>
                 <Loader2 className="animate-spin" size={40} color="#6366f1" />
               </div>
-            ) : viewingSellerHistory ? (
-        /* VIEW: SELLER-WISE ORDER & BUSINESS HISTORY */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Header & Back Button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <button
-                type="button"
-                onClick={() => setViewingSellerHistory(null)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                <ArrowLeft size={16} /> Back to Sellers
-              </button>
-              <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>
-                  {viewingSellerHistory.businessName || viewingSellerHistory.name}'s History
-                </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-dim)' }}>
-                  View order records, delivery activities, and transaction logs for this seller.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleViewSellerHistory(viewingSellerHistory)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-              >
-                <RefreshCw size={14} className={sellerHistoryLoading ? 'animate-spin' : ''} /> Refresh
-              </button>
-            </div>
-          </div>
-
-          {/* Seller Profile Summary Banner */}
-          <div className="glass-card" style={{ padding: '20px 24px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6366f1'
-              }}>
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    {viewingSellerHistory.businessName || viewingSellerHistory.name}
-                  </h3>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: viewingSellerHistory.status === 'approved' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                    color: viewingSellerHistory.status === 'approved' ? '#22c55e' : '#f59e0b',
-                    textTransform: 'uppercase'
-                  }}>
-                    {viewingSellerHistory.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                  <span>{viewingSellerHistory.email}</span>
-                  {viewingSellerHistory.phone && <span>• {viewingSellerHistory.phone}</span>}
-                  <span>• ID: {viewingSellerHistory._id}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Total Records</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)' }}>
-                  {sellerHistoryRows.length}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-            {[
-              { id: 'all', label: 'All Records' },
-              { id: 'orders', label: 'Orders' },
-              { id: 'delivered', label: 'Delivered' },
-              { id: 'pickups', label: 'Pickups' },
-              { id: 'returns', label: 'Returns' },
-              { id: 'payments', label: 'Payments' },
-              { id: 'invoices', label: 'Invoices' },
-              { id: 'statusUpdates', label: 'Status Updates' }
-            ].map(cat => {
-              const count = cat.id === 'all'
-                ? sellerHistoryRows.length
-                : sellerHistoryRows.filter(r => Array.isArray(r.categories) ? r.categories.includes(cat.id) : r.activityType === cat.id).length;
-              const isActive = sellerHistoryCategory === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSellerHistoryCategory(cat.id)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
-                    color: isActive ? '#6366f1' : 'var(--text-dim)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>{cat.label}</span>
-                  <span style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    background: isActive ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#fff' : 'inherit'
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search Bar & Filters */}
-          <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-              <input
-                type="text"
-                value={sellerHistorySearch}
-                onChange={(e) => setSellerHistorySearch(e.target.value)}
-                placeholder="Search order ID, customer name, phone, or description..."
-                style={{
-                  width: '100%',
-                  padding: '9px 14px 9px 38px',
-                  borderRadius: '10px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <select
-              value={sellerHistoryStatus}
-              onChange={(e) => setSellerHistoryStatus(e.target.value)}
-              style={{
-                padding: '9px 14px',
-                borderRadius: '10px',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--glass-border)',
-                color: 'var(--text-main)',
-                fontSize: '13px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="packed">Packed</option>
-              <option value="out for delivery">Out for Delivery</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            {(sellerHistorySearch || sellerHistoryStatus || sellerHistoryCategory !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSellerHistorySearch('');
-                  setSellerHistoryStatus('');
-                  setSellerHistoryCategory('all');
-                }}
-                className="btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '12px', borderRadius: '10px' }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-
-          {/* History Records Table */}
-          <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-            {sellerHistoryLoading ? (
-              <div style={{ padding: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-                <Loader2 className="animate-spin" size={36} color="#6366f1" />
-                <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                  Loading history for {viewingSellerHistory.businessName || viewingSellerHistory.name}...
-                </span>
-              </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(99, 102, 241, 0.04)' }}>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>DATE & TIME</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER ID</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>CUSTOMER</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PRODUCTS / ITEMS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>TOTAL AMOUNT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PAYMENT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER STATUS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textAlign: 'right' }}>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sellerHistoryRows
-                      .filter(row => {
-                        const needle = sellerHistorySearch.toLowerCase();
-                        const matchesSearch = !needle ||
-                          (row.referenceId && String(row.referenceId).toLowerCase().includes(needle)) ||
-                          (row.customer?.name && row.customer.name.toLowerCase().includes(needle)) ||
-                          (row.customer?.phone && String(row.customer.phone).includes(needle)) ||
-                          (row.description && row.description.toLowerCase().includes(needle));
-
-                        const matchesStatus = !sellerHistoryStatus ||
-                          (row.status && row.status.toLowerCase() === sellerHistoryStatus.toLowerCase());
-
-                        const matchesCategory = sellerHistoryCategory === 'all' ||
-                          (Array.isArray(row.categories) ? row.categories.includes(sellerHistoryCategory) : row.activityType === sellerHistoryCategory);
-
-                        return matchesSearch && matchesStatus && matchesCategory;
-                      })
-                      .map((row) => (
-                        <tr
-                          key={row.id}
-                          style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s', cursor: 'pointer' }}
-                          onClick={() => setSelectedHistoryOrder(row)}
-                          className="table-row-hover"
-                        >
-                          <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleDateString()}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#6366f1', fontFamily: 'monospace' }}>
-                              {row.referenceId || '—'}
-                            </div>
-                            {row.activities?.length > 1 && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'rgba(99, 102, 241, 0.08)', padding: '2px 6px', borderRadius: '6px', fontWeight: 600 }}>
-                                {row.activities.length} updates
-                              </span>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.customer?.name || 'Customer'}
-                            </div>
-                            {row.customer?.phone && (
-                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                                {row.customer.phone}
-                              </div>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px', maxWidth: '280px' }}>
-                            <div style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {row.description || '—'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            ₹{Number(row.amount || 0).toLocaleString()}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.paymentMethod || row.details?.paymentMethod || 'COD'}
-                            </div>
-                            <div style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              color: ['Paid', 'Completed'].includes(row.paymentStatus || row.details?.paymentStatus) ? '#22c55e' : '#f59e0b',
-                              marginTop: '2px'
-                            }}>
-                              {row.paymentStatus || row.details?.paymentStatus || 'Pending'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '4px 10px',
-                              borderRadius: '8px',
-                              textTransform: 'uppercase',
-                              background: row.status === 'Delivered'
-                                ? 'rgba(34, 197, 94, 0.12)'
-                                : row.status === 'Out for Delivery'
-                                  ? 'rgba(168, 85, 247, 0.14)'
-                                  : row.status === 'Packed'
-                                    ? 'rgba(6, 182, 212, 0.14)'
-                                    : row.status === 'Cancelled'
-                                      ? 'rgba(239, 68, 68, 0.12)'
-                                      : 'rgba(245, 158, 11, 0.12)',
-                              color: row.status === 'Delivered'
-                                ? '#22c55e'
-                                : row.status === 'Out for Delivery'
-                                  ? '#9333ea'
-                                  : row.status === 'Packed'
-                                    ? '#0891b2'
-                                    : row.status === 'Cancelled'
-                                      ? '#ef4444'
-                                      : '#f59e0b'
-                            }}>
-                              {row.status || 'Pending'}
-                            </span>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedHistoryOrder(row)}
-                              className="btn-secondary"
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '11px',
-                                borderRadius: '8px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}
-                            >
-                              <Eye size={12} /> View Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {sellerHistoryRows.length === 0 && (
-                      <tr>
-                        <td colSpan="8" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                          No history records found for this seller.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* View Details Order Modal */}
-          {selectedHistoryOrder && (
-            <div style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 1000,
-              background: 'rgba(0,0,0,0.6)',
-              backdropFilter: 'blur(8px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}>
-              <div style={{
-                width: 'min(800px, 100%)',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                background: 'var(--card-bg)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '24px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                      Order {selectedHistoryOrder.referenceId}
-                    </h3>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-dim)' }}>
-                      Placed on {new Date(selectedHistoryOrder.createdAt || selectedHistoryOrder.occurredAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    style={{
-                      padding: '8px',
-                      borderRadius: '10px',
-                      background: 'var(--glass-bg)',
-                      border: '1px solid var(--glass-border)',
-                      cursor: 'pointer',
-                      color: 'var(--text-main)'
-                    }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* 4 Cards Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Amount</span>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
-                      ₹{Number(selectedHistoryOrder.amount || 0).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Payment</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.paymentMethod || 'COD'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      Status: {selectedHistoryOrder.paymentStatus || 'Pending'}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Customer</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.customer?.name || 'Customer'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      {selectedHistoryOrder.customer?.phone || ''}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Status</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1', marginTop: '4px' }}>
-                      {selectedHistoryOrder.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Ordered Table */}
-                {selectedHistoryOrder.items && selectedHistoryOrder.items.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
-                      Products Ordered from this Seller
-                    </h4>
-                    <div style={{ borderRadius: '12px', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--input-bg)', color: 'var(--text-dim)' }}>
-                            <th style={{ padding: '10px 14px' }}>Product</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Unit Price</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedHistoryOrder.items.map((it, idx) => (
-                            <tr key={idx} style={{ borderTop: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '10px 14px', fontWeight: 600 }}>{it.name}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>{it.quantity}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>₹{it.unitPrice}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>₹{it.amount}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Activity Timeline */}
-                {selectedHistoryOrder.activities && selectedHistoryOrder.activities.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-main)' }}>
-                      Activity Timeline & Updates ({selectedHistoryOrder.activities.length})
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '14px', borderLeft: '2px solid rgba(99,102,241,0.2)' }}>
-                      {selectedHistoryOrder.activities.map((act, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{act.activity}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{act.description}</div>
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                            {new Date(act.occurredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    className="btn-primary"
-                    style={{ padding: '8px 20px', fontSize: '13px' }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
@@ -4367,547 +1926,7 @@ const Sellers = () => {
                           <p style={{ fontWeight: 500 }}>No merchants found matching your criteria.</p>
                         </td>
                       </tr>
-                    ) : viewingSellerHistory ? (
-        /* VIEW: SELLER-WISE ORDER & BUSINESS HISTORY */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Header & Back Button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <button
-                type="button"
-                onClick={() => setViewingSellerHistory(null)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                <ArrowLeft size={16} /> Back to Sellers
-              </button>
-              <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>
-                  {viewingSellerHistory.businessName || viewingSellerHistory.name}'s History
-                </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-dim)' }}>
-                  View order records, delivery activities, and transaction logs for this seller.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleViewSellerHistory(viewingSellerHistory)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-              >
-                <RefreshCw size={14} className={sellerHistoryLoading ? 'animate-spin' : ''} /> Refresh
-              </button>
-            </div>
-          </div>
-
-          {/* Seller Profile Summary Banner */}
-          <div className="glass-card" style={{ padding: '20px 24px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6366f1'
-              }}>
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    {viewingSellerHistory.businessName || viewingSellerHistory.name}
-                  </h3>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: viewingSellerHistory.status === 'approved' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                    color: viewingSellerHistory.status === 'approved' ? '#22c55e' : '#f59e0b',
-                    textTransform: 'uppercase'
-                  }}>
-                    {viewingSellerHistory.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                  <span>{viewingSellerHistory.email}</span>
-                  {viewingSellerHistory.phone && <span>• {viewingSellerHistory.phone}</span>}
-                  <span>• ID: {viewingSellerHistory._id}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Total Records</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)' }}>
-                  {sellerHistoryRows.length}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-            {[
-              { id: 'all', label: 'All Records' },
-              { id: 'orders', label: 'Orders' },
-              { id: 'delivered', label: 'Delivered' },
-              { id: 'pickups', label: 'Pickups' },
-              { id: 'returns', label: 'Returns' },
-              { id: 'payments', label: 'Payments' },
-              { id: 'invoices', label: 'Invoices' },
-              { id: 'statusUpdates', label: 'Status Updates' }
-            ].map(cat => {
-              const count = cat.id === 'all'
-                ? sellerHistoryRows.length
-                : sellerHistoryRows.filter(r => Array.isArray(r.categories) ? r.categories.includes(cat.id) : r.activityType === cat.id).length;
-              const isActive = sellerHistoryCategory === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSellerHistoryCategory(cat.id)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
-                    color: isActive ? '#6366f1' : 'var(--text-dim)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>{cat.label}</span>
-                  <span style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    background: isActive ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#fff' : 'inherit'
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search Bar & Filters */}
-          <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-              <input
-                type="text"
-                value={sellerHistorySearch}
-                onChange={(e) => setSellerHistorySearch(e.target.value)}
-                placeholder="Search order ID, customer name, phone, or description..."
-                style={{
-                  width: '100%',
-                  padding: '9px 14px 9px 38px',
-                  borderRadius: '10px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <select
-              value={sellerHistoryStatus}
-              onChange={(e) => setSellerHistoryStatus(e.target.value)}
-              style={{
-                padding: '9px 14px',
-                borderRadius: '10px',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--glass-border)',
-                color: 'var(--text-main)',
-                fontSize: '13px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="packed">Packed</option>
-              <option value="out for delivery">Out for Delivery</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            {(sellerHistorySearch || sellerHistoryStatus || sellerHistoryCategory !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSellerHistorySearch('');
-                  setSellerHistoryStatus('');
-                  setSellerHistoryCategory('all');
-                }}
-                className="btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '12px', borderRadius: '10px' }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-
-          {/* History Records Table */}
-          <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-            {sellerHistoryLoading ? (
-              <div style={{ padding: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-                <Loader2 className="animate-spin" size={36} color="#6366f1" />
-                <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                  Loading history for {viewingSellerHistory.businessName || viewingSellerHistory.name}...
-                </span>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(99, 102, 241, 0.04)' }}>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>DATE & TIME</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER ID</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>CUSTOMER</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PRODUCTS / ITEMS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>TOTAL AMOUNT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PAYMENT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER STATUS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textAlign: 'right' }}>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sellerHistoryRows
-                      .filter(row => {
-                        const needle = sellerHistorySearch.toLowerCase();
-                        const matchesSearch = !needle ||
-                          (row.referenceId && String(row.referenceId).toLowerCase().includes(needle)) ||
-                          (row.customer?.name && row.customer.name.toLowerCase().includes(needle)) ||
-                          (row.customer?.phone && String(row.customer.phone).includes(needle)) ||
-                          (row.description && row.description.toLowerCase().includes(needle));
-
-                        const matchesStatus = !sellerHistoryStatus ||
-                          (row.status && row.status.toLowerCase() === sellerHistoryStatus.toLowerCase());
-
-                        const matchesCategory = sellerHistoryCategory === 'all' ||
-                          (Array.isArray(row.categories) ? row.categories.includes(sellerHistoryCategory) : row.activityType === sellerHistoryCategory);
-
-                        return matchesSearch && matchesStatus && matchesCategory;
-                      })
-                      .map((row) => (
-                        <tr
-                          key={row.id}
-                          style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s', cursor: 'pointer' }}
-                          onClick={() => setSelectedHistoryOrder(row)}
-                          className="table-row-hover"
-                        >
-                          <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleDateString()}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#6366f1', fontFamily: 'monospace' }}>
-                              {row.referenceId || '—'}
-                            </div>
-                            {row.activities?.length > 1 && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'rgba(99, 102, 241, 0.08)', padding: '2px 6px', borderRadius: '6px', fontWeight: 600 }}>
-                                {row.activities.length} updates
-                              </span>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.customer?.name || 'Customer'}
-                            </div>
-                            {row.customer?.phone && (
-                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                                {row.customer.phone}
-                              </div>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px', maxWidth: '280px' }}>
-                            <div style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {row.description || '—'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            ₹{Number(row.amount || 0).toLocaleString()}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.paymentMethod || row.details?.paymentMethod || 'COD'}
-                            </div>
-                            <div style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              color: ['Paid', 'Completed'].includes(row.paymentStatus || row.details?.paymentStatus) ? '#22c55e' : '#f59e0b',
-                              marginTop: '2px'
-                            }}>
-                              {row.paymentStatus || row.details?.paymentStatus || 'Pending'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '4px 10px',
-                              borderRadius: '8px',
-                              textTransform: 'uppercase',
-                              background: row.status === 'Delivered'
-                                ? 'rgba(34, 197, 94, 0.12)'
-                                : row.status === 'Out for Delivery'
-                                  ? 'rgba(168, 85, 247, 0.14)'
-                                  : row.status === 'Packed'
-                                    ? 'rgba(6, 182, 212, 0.14)'
-                                    : row.status === 'Cancelled'
-                                      ? 'rgba(239, 68, 68, 0.12)'
-                                      : 'rgba(245, 158, 11, 0.12)',
-                              color: row.status === 'Delivered'
-                                ? '#22c55e'
-                                : row.status === 'Out for Delivery'
-                                  ? '#9333ea'
-                                  : row.status === 'Packed'
-                                    ? '#0891b2'
-                                    : row.status === 'Cancelled'
-                                      ? '#ef4444'
-                                      : '#f59e0b'
-                            }}>
-                              {row.status || 'Pending'}
-                            </span>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedHistoryOrder(row)}
-                              className="btn-secondary"
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '11px',
-                                borderRadius: '8px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}
-                            >
-                              <Eye size={12} /> View Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {sellerHistoryRows.length === 0 && (
-                      <tr>
-                        <td colSpan="8" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                          No history records found for this seller.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* View Details Order Modal */}
-          {selectedHistoryOrder && (
-            <div style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 1000,
-              background: 'rgba(0,0,0,0.6)',
-              backdropFilter: 'blur(8px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}>
-              <div style={{
-                width: 'min(800px, 100%)',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                background: 'var(--card-bg)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '24px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                      Order {selectedHistoryOrder.referenceId}
-                    </h3>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-dim)' }}>
-                      Placed on {new Date(selectedHistoryOrder.createdAt || selectedHistoryOrder.occurredAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    style={{
-                      padding: '8px',
-                      borderRadius: '10px',
-                      background: 'var(--glass-bg)',
-                      border: '1px solid var(--glass-border)',
-                      cursor: 'pointer',
-                      color: 'var(--text-main)'
-                    }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* 4 Cards Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Amount</span>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
-                      ₹{Number(selectedHistoryOrder.amount || 0).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Payment</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.paymentMethod || 'COD'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      Status: {selectedHistoryOrder.paymentStatus || 'Pending'}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Customer</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.customer?.name || 'Customer'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      {selectedHistoryOrder.customer?.phone || ''}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Status</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1', marginTop: '4px' }}>
-                      {selectedHistoryOrder.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Ordered Table */}
-                {selectedHistoryOrder.items && selectedHistoryOrder.items.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
-                      Products Ordered from this Seller
-                    </h4>
-                    <div style={{ borderRadius: '12px', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--input-bg)', color: 'var(--text-dim)' }}>
-                            <th style={{ padding: '10px 14px' }}>Product</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Unit Price</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedHistoryOrder.items.map((it, idx) => (
-                            <tr key={idx} style={{ borderTop: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '10px 14px', fontWeight: 600 }}>{it.name}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>{it.quantity}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>₹{it.unitPrice}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>₹{it.amount}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Activity Timeline */}
-                {selectedHistoryOrder.activities && selectedHistoryOrder.activities.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-main)' }}>
-                      Activity Timeline & Updates ({selectedHistoryOrder.activities.length})
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '14px', borderLeft: '2px solid rgba(99,102,241,0.2)' }}>
-                      {selectedHistoryOrder.activities.map((act, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{act.activity}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{act.description}</div>
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                            {new Date(act.occurredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    className="btn-primary"
-                    style={{ padding: '8px 20px', fontSize: '13px' }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
+                    ) : (
                       filteredSellers.map((seller) => (
                         <tr key={seller._id} style={{ borderBottom: '1px solid var(--glass-border)', transition: '0.2s' }} className="hover-row">
                           <td style={{ padding: '20px 24px' }}>
@@ -5016,7 +2035,7 @@ const Sellers = () => {
                                 <Eye size={13} /> View Products
                               </button>
 
-                              {/* View Seller History */}
+                              {/* History Icon - View Seller History */}
                               <button 
                                 onClick={() => handleViewSellerHistory(seller)}
                                 style={{ 
@@ -5033,7 +2052,7 @@ const Sellers = () => {
                                   gap: '6px', 
                                   transition: '0.2s'
                                 }}
-                                title={`View business & order history for ${seller.businessName || seller.name}`}
+                                title={`View business history for ${seller.businessName || seller.name}`}
                               >
                                 <History size={13} /> View History
                               </button>
@@ -5317,547 +2336,7 @@ const Sellers = () => {
                       >
                         <ImageIcon size={12} /> View File
                       </a>
-                    ) : viewingSellerHistory ? (
-        /* VIEW: SELLER-WISE ORDER & BUSINESS HISTORY */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Header & Back Button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <button
-                type="button"
-                onClick={() => setViewingSellerHistory(null)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '12px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                <ArrowLeft size={16} /> Back to Sellers
-              </button>
-              <div>
-                <h2 style={{ fontSize: '24px', fontWeight: 800, margin: 0 }}>
-                  {viewingSellerHistory.businessName || viewingSellerHistory.name}'s History
-                </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-dim)' }}>
-                  View order records, delivery activities, and transaction logs for this seller.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleViewSellerHistory(viewingSellerHistory)}
-                className="btn-primary"
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
-                  cursor: 'pointer'
-                }}
-              >
-                <RefreshCw size={14} className={sellerHistoryLoading ? 'animate-spin' : ''} /> Refresh
-              </button>
-            </div>
-          </div>
-
-          {/* Seller Profile Summary Banner */}
-          <div className="glass-card" style={{ padding: '20px 24px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '14px',
-                background: 'rgba(99, 102, 241, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6366f1'
-              }}>
-                <Building2 size={24} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    {viewingSellerHistory.businessName || viewingSellerHistory.name}
-                  </h3>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: viewingSellerHistory.status === 'approved' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                    color: viewingSellerHistory.status === 'approved' ? '#22c55e' : '#f59e0b',
-                    textTransform: 'uppercase'
-                  }}>
-                    {viewingSellerHistory.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-                  <span>{viewingSellerHistory.email}</span>
-                  {viewingSellerHistory.phone && <span>• {viewingSellerHistory.phone}</span>}
-                  <span>• ID: {viewingSellerHistory._id}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Total Records</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)' }}>
-                  {sellerHistoryRows.length}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-            {[
-              { id: 'all', label: 'All Records' },
-              { id: 'orders', label: 'Orders' },
-              { id: 'delivered', label: 'Delivered' },
-              { id: 'pickups', label: 'Pickups' },
-              { id: 'returns', label: 'Returns' },
-              { id: 'payments', label: 'Payments' },
-              { id: 'invoices', label: 'Invoices' },
-              { id: 'statusUpdates', label: 'Status Updates' }
-            ].map(cat => {
-              const count = cat.id === 'all'
-                ? sellerHistoryRows.length
-                : sellerHistoryRows.filter(r => Array.isArray(r.categories) ? r.categories.includes(cat.id) : r.activityType === cat.id).length;
-              const isActive = sellerHistoryCategory === cat.id;
-
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setSellerHistoryCategory(cat.id)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'var(--glass-bg)',
-                    color: isActive ? '#6366f1' : 'var(--text-dim)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>{cat.label}</span>
-                  <span style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    background: isActive ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#fff' : 'inherit'
-                  }}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search Bar & Filters */}
-          <div className="glass-card" style={{ padding: '16px 20px', borderRadius: '16px', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-              <input
-                type="text"
-                value={sellerHistorySearch}
-                onChange={(e) => setSellerHistorySearch(e.target.value)}
-                placeholder="Search order ID, customer name, phone, or description..."
-                style={{
-                  width: '100%',
-                  padding: '9px 14px 9px 38px',
-                  borderRadius: '10px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--glass-border)',
-                  color: 'var(--text-main)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            <select
-              value={sellerHistoryStatus}
-              onChange={(e) => setSellerHistoryStatus(e.target.value)}
-              style={{
-                padding: '9px 14px',
-                borderRadius: '10px',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--glass-border)',
-                color: 'var(--text-main)',
-                fontSize: '13px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="packed">Packed</option>
-              <option value="out for delivery">Out for Delivery</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            {(sellerHistorySearch || sellerHistoryStatus || sellerHistoryCategory !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSellerHistorySearch('');
-                  setSellerHistoryStatus('');
-                  setSellerHistoryCategory('all');
-                }}
-                className="btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '12px', borderRadius: '10px' }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-
-          {/* History Records Table */}
-          <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-            {sellerHistoryLoading ? (
-              <div style={{ padding: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-                <Loader2 className="animate-spin" size={36} color="#6366f1" />
-                <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 500 }}>
-                  Loading history for {viewingSellerHistory.businessName || viewingSellerHistory.name}...
-                </span>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(99, 102, 241, 0.04)' }}>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>DATE & TIME</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER ID</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>CUSTOMER</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PRODUCTS / ITEMS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>TOTAL AMOUNT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>PAYMENT</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)' }}>ORDER STATUS</th>
-                      <th style={{ padding: '16px 20px', fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', textAlign: 'right' }}>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sellerHistoryRows
-                      .filter(row => {
-                        const needle = sellerHistorySearch.toLowerCase();
-                        const matchesSearch = !needle ||
-                          (row.referenceId && String(row.referenceId).toLowerCase().includes(needle)) ||
-                          (row.customer?.name && row.customer.name.toLowerCase().includes(needle)) ||
-                          (row.customer?.phone && String(row.customer.phone).includes(needle)) ||
-                          (row.description && row.description.toLowerCase().includes(needle));
-
-                        const matchesStatus = !sellerHistoryStatus ||
-                          (row.status && row.status.toLowerCase() === sellerHistoryStatus.toLowerCase());
-
-                        const matchesCategory = sellerHistoryCategory === 'all' ||
-                          (Array.isArray(row.categories) ? row.categories.includes(sellerHistoryCategory) : row.activityType === sellerHistoryCategory);
-
-                        return matchesSearch && matchesStatus && matchesCategory;
-                      })
-                      .map((row) => (
-                        <tr
-                          key={row.id}
-                          style={{ borderBottom: '1px solid var(--glass-border)', transition: 'background 0.2s', cursor: 'pointer' }}
-                          onClick={() => setSelectedHistoryOrder(row)}
-                          className="table-row-hover"
-                        >
-                          <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleDateString()}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                              {new Date(row.createdAt || row.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#6366f1', fontFamily: 'monospace' }}>
-                              {row.referenceId || '—'}
-                            </div>
-                            {row.activities?.length > 1 && (
-                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', background: 'rgba(99, 102, 241, 0.08)', padding: '2px 6px', borderRadius: '6px', fontWeight: 600 }}>
-                                {row.activities.length} updates
-                              </span>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.customer?.name || 'Customer'}
-                            </div>
-                            {row.customer?.phone && (
-                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                                {row.customer.phone}
-                              </div>
-                            )}
-                          </td>
-
-                          <td style={{ padding: '14px 20px', maxWidth: '280px' }}>
-                            <div style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {row.description || '—'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: 800, color: 'var(--text-main)' }}>
-                            ₹{Number(row.amount || 0).toLocaleString()}
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {row.paymentMethod || row.details?.paymentMethod || 'COD'}
-                            </div>
-                            <div style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              color: ['Paid', 'Completed'].includes(row.paymentStatus || row.details?.paymentStatus) ? '#22c55e' : '#f59e0b',
-                              marginTop: '2px'
-                            }}>
-                              {row.paymentStatus || row.details?.paymentStatus || 'Pending'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '14px 20px' }}>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '4px 10px',
-                              borderRadius: '8px',
-                              textTransform: 'uppercase',
-                              background: row.status === 'Delivered'
-                                ? 'rgba(34, 197, 94, 0.12)'
-                                : row.status === 'Out for Delivery'
-                                  ? 'rgba(168, 85, 247, 0.14)'
-                                  : row.status === 'Packed'
-                                    ? 'rgba(6, 182, 212, 0.14)'
-                                    : row.status === 'Cancelled'
-                                      ? 'rgba(239, 68, 68, 0.12)'
-                                      : 'rgba(245, 158, 11, 0.12)',
-                              color: row.status === 'Delivered'
-                                ? '#22c55e'
-                                : row.status === 'Out for Delivery'
-                                  ? '#9333ea'
-                                  : row.status === 'Packed'
-                                    ? '#0891b2'
-                                    : row.status === 'Cancelled'
-                                      ? '#ef4444'
-                                      : '#f59e0b'
-                            }}>
-                              {row.status || 'Pending'}
-                            </span>
-                          </td>
-
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedHistoryOrder(row)}
-                              className="btn-secondary"
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '11px',
-                                borderRadius: '8px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}
-                            >
-                              <Eye size={12} /> View Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {sellerHistoryRows.length === 0 && (
-                      <tr>
-                        <td colSpan="8" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                          No history records found for this seller.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* View Details Order Modal */}
-          {selectedHistoryOrder && (
-            <div style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 1000,
-              background: 'rgba(0,0,0,0.6)',
-              backdropFilter: 'blur(8px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}>
-              <div style={{
-                width: 'min(800px, 100%)',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                background: 'var(--card-bg)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '24px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                      Order {selectedHistoryOrder.referenceId}
-                    </h3>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-dim)' }}>
-                      Placed on {new Date(selectedHistoryOrder.createdAt || selectedHistoryOrder.occurredAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    style={{
-                      padding: '8px',
-                      borderRadius: '10px',
-                      background: 'var(--glass-bg)',
-                      border: '1px solid var(--glass-border)',
-                      cursor: 'pointer',
-                      color: 'var(--text-main)'
-                    }}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {/* 4 Cards Summary */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Amount</span>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>
-                      ₹{Number(selectedHistoryOrder.amount || 0).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Payment</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.paymentMethod || 'COD'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      Status: {selectedHistoryOrder.paymentStatus || 'Pending'}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Customer</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
-                      {selectedHistoryOrder.customer?.name || 'Customer'}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      {selectedHistoryOrder.customer?.phone || ''}
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Status</span>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1', marginTop: '4px' }}>
-                      {selectedHistoryOrder.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products Ordered Table */}
-                {selectedHistoryOrder.items && selectedHistoryOrder.items.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
-                      Products Ordered from this Seller
-                    </h4>
-                    <div style={{ borderRadius: '12px', border: '1px solid var(--glass-border)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                        <thead>
-                          <tr style={{ background: 'var(--input-bg)', color: 'var(--text-dim)' }}>
-                            <th style={{ padding: '10px 14px' }}>Product</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Unit Price</th>
-                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedHistoryOrder.items.map((it, idx) => (
-                            <tr key={idx} style={{ borderTop: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '10px 14px', fontWeight: 600 }}>{it.name}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>{it.quantity}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>₹{it.unitPrice}</td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>₹{it.amount}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Activity Timeline */}
-                {selectedHistoryOrder.activities && selectedHistoryOrder.activities.length > 0 && (
-                  <div>
-                    <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-main)' }}>
-                      Activity Timeline & Updates ({selectedHistoryOrder.activities.length})
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '14px', borderLeft: '2px solid rgba(99,102,241,0.2)' }}>
-                      {selectedHistoryOrder.activities.map((act, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{act.activity}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{act.description}</div>
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                            {new Date(act.occurredAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHistoryOrder(null)}
-                    className="btn-primary"
-                    style={{ padding: '8px 20px', fontSize: '13px' }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
+                    ) : (
                       <span style={{ fontSize: '10px', color: 'var(--text-dim)', opacity: 0.6 }}>Not Uploaded</span>
                     )}
                   </div>

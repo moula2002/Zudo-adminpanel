@@ -73,6 +73,9 @@ function App() {
                           <Route path="/sales" element={<Sales />} />
                           <Route path="/drivers" element={<Drivers />} />
                           <Route path="/sellers" element={<Sellers />} />
+                          <Route path="/sellers/history" element={<Sellers />} />
+                          <Route path="/sellers/:sellerId/history" element={<Sellers />} />
+                          <Route path="/history" element={<Sellers />} />
                           <Route path="/popup-ads" element={<PopupAds />} />
                           <Route path="/banners" element={<Banners />} />
                           <Route path="/users" element={<Users />} />
