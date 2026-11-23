@@ -95,7 +95,21 @@ export const SocketProvider = ({ children }) => {
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current);
       }
-      newSocket.close();
+      if (newSocket) {
+        if (newSocket.connected) {
+          newSocket.disconnect();
+        } else {
+          newSocket.once('connect', () => {
+            newSocket.disconnect();
+          });
+          const disconnectTimer = setTimeout(() => {
+            try {
+              newSocket.disconnect();
+            } catch (_) {}
+          }, 1500);
+          newSocket.once('connect', () => clearTimeout(disconnectTimer));
+        }
+      }
     };
   }, [authToken]);
 

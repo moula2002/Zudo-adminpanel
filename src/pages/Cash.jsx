@@ -1,5 +1,5 @@
 import toast from 'react-hot-toast';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from '../utils/api';
 import {
   Plus,
@@ -26,16 +26,33 @@ import {
   FileText,
   Download,
   Edit3,
-  Trash2
+  Trash2,
+  Eye,
+  RefreshCcw,
+  LayoutGrid,
+  Table,
+  Copy,
+  Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const Cash = () => {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [editId, setEditId] = useState(null);
   const [deleteModalData, setDeleteModalData] = useState({ show: false, id: null });
+  const [viewingTransaction, setViewingTransaction] = useState(null);
+  const [copiedTxId, setCopiedTxId] = useState(null);
+
+  // Search, Filter & View States
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('All');
+  const [sortBy, setSortBy] = useState('newest');
+  const [viewMode, setViewMode] = useState(() => (typeof window !== 'undefined' && window.innerWidth <= 768 ? 'cards' : 'table'));
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
+
   const [formData, setFormData] = useState({
     type: 'B2C',
     name: '',
@@ -60,21 +77,47 @@ const Cash = () => {
   const [depositAmount, setDepositAmount] = useState(0);
 
   useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
     fetchTransactions();
     fetchDrivers();
     fetchPendingDeposits();
   }, []);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchTransactions(),
+        fetchDrivers(),
+        fetchPendingDeposits()
+      ]);
+      toast.success('Cash collection records updated');
+    } catch (e) {
+      toast.error('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const fetchPendingDeposits = async () => {
     try {
       const { data } = await axios.get('deposits/all/pending');
       const depositMap = {};
-      data.forEach(d => {
-        const dId = d.driverId?._id || d.driverId;
-        if (dId) {
-          depositMap[dId] = d;
-        }
-      });
+      if (Array.isArray(data)) {
+        data.forEach(d => {
+          const dId = d.driverId?._id || d.driverId;
+          if (dId) {
+            depositMap[dId] = d;
+          }
+        });
+      }
       setPendingDeposits(depositMap);
     } catch (error) {
       console.error('Error fetching pending deposits:', error);
@@ -84,7 +127,7 @@ const Cash = () => {
   const fetchTransactions = async () => {
     try {
       const { data } = await axios.get('cash');
-      setTransactions(data);
+      setTransactions(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching transactions:', error);
     }
@@ -93,10 +136,17 @@ const Cash = () => {
   const fetchDrivers = async () => {
     try {
       const { data } = await axios.get('drivers');
-      setDrivers(data);
+      setDrivers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching drivers:', error);
     }
+  };
+
+  const copyToClipboard = (text, id) => {
+    navigator.clipboard.writeText(text);
+    setCopiedTxId(id);
+    toast.success(`Copied ${text}`);
+    setTimeout(() => setCopiedTxId(null), 2000);
   };
 
   const handleCollectClick = (driver, existingDeposit = null) => {
@@ -108,7 +158,6 @@ const Cash = () => {
     let amount = driver.wallet;
     let depositId = null;
 
-    // Use existing deposit data if provided or found in state
     const deposit = existingDeposit || pendingDeposits[driver._id];
 
     if (deposit) {
@@ -116,7 +165,6 @@ const Cash = () => {
       amount = deposit.amount;
       depositId = deposit._id;
     } else {
-      // For legacy or other types where no deposit record exists, fallback to driver wallet
       otp = driver.otp || Math.floor(1000 + Math.random() * 9000).toString();
       amount = driver.wallet;
     }
@@ -133,56 +181,56 @@ const Cash = () => {
       let isVerified = false;
 
       if (selectedDriver.cashManagement && selectedDriver.type?.toLowerCase() === 'b2c') {
-        // Verify against backend for cash management drivers
         const { data } = await axios.post('drivers/verify-otp', {
           driverId: selectedDriver._id,
-          otp: enteredOtp
+          otp: enteredOtp.trim()
         });
         isVerified = data.success;
       } else {
-        // Traditional verification for others
-        isVerified = enteredOtp === generatedOtp;
+        isVerified = enteredOtp.trim() === generatedOtp.toString().trim();
       }
 
       if (isVerified) {
-        // Simulate processing time
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 600));
 
-        // Record as a transaction in database
         const { data: transaction } = await axios.post('cash', {
           type: 'B2C (Driver)',
           name: selectedDriver.name,
           phone: selectedDriver.phone,
           amount: depositAmount,
           otp: generatedOtp,
-          description: `Collected from driver ${selectedDriver.name}`
+          description: `Collected from driver ${selectedDriver.name}`,
+          paymentMethod: 'Cash'
         });
 
         setTransactions(prev => [transaction, ...prev]);
 
-        // Update driver balance locally
         setDrivers(prev => prev.map(d =>
           d._id === selectedDriver._id ? { ...d, wallet: Math.max(0, d.wallet - depositAmount), otp: '' } : d
         ));
 
-        // Also update driver balance on server and clear OTP
         await axios.put(`drivers/${selectedDriver._id}`, {
           wallet: Math.max(0, selectedDriver.wallet - depositAmount),
           otp: ''
         });
 
-        // Mark deposit as completed if applicable
         if (currentDepositId) {
           await axios.put(`deposits/${currentDepositId}`, { status: 'Completed' });
+          setPendingDeposits(prev => {
+            const updated = { ...prev };
+            delete updated[selectedDriver._id];
+            return updated;
+          });
         }
 
         setCollectSuccess(true);
+        toast.success(`Successfully collected ₹${depositAmount.toLocaleString()} from ${selectedDriver.name}`);
         setTimeout(() => {
           setShowCollectModal(false);
           setCollectSuccess(false);
-        }, 2000);
+        }, 1800);
       } else {
-        toast.error('Invalid OTP. Please try again.');
+        toast.error('Invalid OTP. Please check the code and try again.');
       }
     } catch (error) {
       console.error('Verification error:', error);
@@ -213,7 +261,11 @@ const Cash = () => {
     try {
       await axios.delete(`cash/${deleteModalData.id}`);
       setTransactions(transactions.filter(t => (t._id || t.id) !== deleteModalData.id));
+      if (viewingTransaction && (viewingTransaction._id || viewingTransaction.id) === deleteModalData.id) {
+        setViewingTransaction(null);
+      }
       setDeleteModalData({ show: false, id: null });
+      toast.success('Transaction removed successfully');
     } catch (error) {
       toast.error('Failed to delete transaction');
     }
@@ -228,10 +280,12 @@ const Cash = () => {
         setTransactions(transactions.map(t => (t._id || t.id) === editId ? updatedTx : t));
         setShowForm(false);
         setEditId(null);
+        toast.success('Transaction updated successfully');
       } else {
         const { data: transaction } = await axios.post('cash', formData);
         setTransactions([transaction, ...transactions]);
         setShowForm(false);
+        toast.success('Cash collection transaction logged');
       }
       setFormData({
         type: 'B2C',
@@ -251,34 +305,115 @@ const Cash = () => {
     }
   };
 
+  // Filtered & Sorted Transactions
+  const filteredTransactions = useMemo(() => {
+    let result = [...transactions];
+
+    if (filterType !== 'All') {
+      if (filterType === 'B2C (Driver)') {
+        result = result.filter(t => t.type === 'B2C (Driver)');
+      } else if (filterType === 'B2C') {
+        result = result.filter(t => t.type === 'B2C');
+      } else if (filterType === 'B2B') {
+        result = result.filter(t => t.type === 'B2B');
+      }
+    }
+
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      result = result.filter(t => {
+        const name = (t.name || '').toLowerCase();
+        const phone = (t.phone || '').toLowerCase();
+        const email = (t.email || '').toLowerCase();
+        const desc = (t.description || '').toLowerCase();
+        const type = (t.type || '').toLowerCase();
+        const amount = String(t.amount || '');
+        const id = String(t._id || t.id || '').toLowerCase();
+        return name.includes(term) || phone.includes(term) || email.includes(term) || desc.includes(term) || type.includes(term) || amount.includes(term) || id.includes(term);
+      });
+    }
+
+    result.sort((a, b) => {
+      if (sortBy === 'oldest') {
+        return new Date(a.date || a.createdAt || 0) - new Date(b.date || b.createdAt || 0);
+      } else if (sortBy === 'highest') {
+        return Number(b.amount || 0) - Number(a.amount || 0);
+      } else if (sortBy === 'lowest') {
+        return Number(a.amount || 0) - Number(b.amount || 0);
+      }
+      // 'newest' default
+      return new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0);
+    });
+
+    return result;
+  }, [transactions, filterType, searchTerm, sortBy]);
+
   const exportTransactions = () => {
-    const exportData = transactions.map(t => ({
+    if (filteredTransactions.length === 0) {
+      toast.error('No transactions available to export');
+      return;
+    }
+    const exportData = filteredTransactions.map((t, index) => ({
+      'SL No': index + 1,
       'Transaction ID': t._id || t.id,
       'Client Name': t.name,
       'Client Phone': t.phone,
+      'Email': t.email || '—',
       'Flow Type': t.type,
-      'Date & Time': new Date(t.date).toLocaleString(),
-      'OTP/Password Verification': t.type === 'B2B' ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'N/A'),
-      'Amount (₹)': t.amount,
-      Method: t.paymentMethod || 'Cash',
-      Description: t.description || ''
+      'Date & Time': new Date(t.date || t.createdAt).toLocaleString(),
+      'Verification Status': t.type === 'B2B' ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'N/A'),
+      'Amount (₹)': Number(t.amount || 0),
+      'Payment Method': t.paymentMethod || 'Cash',
+      'Description / Notes': t.description || '—'
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Transactions");
-    XLSX.writeFile(wb, "Zudo_Cash_Collector_Registry.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Cash_Logs");
+    XLSX.writeFile(wb, `Zudo_Cash_Collection_Logs_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success('Cash collection logs exported');
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '20px' : '32px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
       {/* Header Section */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: '16px', flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Cash Collector</h1>
-          <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginTop: '4px' }}>Log and monitor manual B2B & B2C cash flows</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h1 style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Cash Collection Logs</h1>
+            <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '12px', background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e' }}>
+              Financial Audit
+            </span>
+          </div>
+          <p style={{ fontSize: isMobile ? '12px' : '14px', color: 'var(--text-dim)', marginTop: '4px' }}>Log, verify, and monitor B2B and B2C manual cash receipts and driver settlements</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
           <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="btn-primary"
+            style={{
+              background: 'var(--glass-bg)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--glass-border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '10px 18px',
+              borderRadius: '14px',
+              fontSize: '13px',
+              flex: isMobile ? '1 1 calc(50% - 5px)' : 'none'
+            }}
+            title="Refresh All Records"
+          >
+            <RefreshCcw size={16} className={refreshing ? 'animate-spin' : ''} style={{ color: 'var(--primary)' }} />
+            <span>Refresh</span>
+          </button>
+
+          <button
+            type="button"
             onClick={exportTransactions}
             className="btn-primary"
             style={{
@@ -287,105 +422,121 @@ const Cash = () => {
               border: '1px solid var(--glass-border)',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '8px',
-              padding: '12px 24px',
-              borderRadius: '16px',
-              height: '48px'
+              padding: '10px 18px',
+              borderRadius: '14px',
+              fontSize: '13px',
+              flex: isMobile ? '1 1 calc(50% - 5px)' : 'none'
             }}
+            title="Export to Excel Spreadsheet"
           >
-            <Download size={18} /> Export
+            <Download size={16} /> <span>Export Excel</span>
           </button>
+
           <button
+            type="button"
             onClick={() => {
               setEditId(null);
               setFormData({ type: 'B2C', name: '', phone: '', email: '', password: '', otp: '', amount: '', description: '', paymentMethod: 'Cash' });
               setShowForm(true);
             }}
             style={{
-              padding: '12px 24px',
-              borderRadius: '16px',
+              padding: '10px 20px',
+              borderRadius: '14px',
               border: 'none',
               background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: 'var(--text-main)',
+              color: '#ffffff',
               fontWeight: 700,
+              fontSize: '13px',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '8px',
               cursor: 'pointer',
-              boxShadow: '0 10px 20px -10px rgba(99, 102, 241, 0.5)',
-              transition: '0.3s',
-              height: '48px'
+              boxShadow: '0 8px 18px -6px rgba(99, 102, 241, 0.5)',
+              transition: '0.2s',
+              flex: isMobile ? '1 1 100%' : 'none'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
           >
-            <Plus size={20} />
-            New Transaction
+            <Plus size={18} />
+            <span>Record Cash Entry</span>
           </button>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px' }}>
-        <div className="glass-card" style={{ padding: '20px', borderRadius: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Summary KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: isMobile ? '12px' : '20px' }}>
+        <div className="glass-card" style={{ padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <ArrowDownLeft size={24} />
           </div>
           <div>
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Total B2C Cash</p>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0' }}>₹{transactions.filter(t => t.type === 'B2C' || t.type === 'B2C (Driver)').reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString()}</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: 'var(--text-main)' }}>
+              ₹{transactions.filter(t => t.type === 'B2C' || t.type === 'B2C (Driver)').reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString('en-IN')}
+            </h2>
           </div>
         </div>
-        <div className="glass-card" style={{ padding: '20px', borderRadius: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+
+        <div className="glass-card" style={{ padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(99, 102, 241, 0.12)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Building2 size={24} />
           </div>
           <div>
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Total B2B Cash</p>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0' }}>₹{transactions.filter(t => t.type === 'B2B').reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString()}</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: 'var(--text-main)' }}>
+              ₹{transactions.filter(t => t.type === 'B2B').reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString('en-IN')}
+            </h2>
           </div>
         </div>
-        <div className="glass-card" style={{ padding: '20px', borderRadius: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+
+        <div className="glass-card" style={{ padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <ShieldCheck size={24} />
           </div>
           <div>
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Pending Deposits</p>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0' }}>₹{Object.values(pendingDeposits).reduce((acc, d) => acc + (d.amount || 0), 0).toLocaleString()}</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: '#f59e0b' }}>
+              ₹{Object.values(pendingDeposits).reduce((acc, d) => acc + (d.amount || 0), 0).toLocaleString('en-IN')}
+            </h2>
           </div>
         </div>
-        <div className="glass-card" style={{ padding: '20px', borderRadius: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+
+        <div className="glass-card" style={{ padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(168, 85, 247, 0.12)', color: '#a855f7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Wallet size={24} />
           </div>
           <div>
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>B2C Driver Wallets</p>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0' }}>₹{drivers.filter(d => d.type?.toUpperCase() === 'B2C').reduce((acc, d) => acc + (d.wallet || 0), 0).toLocaleString()}</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: 'var(--text-main)' }}>
+              ₹{drivers.filter(d => (d.type || '').toUpperCase() === 'B2C').reduce((acc, d) => acc + (d.wallet || 0), 0).toLocaleString('en-IN')}
+            </h2>
           </div>
         </div>
       </div>
 
       {/* Pending Deposit Requests Section */}
       {Object.keys(pendingDeposits).length > 0 && (
-        <div className="glass-card" style={{ borderRadius: '28px', overflow: 'hidden', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
-          <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(245, 158, 11, 0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(245, 158, 11, 0.35)' }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(245, 158, 11, 0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Clock size={20} style={{ color: '#f59e0b' }} />
-              <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Pending Deposit Requests</h3>
+              <h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Pending Driver Deposit Requests</h3>
             </div>
-            <span style={{ padding: '4px 12px', borderRadius: '20px', background: '#f59e0b', color: 'var(--text-main)', fontSize: '12px', fontWeight: 800 }}>
+            <span style={{ padding: '4px 12px', borderRadius: '16px', background: '#f59e0b', color: '#000', fontSize: '11.5px', fontWeight: 800 }}>
               {Object.keys(pendingDeposits).length} Action Required
             </span>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ overflowX: 'auto' }} className="custom-scrollbar">
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
               <thead>
                 <tr style={{ background: 'var(--card-bg)' }}>
-                  <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Driver</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Requested Amount</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'center', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>OTP</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Time</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Action</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Driver</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Requested Amount</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'center', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>OTP Code</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Time</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -393,47 +544,50 @@ const Cash = () => {
                   const driver = deposit.driverId || {};
                   return (
                     <tr key={deposit._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                      <td style={{ padding: '20px 32px' }}>
+                      <td style={{ padding: '16px 24px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div style={{
-                            width: '40px', height: '40px', borderRadius: '50%',
-                            background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b',
+                            width: '38px', height: '38px', borderRadius: '50%',
+                            background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800
                           }}>
                             {driver.name ? driver.name[0] : '?'}
                           </div>
                           <div>
-                            <div style={{ fontSize: '14px', fontWeight: 700 }}>{driver.name || 'Unknown Driver'}</div>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{driver.name || 'Unknown Driver'}</div>
                             <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{driver.phone || 'N/A'}</div>
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: '20px 32px' }}>
-                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#f59e0b' }}>₹{deposit.amount.toLocaleString()}</div>
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 800, color: '#f59e0b' }}>
+                          ₹{Number(deposit.amount || 0).toLocaleString('en-IN')}
+                        </div>
                       </td>
-                      <td style={{ padding: '20px 32px', textAlign: 'center' }}>
-                        <div style={{ padding: '6px 12px', background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', borderRadius: '8px', fontSize: '16px', fontWeight: 900, letterSpacing: '2px', display: 'inline-block' }}>
+                      <td style={{ padding: '16px 24px', textAlign: 'center' }}>
+                        <div style={{ padding: '6px 14px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', borderRadius: '8px', fontSize: '15px', fontWeight: 900, letterSpacing: '2px', display: 'inline-block', fontFamily: 'monospace' }}>
                           {deposit.otp}
                         </div>
                       </td>
-                      <td style={{ padding: '20px 32px' }}>
-                        <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ fontSize: '12.5px', color: 'var(--text-dim)' }}>
                           {new Date(deposit.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           <div style={{ fontSize: '11px' }}>{new Date(deposit.createdAt).toLocaleDateString()}</div>
                         </div>
                       </td>
-                      <td style={{ padding: '20px 32px', textAlign: 'right' }}>
+                      <td style={{ padding: '16px 24px', textAlign: 'right' }}>
                         <button
                           onClick={() => handleCollectClick(driver, deposit)}
+                          className="btn-primary"
                           style={{
-                            padding: '8px 20px', borderRadius: '12px', border: 'none',
-                            background: '#22c55e', color: 'var(--text-main)',
-                            fontWeight: 700, fontSize: '13px', cursor: 'pointer',
+                            padding: '8px 18px', borderRadius: '12px', border: 'none',
+                            background: '#22c55e', color: '#ffffff',
+                            fontWeight: 700, fontSize: '12.5px', cursor: 'pointer',
                             boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
-                            transition: '0.3s'
+                            display: 'inline-flex', alignItems: 'center', gap: '6px'
                           }}
                         >
-                          Verify & Settle
+                          <CheckCircle2 size={15} /> Verify & Settle
                         </button>
                       </td>
                     </tr>
@@ -445,45 +599,49 @@ const Cash = () => {
         </div>
       )}
 
-      {/* Driver Wallets Section */}
-      <div className="glass-card" style={{ borderRadius: '28px', overflow: 'hidden' }}>
-        <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Smartphone size={20} style={{ color: 'var(--primary)' }} />
-            <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Driver Wallet Balances (B2C Only)</h3>
+      {/* Driver Wallet Balances Section */}
+      <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Smartphone size={18} style={{ color: 'var(--primary)' }} />
+            <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Driver Wallet Balances (B2C Cash in Hand)</h3>
           </div>
+          <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
+            {drivers.filter(d => (d.wallet || 0) > 0 && (d.type || '').toUpperCase() === 'B2C').length} active wallets
+          </span>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto' }} className="custom-scrollbar">
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
             <thead>
               <tr style={{ background: 'var(--card-bg)' }}>
-                <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Driver Details</th>
-                <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Type</th>
-                <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Vehicle</th>
-                <th style={{ padding: '16px 32px', textAlign: 'center', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Wallet Balance</th>
+                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Driver Details</th>
+                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Segment</th>
+                <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Vehicle Details</th>
+                <th style={{ padding: '14px 24px', textAlign: 'center', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Cash in Wallet</th>
+                <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {drivers.filter(d => (d.wallet || 0) > 0 && d.type?.toUpperCase() === 'B2C').length === 0 ? (
+              {drivers.filter(d => (d.wallet || 0) > 0 && (d.type || '').toUpperCase() === 'B2C').length === 0 ? (
                 <tr>
-                  <td colSpan="4" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px' }}>
-                    No pending driver wallets.
+                  <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px' }}>
+                    No pending driver cash in hand. All driver wallets settled!
                   </td>
                 </tr>
-              ) : drivers.filter(d => (d.wallet || 0) > 0 && d.type?.toUpperCase() === 'B2C').map(driver => (
+              ) : drivers.filter(d => (d.wallet || 0) > 0 && (d.type || '').toUpperCase() === 'B2C').map(driver => (
                 <tr key={driver._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                  <td style={{ padding: '20px 32px' }}>
+                  <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{
-                        width: '40px', height: '40px', borderRadius: '50%',
-                        background: driver.type?.toUpperCase() === 'B2B' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
-                        color: driver.type?.toUpperCase() === 'B2B' ? '#6366f1' : '#ec4899',
+                        width: '38px', height: '38px', borderRadius: '50%',
+                        background: 'rgba(236, 72, 153, 0.15)',
+                        color: '#ec4899',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800
                       }}>
                         {driver.name ? driver.name[0] : '?'}
                       </div>
                       <div>
-                        <div style={{ fontSize: '14px', fontWeight: 700 }}>{driver.name}</div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{driver.name}</div>
                         <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{driver.phone}</div>
                         {driver.cashManagement && (
                           <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 800, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -492,26 +650,40 @@ const Cash = () => {
                         )}
                         {pendingDeposits[driver._id] && (
                           <div style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 800, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <ArrowDownLeft size={10} /> PENDING REQUEST (₹{pendingDeposits[driver._id].amount})
+                            <ArrowDownLeft size={10} /> PENDING SETTLEMENT (₹{pendingDeposits[driver._id].amount})
                           </div>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td style={{ padding: '20px 32px' }}>
+                  <td style={{ padding: '16px 24px' }}>
                     <span style={{
-                      padding: '4px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase',
-                      background: driver.type === 'b2b' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
-                      color: driver.type === 'b2b' ? '#6366f1' : '#ec4899'
+                      padding: '3px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase',
+                      background: 'rgba(236, 72, 153, 0.15)', color: '#ec4899'
                     }}>
-                      {driver.type}
+                      B2C Logistics
                     </span>
                   </td>
-                  <td style={{ padding: '20px 32px' }}>
-                    <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>{driver.vehicleDetails}</div>
+                  <td style={{ padding: '16px 24px' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>{driver.vehicleDetails || 'Standard Delivery'}</div>
                   </td>
-                  <td style={{ padding: '20px 32px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#f59e0b' }}>₹{driver.wallet.toLocaleString()}</div>
+                  <td style={{ padding: '16px 24px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#f59e0b' }}>
+                      ₹{Number(driver.wallet || 0).toLocaleString('en-IN')}
+                    </div>
+                  </td>
+                  <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                    <button
+                      onClick={() => handleCollectClick(driver)}
+                      className="btn-primary"
+                      style={{
+                        padding: '6px 14px', borderRadius: '10px', border: 'none',
+                        background: 'rgba(99, 102, 241, 0.12)', color: 'var(--primary)',
+                        fontWeight: 700, fontSize: '12px', cursor: 'pointer'
+                      }}
+                    >
+                      Collect Cash
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -520,130 +692,466 @@ const Cash = () => {
         </div>
       </div>
 
-      {/* Transactions Table */}
-      <div className="glass-card" style={{ borderRadius: '28px', overflow: 'hidden' }}>
-        <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Recent Activity</h3>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <div style={{ position: 'relative' }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+      {/* Transactions & Cash Collection Logs Section */}
+      <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
+        <div style={{
+          padding: isMobile ? '16px' : '20px 24px',
+          borderBottom: '1px solid var(--glass-border)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '14px'
+        }}>
+          <div>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Cash Collection History</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '2px 0 0' }}>
+              Found {filteredTransactions.length} transaction entries
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
+            {/* View Mode Switcher */}
+            <div style={{
+              display: 'flex',
+              gap: '4px',
+              background: 'var(--glass-bg)',
+              padding: '4px',
+              borderRadius: '12px',
+              border: '1px solid var(--glass-border)'
+            }}>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: viewMode === 'table' ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
+                  color: viewMode === 'table' ? '#ffffff' : 'var(--text-dim)'
+                }}
+              >
+                <Table size={14} /> Table
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: viewMode === 'cards' ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
+                  color: viewMode === 'cards' ? '#ffffff' : 'var(--text-dim)'
+                }}
+              >
+                <LayoutGrid size={14} /> Cards
+              </button>
+            </div>
+
+            {/* Type Filter */}
+            <select
+              value={filterType}
+              onChange={e => setFilterType(e.target.value)}
+              className="input-field"
+              style={{ padding: '8px 12px', minHeight: 'auto', fontSize: '12.5px', width: isMobile ? '100%' : 'auto' }}
+            >
+              <option value="All">All Flow Types</option>
+              <option value="B2C">B2C Customers</option>
+              <option value="B2B">B2B Sellers / Clients</option>
+              <option value="B2C (Driver)">B2C Driver Collections</option>
+            </select>
+
+            {/* Sorting */}
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              className="input-field"
+              style={{ padding: '8px 12px', minHeight: 'auto', fontSize: '12.5px', width: isMobile ? '100%' : 'auto' }}
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="highest">Highest Amount</option>
+              <option value="lowest">Lowest Amount</option>
+            </select>
+
+            {/* Search Input */}
+            <div style={{ position: 'relative', width: isMobile ? '100%' : '220px' }}>
+              <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
               <input
                 type="text"
                 placeholder="Search logs..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
                 style={{
+                  width: '100%',
                   background: 'var(--input-bg)',
                   border: '1px solid var(--glass-border)',
                   borderRadius: '12px',
-                  padding: '10px 12px 10px 40px',
+                  padding: '8px 12px 8px 36px',
                   color: 'var(--text-main)',
-                  fontSize: '13px',
-                  outline: 'none'
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  boxSizing: 'border-box'
                 }}
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}
+                >
+                  <X size={13} />
+                </button>
+              )}
             </div>
           </div>
         </div>
 
-        {transactions.length === 0 ? (
-          <div style={{ padding: '80px 40px', textAlign: 'center' }}>
-            <div style={{ width: '80px', height: '80px', borderRadius: '24px', background: 'var(--card-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-              <CreditCard size={40} style={{ opacity: 0.1 }} />
+        {filteredTransactions.length === 0 ? (
+          <div style={{ padding: '70px 40px', textAlign: 'center' }}>
+            <div style={{ width: '70px', height: '70px', borderRadius: '20px', background: 'var(--card-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <CreditCard size={36} style={{ opacity: 0.25 }} />
             </div>
-            <h4 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-dim)', margin: '0 0 8px' }}>No Transactions Yet</h4>
-            <p style={{ color: 'var(--text-dim)', fontSize: '14px', maxWidth: '300px', margin: '0 auto' }}>Manual cash entries will appear here once you record your first B2B or B2C transaction.</p>
+            <h4 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 6px' }}>
+              {searchTerm || filterType !== 'All' ? 'No matching logs found' : 'No Transactions Yet'}
+            </h4>
+            <p style={{ color: 'var(--text-dim)', fontSize: '13px', maxWidth: '340px', margin: '0 auto' }}>
+              {searchTerm || filterType !== 'All' ? 'Try adjusting your search query or flow filter.' : 'Manual cash receipts and driver settlements will automatically appear in this audit log.'}
+            </p>
           </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        ) : viewMode === 'table' ? (
+          <div style={{ overflowX: 'auto' }} className="custom-scrollbar">
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '850px' }}>
               <thead>
-                <tr style={{ background: 'var(--card-bg)' }}>
-                  <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Client Details</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Type</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Date & Time</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'left', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Verification</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'center', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Status</th>
-                  <th style={{ padding: '16px 32px', textAlign: 'right', fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Action</th>
+                <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
+                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Client / Payee</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Flow Type</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Amount Collected (₹)</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Date & Time</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Verification</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'center', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Status</th>
+                  <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((t) => (
-                  <tr key={t._id || t.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                    <td style={{ padding: '20px 32px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{
-                          width: '40px', height: '40px', borderRadius: '12px',
-                          background: t.type === 'B2B' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
-                          color: t.type === 'B2B' ? '#6366f1' : '#ec4899',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800
+                {filteredTransactions.map((t) => {
+                  const txId = t._id || t.id;
+                  const isB2B = t.type === 'B2B';
+                  return (
+                    <tr key={txId} style={{ borderBottom: '1px solid var(--glass-border)' }} className="table-row-hover hover-row">
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{
+                            width: '38px', height: '38px', borderRadius: '12px',
+                            background: isB2B ? 'rgba(99, 102, 241, 0.12)' : 'rgba(236, 72, 153, 0.12)',
+                            color: isB2B ? '#6366f1' : '#ec4899',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800,
+                            flexShrink: 0
+                          }}>
+                            {t.name ? t.name[0] : 'C'}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{t.name}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{t.phone || 'No phone'}</div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '16px 24px' }}>
+                        <span style={{
+                          padding: '3px 10px', borderRadius: '12px', fontSize: '10.5px', fontWeight: 800,
+                          background: isB2B ? 'rgba(99, 102, 241, 0.12)' : 'rgba(236, 72, 153, 0.12)',
+                          color: isB2B ? '#6366f1' : '#ec4899'
                         }}>
-                          {t.name[0]}
+                          {t.type}
+                        </span>
+                      </td>
+
+                      {/* Explicit AMOUNT Column */}
+                      <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                        <div style={{ fontSize: '15.5px', fontWeight: 800, color: '#10b981', fontFamily: 'monospace' }}>
+                          ₹{Number(t.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </div>
-                        <div>
-                          <div style={{ fontSize: '14px', fontWeight: 700 }}>{t.name}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{t.phone}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                          {t.paymentMethod || 'Cash'}
                         </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '20px 32px' }}>
-                      <span style={{
-                        padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 800,
-                        background: t.type === 'B2B' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
-                        color: t.type === 'B2B' ? '#6366f1' : '#ec4899'
-                      }}>
-                        {t.type}
-                      </span>
-                    </td>
-                    <td style={{ padding: '20px 32px' }}>
-                      <div style={{ fontSize: '13px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Clock size={14} />
-                        {new Date(t.date).toLocaleDateString()} at {new Date(t.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </td>
-                    <td style={{ padding: '20px 32px' }}>
-                      <div style={{ fontSize: '13px', color: '#10b981', fontWeight: 700 }}>
-                        {t.type === 'B2B' ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'N/A')}
-                      </div>
-                    </td>
-                    <td style={{ padding: '20px 32px', textAlign: 'center' }}>
-                      <span style={{
-                        padding: '6px 12px', borderRadius: '10px', fontSize: '11px', fontWeight: 800,
-                        background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', textTransform: 'uppercase'
-                      }}>
-                        Completed
-                      </span>
-                    </td>
-                    <td style={{ padding: '20px 32px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button
-                          onClick={() => handleEditClick(t)}
-                          style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                          title="Edit"
-                        >
-                          <Edit3 size={16} />
-                        </button>
-                        <button
-                          onClick={() => setDeleteModalData({ show: true, id: t._id || t.id })}
-                          style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                          title="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ fontSize: '12.5px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Clock size={13} />
+                          {new Date(t.date || t.createdAt).toLocaleDateString()}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px', opacity: 0.8 }}>
+                          {new Date(t.date || t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ fontSize: '12.5px', color: '#10b981', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <ShieldCheck size={14} />
+                          {isB2B ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'Verified')}
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '16px 24px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 800,
+                          background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', textTransform: 'uppercase'
+                        }}>
+                          Settled
+                        </span>
+                      </td>
+
+                      <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={() => setViewingTransaction(t)}
+                            style={{ background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none', padding: '7px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                            title="View Transaction Details"
+                          >
+                            <Eye size={15} />
+                          </button>
+                          <button
+                            onClick={() => handleEditClick(t)}
+                            style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', border: 'none', padding: '7px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                            title="Edit Transaction"
+                          >
+                            <Edit3 size={15} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteModalData({ show: true, id: txId })}
+                            style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '7px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                            title="Delete Transaction"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+        ) : (
+          /* Cards View */
+          <div style={{ padding: isMobile ? '12px' : '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
+              {filteredTransactions.map((t) => {
+                const txId = t._id || t.id;
+                const isB2B = t.type === 'B2B';
+
+                return (
+                  <div
+                    key={txId}
+                    style={{
+                      padding: '16px',
+                      borderRadius: '16px',
+                      background: 'var(--glass-bg)',
+                      border: '1px solid var(--glass-border)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '36px', height: '36px', borderRadius: '10px',
+                          background: isB2B ? 'rgba(99, 102, 241, 0.15)' : 'rgba(236, 72, 153, 0.15)',
+                          color: isB2B ? '#6366f1' : '#ec4899',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800
+                        }}>
+                          {t.name ? t.name[0] : 'C'}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{t.name}</div>
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>{t.phone || 'No phone'}</div>
+                        </div>
+                      </div>
+
+                      <span style={{
+                        padding: '3px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 800,
+                        background: isB2B ? 'rgba(99, 102, 241, 0.15)' : 'rgba(236, 72, 153, 0.15)',
+                        color: isB2B ? '#6366f1' : '#ec4899'
+                      }}>
+                        {t.type}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)', padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                      <div>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>Amount Collected</span>
+                        <span style={{ fontSize: '17px', fontWeight: 800, color: '#10b981', fontFamily: 'monospace' }}>
+                          ₹{Number(t.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>Method</span>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>
+                          {t.paymentMethod || 'Cash'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: 'var(--text-dim)' }}>
+                      <span>{new Date(t.date || t.createdAt).toLocaleDateString()}</span>
+                      <span style={{ color: '#10b981', fontWeight: 700 }}>
+                        {isB2B ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : 'Verified')}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '10px' }}>
+                      <button
+                        onClick={() => setViewingTransaction(t)}
+                        className="btn-primary"
+                        style={{ flex: 1, padding: '7px', fontSize: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--primary)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                      >
+                        <Eye size={14} /> Details
+                      </button>
+                      <button
+                        onClick={() => handleEditClick(t)}
+                        className="btn-secondary"
+                        style={{ padding: '7px 12px', fontSize: '12px' }}
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteModalData({ show: true, id: txId })}
+                        className="btn-secondary"
+                        style={{ padding: '7px 12px', fontSize: '12px', color: '#ef4444' }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
+
+      {/* Transaction Details Modal */}
+      {viewingTransaction && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 1200, padding: '16px'
+        }}>
+          <div className="glass-card" style={{
+            width: '100%', maxWidth: '480px', borderRadius: '24px',
+            overflow: 'hidden', border: '1px solid var(--glass-border)',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+            padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CreditCard size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Cash Receipt Slip</h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                    Ref: {viewingTransaction._id || viewingTransaction.id}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingTransaction(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: '6px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ background: 'rgba(34, 197, 94, 0.08)', borderRadius: '16px', padding: '16px', textAlign: 'center', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Cash Amount Collected</span>
+              <div style={{ fontSize: '28px', fontWeight: 900, color: '#10b981', margin: '4px 0 0', fontFamily: 'monospace' }}>
+                ₹{Number(viewingTransaction.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
+                Payment Method: <strong style={{ color: 'var(--text-main)' }}>{viewingTransaction.paymentMethod || 'Cash'}</strong>
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Client / Payee</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>{viewingTransaction.name}</span>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>{viewingTransaction.phone}</span>
+              </div>
+
+              <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Flow Type</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: viewingTransaction.type === 'B2B' ? 'var(--primary)' : '#ec4899', marginTop: '2px', display: 'block' }}>
+                  {viewingTransaction.type}
+                </span>
+                <span style={{ fontSize: '11.5px', color: '#10b981', fontWeight: 700 }}>
+                  {viewingTransaction.type === 'B2B' ? 'Password Verified' : (viewingTransaction.otp ? `OTP: ${viewingTransaction.otp}` : 'Verified')}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+              <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Timestamp</span>
+              <span style={{ fontSize: '12.5px', color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
+                {new Date(viewingTransaction.date || viewingTransaction.createdAt).toLocaleString()}
+              </span>
+            </div>
+
+            {viewingTransaction.description && (
+              <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Notes / Description</span>
+                <span style={{ fontSize: '12.5px', color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
+                  {viewingTransaction.description}
+                </span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <button
+                onClick={() => {
+                  const t = viewingTransaction;
+                  setViewingTransaction(null);
+                  handleEditClick(t);
+                }}
+                className="btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '12.5px' }}
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setViewingTransaction(null)}
+                className="btn-primary"
+                style={{ padding: '8px 20px', fontSize: '12.5px' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Transaction Form Modal */}
       {showForm && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
           backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', zIndex: 1000, padding: '16px'
+          justifyContent: 'center', zIndex: 1100, padding: '16px'
         }}>
           <div className="glass-card" style={{
             width: '100%', maxWidth: '520px', borderRadius: '24px',
@@ -748,6 +1256,31 @@ const Cash = () => {
                   </>
                 ) : (
                   <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ position: 'relative' }}>
+                        <User size={14} style={{ position: 'absolute', left: '12px', top: '12px', color: '#6366f1' }} />
+                        <input
+                          className="input-field"
+                          style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
+                          placeholder="Customer Name"
+                          required
+                          value={formData.name}
+                          onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        />
+                      </div>
+                      <div style={{ position: 'relative' }}>
+                        <Phone size={14} style={{ position: 'absolute', left: '12px', top: '12px', color: '#6366f1' }} />
+                        <input
+                          className="input-field"
+                          style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
+                          placeholder="Phone Number"
+                          required
+                          value={formData.phone}
+                          onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Logistics Verification</label>
                       <div style={{ position: 'relative' }}>
@@ -814,7 +1347,7 @@ const Cash = () => {
                   borderRadius: '12px',
                   border: 'none',
                   background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                  color: 'var(--text-main)',
+                  color: '#ffffff',
                   fontWeight: 800,
                   fontSize: '14px',
                   cursor: 'pointer',
@@ -832,7 +1365,7 @@ const Cash = () => {
         </div>
       )}
 
-      {/* Payment Collection OTP Modal */}
+      {/* Payment Collection OTP Modal with Input & Auto-fill */}
       {showCollectModal && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
@@ -845,37 +1378,93 @@ const Cash = () => {
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
             textAlign: 'center'
           }}>
-            <div style={{ padding: '40px 32px' }}>
+            <div style={{ padding: '36px 32px' }}>
               {collectSuccess ? (
                 <div className="animate-in fade-in zoom-in duration-300">
-                  <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-                    <CheckCircle size={40} />
+                  <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                    <CheckCircle size={44} />
                   </div>
-                  <h3 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 8px' }}>Payment Collected!</h3>
-                  <p style={{ color: 'var(--text-dim)', fontSize: '15px' }}>Transaction of ₹{depositAmount} from {selectedDriver?.name} has been successfully recorded.</p>
+                  <h3 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 8px', color: 'var(--text-main)' }}>Payment Collected!</h3>
+                  <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>Transaction of ₹{depositAmount.toLocaleString()} from {selectedDriver?.name} has been successfully recorded and settled.</p>
                 </div>
               ) : (
                 <>
-                  <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{ fontSize: '22px', fontWeight: 800, margin: 0 }}>Verify Collection</h3>
+                  <div style={{ marginBottom: '24px' }}>
+                    <h3 style={{ fontSize: '22px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Verify Cash Collection</h3>
                     <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginTop: '4px' }}>
-                      Confirm payment of <span style={{ color: '#f59e0b', fontWeight: 800 }}>₹{depositAmount}</span> from {selectedDriver?.name}
+                      Confirm payment of <span style={{ color: '#f59e0b', fontWeight: 800 }}>₹{depositAmount.toLocaleString()}</span> from {selectedDriver?.name}
                     </p>
                   </div>
 
-                  <div style={{ background: 'rgba(99, 102, 241, 0.05)', borderRadius: '24px', padding: '24px', marginBottom: '32px', border: '1px dashed rgba(99, 102, 241, 0.2)' }}>
-                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Security OTP</p>
-                    <div style={{ fontSize: '48px', fontWeight: 900, color: 'var(--primary)', letterSpacing: '8px' }}>{generatedOtp}</div>
-                    <p style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '8px' }}>Ask the driver to confirm this code</p>
+                  <div style={{ background: 'rgba(99, 102, 241, 0.06)', borderRadius: '20px', padding: '20px', marginBottom: '24px', border: '1px dashed rgba(99, 102, 241, 0.3)' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Expected Driver OTP</p>
+                    <div style={{ fontSize: '40px', fontWeight: 900, color: 'var(--primary)', letterSpacing: '6px', fontFamily: 'monospace' }}>
+                      {generatedOtp}
+                    </div>
+                    <p style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '6px' }}>Verify this security code with the driver</p>
                   </div>
 
+                  {/* Input field for entering OTP */}
+                  <div style={{ marginBottom: '24px', textAlign: 'left' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+                      Enter Verification OTP
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="Enter 4-digit code"
+                      value={enteredOtp}
+                      onChange={e => setEnteredOtp(e.target.value)}
+                      style={{
+                        width: '100%',
+                        height: '48px',
+                        borderRadius: '12px',
+                        border: '1px solid var(--glass-border)',
+                        background: 'var(--input-bg)',
+                        color: 'var(--text-main)',
+                        fontSize: '18px',
+                        fontWeight: 700,
+                        textAlign: 'center',
+                        letterSpacing: '4px',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                      autoFocus
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Target code: <strong style={{ color: 'var(--primary)' }}>{generatedOtp}</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => setEnteredOtp(generatedOtp.toString())}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                      >
+                        Auto-fill OTP
+                      </button>
+                    </div>
+                  </div>
 
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <button
+                      type="button"
                       onClick={() => setShowCollectModal(false)}
-                      style={{ flex: 1, height: '56px', borderRadius: '16px', border: 'none', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 700, cursor: 'pointer' }}
+                      style={{ flex: 1, height: '46px', borderRadius: '14px', border: '1px solid var(--glass-border)', background: 'transparent', color: 'var(--text-main)', fontWeight: 700, cursor: 'pointer' }}
                     >
                       Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={verifyOtp}
+                      disabled={verifying || !enteredOtp.trim()}
+                      style={{
+                        flex: 1, height: '46px', borderRadius: '14px', border: 'none',
+                        background: enteredOtp.trim() ? '#22c55e' : '#94a3b8',
+                        color: '#fff', fontWeight: 700, cursor: enteredOtp.trim() ? 'pointer' : 'not-allowed',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                        boxShadow: enteredOtp.trim() ? '0 4px 15px rgba(34, 197, 94, 0.4)' : 'none',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {verifying ? <Loader2 className="animate-spin" size={18} /> : 'Verify & Settle'}
                     </button>
                   </div>
                 </>
@@ -884,6 +1473,7 @@ const Cash = () => {
           </div>
         </div>
       )}
+
       {/* Custom Delete Modal */}
       {deleteModalData.show && (
         <div style={{
@@ -896,7 +1486,7 @@ const Cash = () => {
             </div>
             <h3 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '8px', color: 'var(--text-main)' }}>Delete Transaction</h3>
             <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginBottom: '24px', lineHeight: '1.5' }}>
-              Are you sure you want to delete this transaction? This action cannot be undone.
+              Are you sure you want to delete this cash collection log? This action cannot be undone.
             </p>
             <div style={{ display: 'flex', gap: '12px' }}>
               <button

@@ -1,8 +1,9 @@
 import toast from 'react-hot-toast';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api, { getImageUrl } from '../utils/api';
 import { 
-  Receipt, Printer, Search, Filter, Calendar, CheckCircle2, FileText, X, ChevronDown, Edit2, Download, Table, Eye
+  Receipt, Printer, Search, Filter, Calendar, CheckCircle2, FileText, X, ChevronDown, Edit2, Download, Table, Eye,
+  RefreshCcw, Copy, Check, ChevronLeft, ChevronRight, Building2, MapPin, Phone, Mail, LayoutGrid, ShieldCheck, AlertCircle, IndianRupee, Layers
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -28,6 +29,15 @@ const Invoices = () => {
   const [pageSize, setPageSize] = useState('A5');
   const [printCopyType, setPrintCopyType] = useState('ORIGINAL FOR RECIPIENT');
   const iframeRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const numberToWords = (num) => {
     const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
@@ -837,24 +847,254 @@ const Invoices = () => {
     }
   };
 
+  const [viewMode, setViewMode] = useState('table');
+  const [rowsPerPage, setRowsPerPage] = useState('25');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [copiedInvoiceId, setCopiedInvoiceId] = useState(null);
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
+
+  const isAnyFilterActive = useMemo(() => {
+    return segmentType !== 'All' || searchTerm.trim() !== '' || dateFilter !== 'All Time' || collation !== 'All' || cityFilter !== 'All' || printStatusFilter !== 'All';
+  }, [segmentType, searchTerm, dateFilter, collation, cityFilter, printStatusFilter]);
+
+  const clearAllFilters = () => {
+    setSegmentType('All');
+    setSearchTerm('');
+    setDateFilter('All Time');
+    setCustomDate({ start: '', end: '' });
+    setCollation('All');
+    setCityFilter('All');
+    setPrintStatusFilter('All');
+    setCurrentPage(1);
+  };
+
+  const handleRefreshData = async () => {
+    try {
+      if (invoiceType === 'seller_generated') {
+        await fetchSellerInvoices();
+      } else {
+        await fetchOrders();
+      }
+      toast.success('Invoices updated');
+    } catch (err) {
+      toast.error('Failed to refresh data');
+    }
+  };
+
+  const copyToClipboard = (text, id) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+    }
+    setCopiedInvoiceId(id);
+    toast.success('Invoice number copied!');
+    setTimeout(() => setCopiedInvoiceId(null), 2000);
+  };
+
+  const toggleOrderPrintStatus = async (orderId, currentStatus) => {
+    try {
+      const updatedStatus = !currentStatus;
+      setOrders(prev => prev.map(o => o._id === orderId ? { ...o, isPrinted: updatedStatus } : o));
+      setFilteredOrders(prev => prev.map(o => o._id === orderId ? { ...o, isPrinted: updatedStatus } : o));
+      if (selectedOrderDetails?._id === orderId) {
+        setSelectedOrderDetails(prev => prev ? { ...prev, isPrinted: updatedStatus } : null);
+      }
+      toast.success(updatedStatus ? 'Marked as Printed' : 'Marked as Unprinted');
+      await api.patch(`/orders/${orderId}`, { isPrinted: updatedStatus }).catch(() => {});
+    } catch (err) {
+      toast.error('Failed to update print status');
+    }
+  };
+
+  const totalOrderPages = rowsPerPage === 'All' ? 1 : Math.max(1, Math.ceil(filteredOrders.length / (Number(rowsPerPage) || 25)));
+  const totalSellerPages = rowsPerPage === 'All' ? 1 : Math.max(1, Math.ceil(filteredSellerInvoices.length / (Number(rowsPerPage) || 25)));
+
+  const paginatedOrders = useMemo(() => {
+    if (rowsPerPage === 'All') return filteredOrders;
+    const size = Number(rowsPerPage) || 25;
+    const start = (currentPage - 1) * size;
+    return filteredOrders.slice(start, start + size);
+  }, [filteredOrders, rowsPerPage, currentPage]);
+
+  const paginatedSellerInvoices = useMemo(() => {
+    if (rowsPerPage === 'All') return filteredSellerInvoices;
+    const size = Number(rowsPerPage) || 25;
+    const start = (currentPage - 1) * size;
+    return filteredSellerInvoices.slice(start, start + size);
+  }, [filteredSellerInvoices, rowsPerPage, currentPage]);
+
+  const calculateOrderTaxBreakdown = (order) => {
+    let totalQty = 0;
+    let totalTaxableValue = 0;
+    let totalSgst = 0;
+    let totalCgst = 0;
+    let grandTotal = 0;
+
+    const items = (order?.items || []).map((item, i) => {
+      const itemIdentifier = item.itemIndex !== undefined ? item.itemIndex : i;
+      const orderIdentifier = item.parentOrderId || order?._id;
+
+      const rawPrice = item.price || 0;
+      const rawName = item.name || 'Unknown Item';
+      const rawQty = item.quantity || 1;
+
+      const currentPrice = calculateItemPrice(orderIdentifier, itemIdentifier, rawPrice);
+      const currentName = calculateItemName(orderIdentifier, itemIdentifier, rawName);
+      const currentQty = calculateItemQuantity(orderIdentifier, itemIdentifier, rawQty);
+
+      const itemTotal = currentPrice * currentQty;
+      const gstPercent = item.gstPercent || item.productId?.gstPercent || item.product?.gstPercent || productGstMap[item.productId?._id || item.productId] || 0;
+      const halfGstPercent = gstPercent / 2;
+
+      const taxableValue = itemTotal / (1 + gstPercent / 100);
+      const cgst = taxableValue * (halfGstPercent / 100);
+      const sgst = taxableValue * (halfGstPercent / 100);
+
+      totalQty += currentQty;
+      totalTaxableValue += taxableValue;
+      totalCgst += cgst;
+      totalSgst += sgst;
+      grandTotal += itemTotal;
+
+      const hsnCode = item.hsn || item.productId?.hsn || item.product?.hsn || '25010090';
+      const unitLabel = item.unit || item.productId?.unit || 'Pack';
+
+      return {
+        index: i + 1,
+        name: currentName,
+        hsn: hsnCode,
+        qty: currentQty,
+        unit: unitLabel,
+        rate: currentPrice,
+        taxableValue,
+        sgst,
+        cgst,
+        halfGstPercent,
+        itemTotal
+      };
+    });
+
+    return {
+      totalQty,
+      totalTaxableValue,
+      totalSgst,
+      totalCgst,
+      totalTax: totalSgst + totalCgst,
+      grandTotal: grandTotal || order?.totalAmount || 0,
+      items
+    };
+  };
+
   const availableCities = ['All', ...new Set(orders.map(o => o.locationId?.city).filter(Boolean))];
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex justify-between items-center">
+    <div className="flex flex-col gap-6" style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+      {/* Header Bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: '16px', flexWrap: 'wrap' }}>
         <div>
-          <h1 className="text-3xl font-extrabold text-[var(--text-main)] m-0">Invoices Hub</h1>
-          <p className="text-sm text-[var(--text-dim)] mt-1">Generate and customize print-ready invoices</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h1 className="text-3xl font-extrabold text-[var(--text-main)] m-0" style={{ fontSize: isMobile ? '22px' : '28px' }}>Invoices Hub</h1>
+            <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--primary)' }}>
+              {invoiceType === 'seller_generated' ? 'Seller Accounts' : 'Tax Invoices'}
+            </span>
+          </div>
+          <p className="text-sm text-[var(--text-dim)] mt-1">Generate, review, and customize print-ready GST invoices</p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
+          <button
+            type="button"
+            onClick={handleRefreshData}
+            disabled={loading}
+            className="btn-primary"
+            style={{
+              padding: '9px 16px',
+              fontSize: '13px',
+              background: 'var(--card-bg)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--glass-border)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              flex: isMobile ? 1 : 'none'
+            }}
+            title="Refresh Invoices and Orders Data"
+          >
+            <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} style={{ color: 'var(--primary)' }} />
+            <span>Refresh</span>
+          </button>
+
+          {invoiceType === 'order' && (
+            <div style={{
+              display: 'flex',
+              gap: '4px',
+              background: 'var(--glass-bg)',
+              padding: '4px',
+              borderRadius: '12px',
+              border: '1px solid var(--glass-border)',
+              flex: isMobile ? 1 : 'none'
+            }}>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                style={{
+                  flex: isMobile ? 1 : 'none',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: viewMode === 'table' ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
+                  color: viewMode === 'table' ? '#ffffff' : 'var(--text-dim)',
+                  boxShadow: viewMode === 'table' ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none',
+                  transition: 'all 0.2s'
+                }}
+                title="Table View"
+              >
+                <Table size={14} /> Table
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                style={{
+                  flex: isMobile ? 1 : 'none',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: viewMode === 'cards' ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'transparent',
+                  color: viewMode === 'cards' ? '#ffffff' : 'var(--text-dim)',
+                  boxShadow: viewMode === 'cards' ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none',
+                  transition: 'all 0.2s'
+                }}
+                title="Cards View"
+              >
+                <LayoutGrid size={14} /> Cards
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="glass-card" style={{ padding: '24px', borderRadius: '24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px', marginBottom: '24px' }}>
+      {/* Filter Card */}
+      <div className="glass-card" style={{ padding: isMobile ? '16px' : '24px', borderRadius: '24px', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: isMobile ? '14px' : '20px', marginBottom: '20px' }}>
           
           <div>
             <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">Invoice Type</label>
             <select className="input-field" value={invoiceType} onChange={e => setInvoiceType(e.target.value)}>
-              <option value="order">Order Invoice</option>
+              <option value="order">Order Tax Invoice</option>
               <option value="seller_generated">Seller Generated Invoices</option>
             </select>
           </div>
@@ -868,20 +1108,27 @@ const Invoices = () => {
             </select>
           </div>
 
-          <div>
-            <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">Search</label>
-            <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)]" />
-              <input 
-                type="text" 
-                placeholder="Buyer or Seller Name" 
-                className="input-field" 
-                style={{ paddingLeft: '36px' }}
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
+          {invoiceType === 'order' && (
+            <div>
+              <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">Print Status</label>
+              <select className="input-field" value={printStatusFilter} onChange={e => setPrintStatusFilter(e.target.value)}>
+                <option value="All">All Invoices</option>
+                <option value="Printed">Printed Only</option>
+                <option value="Unprinted">Unprinted Only</option>
+              </select>
             </div>
-          </div>
+          )}
+
+          {invoiceType === 'order' && (
+            <div>
+              <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">City / Branch</label>
+              <select className="input-field" value={cityFilter} onChange={e => setCityFilter(e.target.value)}>
+                {availableCities.map(city => (
+                  <option key={city} value={city}>{city === 'All' ? 'All Locations' : city}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">Date Range</label>
@@ -894,89 +1141,175 @@ const Invoices = () => {
             </select>
           </div>
 
-          
-
-          
+          <div>
+            <label className="text-xs font-bold text-[var(--text-dim)] uppercase mb-2 block">Search</label>
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)]" />
+              <input 
+                type="text" 
+                placeholder="Buyer, Seller, Inv #, Phone..." 
+                className="input-field" 
+                style={{ paddingLeft: '36px' }}
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {dateFilter === 'Custom' && (
-          <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', padding: '16px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', padding: '16px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 200px' }}>
               <label className="text-xs font-bold text-[var(--text-dim)] mb-2 block">Start Date</label>
               <input type="date" className="input-field" value={customDate.start} onChange={e => setCustomDate({...customDate, start: e.target.value})} />
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1 1 200px' }}>
               <label className="text-xs font-bold text-[var(--text-dim)] mb-2 block">End Date</label>
               <input type="date" className="input-field" value={customDate.end} onChange={e => setCustomDate({...customDate, end: e.target.value})} />
             </div>
           </div>
         )}
 
-        <div className="flex justify-between items-center border-t border-[var(--glass-border)] pt-6 mt-2">
-          <div className="text-sm font-semibold text-[var(--text-main)]">
-            Found {invoiceType === 'seller_generated' ? filteredSellerInvoices.length : filteredOrders.length} matching records
+        {/* Action Bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--glass-border)', paddingTop: '16px', flexWrap: 'wrap', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span className="text-sm font-semibold text-[var(--text-main)]">
+              Found {invoiceType === 'seller_generated' ? filteredSellerInvoices.length : filteredOrders.length} records
+            </span>
+            {isAnyFilterActive && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="btn-secondary"
+                style={{ padding: '4px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <X size={12} /> Clear Filters
+              </button>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-dim)' }}>
+              <span>Show:</span>
+              <select
+                value={rowsPerPage}
+                onChange={e => {
+                  setRowsPerPage(e.target.value === 'All' ? 'All' : Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="input-field"
+                style={{ padding: '4px 8px', minHeight: 'auto', fontSize: '12px', width: 'auto' }}
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value="All">All</option>
+              </select>
+            </div>
           </div>
-          <div className="flex gap-4">
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
             <button 
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary"
               onClick={handleBulkExcelDownload}
               disabled={(invoiceType === 'seller_generated' ? filteredSellerInvoices.length === 0 : filteredOrders.length === 0)}
-              style={{ background: 'linear-gradient(135deg, #10b981, #059669)', opacity: (invoiceType === 'seller_generated' ? (filteredSellerInvoices.length === 0 ? 0.5 : 1) : (filteredOrders.length === 0 ? 0.5 : 1)) }}
+              style={{
+                flex: isMobile ? '1 1 calc(50% - 5px)' : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '9px 14px',
+                fontSize: '12.5px',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                opacity: (invoiceType === 'seller_generated' ? (filteredSellerInvoices.length === 0 ? 0.5 : 1) : (filteredOrders.length === 0 ? 0.5 : 1))
+              }}
+              title="Download Excel Spreadsheet of Filtered Records"
             >
-              <Table size={18} />
-              <span>Bulk Excel Export</span>
+              <Table size={16} />
+              <span>Excel Export</span>
             </button>
+            
             <button 
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary"
               onClick={() => handlePreview(filteredOrders)}
               disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
-              style={{ opacity: invoiceType === 'seller_generated' ? 0.5 : 1 }}
+              style={{
+                flex: isMobile ? '1 1 calc(50% - 5px)' : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '9px 14px',
+                fontSize: '12.5px',
+                opacity: (invoiceType === 'seller_generated' || filteredOrders.length === 0) ? 0.5 : 1
+              }}
+              title="Preview and customize all filtered invoices"
             >
-              <FileText size={18} />
-              <span>Preview & Generate All ({filteredOrders.length})</span>
+              <FileText size={16} />
+              <span>Preview All ({filteredOrders.length})</span>
             </button>
+
             <button 
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary"
               onClick={() => handleDirectBulkPrint(filteredOrders)}
               disabled={filteredOrders.length === 0 || invoiceType === 'seller_generated'}
-              style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', opacity: invoiceType === 'seller_generated' ? 0.5 : 1 }}
+              style={{
+                flex: isMobile ? '1 1 100%' : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '9px 14px',
+                fontSize: '12.5px',
+                background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                opacity: (invoiceType === 'seller_generated' || filteredOrders.length === 0) ? 0.5 : 1
+              }}
+              title="Send all filtered invoices directly to printer frame"
             >
-              <Printer size={18} />
+              <Printer size={16} />
               <span>Bulk Print Page ({filteredOrders.length})</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Results Table */}
-      <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          {invoiceType === 'seller_generated' ? (
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+      {/* Results Section */}
+      <div className="glass-card" style={{ borderRadius: '24px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+        {invoiceType === 'seller_generated' ? (
+          <div style={{ overflowX: 'auto' }} className="custom-scrollbar">
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '850px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'var(--card-bg)' }}>
-                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>ORDER ID</th>
-                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>CUSTOMER / SELLER</th>
-                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>DATE</th>
-                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>AMOUNT / TYPE</th>
-                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>STATUS</th>
-                  <th style={{ padding: '20px 24px', color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600 }}>ACTIONS</th>
+                  <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>ORDER ID</th>
+                  <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>CUSTOMER / SELLER</th>
+                  <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>DATE</th>
+                  <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>AMOUNT / TYPE</th>
+                  <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>STATUS</th>
+                  <th style={{ padding: '18px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, textAlign: 'right' }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="6" style={{ padding: '40px', textAlign: 'center' }}>
-                      <div className="animate-spin" style={{ display: 'inline-block' }}><Receipt size={24} /></div>
+                    <td colSpan="6" style={{ padding: '60px', textAlign: 'center' }}>
+                      <div className="animate-spin" style={{ display: 'inline-block', color: 'var(--primary)' }}><Receipt size={28} /></div>
+                      <div style={{ marginTop: '10px', color: 'var(--text-dim)', fontSize: '13px' }}>Loading seller invoices...</div>
                     </td>
                   </tr>
-                ) : filteredSellerInvoices.length === 0 ? (
+                ) : paginatedSellerInvoices.length === 0 ? (
                   <tr>
-                    <td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-                      No seller invoices found matching your filters.
+                    <td colSpan="6" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                      No seller invoices match the selected filter criteria.
                     </td>
                   </tr>
-                ) : filteredSellerInvoices.map((inv) => {
+                ) : paginatedSellerInvoices.map((inv) => {
                   const primaryOrder = inv.orderId || (inv.orders && inv.orders[0]);
                   const customerName = primaryOrder?.userId?.businessName || 
                     primaryOrder?.userId?.companyName || 
@@ -1056,33 +1389,33 @@ const Invoices = () => {
                           {inv.status}
                         </span>
                       </td>
-                      <td style={{ padding: '16px 24px' }}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                      <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                           <button
                             onClick={() => openSellerInvoiceModal(inv)}
                             className="btn-primary"
-                            style={{ padding: '8px 12px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none' }}
-                            title="Preview Single"
+                            style={{ padding: '8px 12px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                            title="Preview Details & Images"
                           >
-                            <Eye size={16} />
-                            <span style={{ marginLeft: '6px' }}>Preview Single</span>
+                            <Eye size={15} />
+                            <span>Details</span>
                           </button>
                           <button 
                             onClick={() => handleDownloadInvoice(inv._id)}
                             className="btn-primary"
-                            style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none' }}
+                            style={{ padding: '8px 10px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none' }}
                             title="Download PDF"
                           >
-                            <Download size={16} />
+                            <Download size={15} />
                           </button>
                           {inv.status !== 'Cleared' && (
                             <button 
                               onClick={() => handleClearInvoice(inv._id)}
                               className="btn-primary"
-                              style={{ padding: '8px', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: 'none' }}
+                              style={{ padding: '8px 10px', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: 'none' }}
                               title="Mark as Cleared"
                             >
-                              <CheckCircle2 size={16} />
+                              <CheckCircle2 size={15} />
                             </button>
                           )}
                         </div>
@@ -1092,62 +1425,706 @@ const Invoices = () => {
                 })}
               </tbody>
             </table>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          </div>
+        ) : viewMode === 'table' ? (
+          <div style={{ overflowX: 'auto' }} className="custom-scrollbar">
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '950px' }}>
               <thead>
-                <tr style={{ background: 'var(--card-bg)' }}>
-                  <th style={{ padding: '16px 24px', textAlign: 'left', color: 'var(--text-dim)', fontSize: '12px' }}>ORDER ID</th>
-                  <th style={{ padding: '16px 24px', textAlign: 'left', color: 'var(--text-dim)', fontSize: '12px' }}>CUSTOMER / SELLER</th>
-                  <th style={{ padding: '16px 24px', textAlign: 'left', color: 'var(--text-dim)', fontSize: '12px' }}>DATE</th>
-                  <th style={{ padding: '16px 24px', textAlign: 'left', color: 'var(--text-dim)', fontSize: '12px' }}>AMOUNT</th>
-                  <th style={{ padding: '16px 24px', textAlign: 'right', color: 'var(--text-dim)', fontSize: '12px' }}>ACTIONS</th>
+                <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--border-color)' }}>
+                  <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>INVOICE & ORDER REF</th>
+                  <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>CUSTOMER / BUYER</th>
+                  <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>SELLER</th>
+                  <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>DATE & TIME</th>
+                  <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>AMOUNT</th>
+                  <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, textAlign: 'right' }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.slice(0, 50).map((order, index) => (
-                  <tr key={order._id} className="border-b border-[var(--glass-border)] hover:bg-white/5">
-                    <td style={{ padding: '16px 24px', fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                      <span title={`Order ID: ${order._id} (#${order._id.slice(-8).toUpperCase()})`} style={{ fontFamily: 'monospace' }}>
-                        #{index + 1}
-                      </span>
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {order.userId?.role?.toUpperCase() || 'B2C'}
-                        {order.isPrinted && <span style={{ padding: '2px 6px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold' }}>Printed</span>}
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 24px' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer'}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>Seller: {order.sellerId?.name || 'Zudo Admin'}</div>
-                    </td>
-                    <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-dim)' }}>
-                      {new Date(order.createdAt).toLocaleDateString()}
-                    </td>
-                    <td style={{ padding: '16px 24px', fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
-                      ₹{order.totalAmount}
-                    </td>
-                    <td style={{ padding: '16px 24px', textAlign: 'right' }}>
-                      <button 
-                        onClick={() => handlePreview([order])}
-                        className="btn-primary"
-                        style={{ padding: '8px 16px', fontSize: '12px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: 'none' }}
-                      >
-                        Preview Single
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filteredOrders.length > 50 && (
+                {loading ? (
                   <tr>
-                    <td colSpan="5" style={{ padding: '16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}>
-                      Showing first 50 results. Use filters to narrow down or "Preview All" to print all.
+                    <td colSpan="6" style={{ padding: '60px', textAlign: 'center' }}>
+                      <div className="animate-spin" style={{ display: 'inline-block', color: 'var(--primary)' }}><Receipt size={28} /></div>
+                      <div style={{ marginTop: '10px', color: 'var(--text-dim)', fontSize: '13px' }}>Loading invoices...</div>
                     </td>
                   </tr>
+                ) : paginatedOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                      No orders match the selected invoice criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedOrders.map((order) => {
+                    const invNo = getInvoiceNumber(order);
+                    const ordRef = getOrderRef(order);
+                    const isB2B = (order.userId?.role || 'b2c').toLowerCase() === 'b2b';
+                    const buyerName = order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer';
+                    const buyerPhone = order.shippingAddress?.phone || order.userId?.phone || '';
+                    const buyerCity = order.locationId?.city || order.shippingAddress?.city || '';
+                    const sellerName = order.sellerId?.companyName || order.sellerId?.name || 'Zudo Admin';
+
+                    return (
+                      <tr key={order._id} className="border-b border-[var(--glass-border)] hover:bg-white/5" style={{ transition: 'background 0.2s' }}>
+                        <td style={{ padding: '16px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--primary)', fontFamily: 'monospace' }}>
+                              {invNo}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(invNo, order._id)}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: '2px', display: 'flex' }}
+                              title="Copy Invoice Number"
+                            >
+                              {copiedInvoiceId === order._id ? <Check size={14} color="#10b981" /> : <Copy size={13} />}
+                            </button>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'monospace' }}>
+                              Ref #{ordRef}
+                            </span>
+                            <span style={{
+                              fontSize: '9px',
+                              fontWeight: 800,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              background: isB2B ? 'rgba(99, 102, 241, 0.15)' : 'rgba(236, 72, 153, 0.15)',
+                              color: isB2B ? 'var(--primary)' : '#ec4899'
+                            }}>
+                              {isB2B ? 'B2B' : 'B2C'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleOrderPrintStatus(order._id, order.isPrinted)}
+                              style={{
+                                cursor: 'pointer',
+                                border: 'none',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '9.5px',
+                                fontWeight: 700,
+                                background: order.isPrinted ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.12)',
+                                color: order.isPrinted ? '#10b981' : 'var(--text-dim)'
+                              }}
+                              title="Click to toggle Print Status"
+                            >
+                              {order.isPrinted ? '✓ Printed' : '○ Unprinted'}
+                            </button>
+                          </div>
+                        </td>
+
+                        <td style={{ padding: '16px 24px' }}>
+                          <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-main)' }}>
+                            {buyerName}
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {buyerPhone && <span>{buyerPhone}</span>}
+                            {buyerPhone && buyerCity && <span>•</span>}
+                            {buyerCity && <span>{buyerCity}</span>}
+                          </div>
+                        </td>
+
+                        <td style={{ padding: '16px 24px' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                            {sellerName}
+                          </div>
+                          {order.sellerId?.gstNumber && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                              GSTIN: {order.sellerId.gstNumber}
+                            </div>
+                          )}
+                        </td>
+
+                        <td style={{ padding: '16px 24px', fontSize: '12.5px', color: 'var(--text-dim)' }}>
+                          <div>{new Date(order.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                          <div style={{ fontSize: '11px', marginTop: '2px', opacity: 0.8 }}>
+                            {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </td>
+
+                        <td style={{ padding: '16px 24px' }}>
+                          <div style={{ fontSize: '14.5px', fontWeight: 800, color: 'var(--text-main)' }}>
+                            ₹{Number(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                            {order.paymentMethod || 'Prepaid'}
+                          </div>
+                        </td>
+
+                        <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                            <button 
+                              type="button"
+                              onClick={() => setSelectedOrderDetails(order)}
+                              className="btn-primary"
+                              style={{
+                                padding: '8px 12px',
+                                fontSize: '12px',
+                                background: 'rgba(99, 102, 241, 0.12)',
+                                color: 'var(--primary)',
+                                border: '1px solid rgba(99, 102, 241, 0.25)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                              title="View full itemized invoice breakdown"
+                            >
+                              <Eye size={15} />
+                              <span>View Details</span>
+                            </button>
+
+                            <button 
+                              type="button"
+                              onClick={() => handlePreview([order])}
+                              className="btn-primary"
+                              style={{
+                                padding: '8px 12px',
+                                fontSize: '12px',
+                                background: 'var(--card-bg)',
+                                color: 'var(--text-main)',
+                                border: '1px solid var(--glass-border)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                              title="Open Print & PDF Customization Preview"
+                            >
+                              <Printer size={15} />
+                              <span>Print / PDF</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
-          )}
-        </div>
+          </div>
+        ) : (
+          /* Cards View */
+          <div style={{ padding: isMobile ? '12px' : '20px' }}>
+            {loading ? (
+              <div style={{ padding: '60px', textAlign: 'center' }}>
+                <div className="animate-spin" style={{ display: 'inline-block', color: 'var(--primary)' }}><Receipt size={28} /></div>
+                <div style={{ marginTop: '10px', color: 'var(--text-dim)', fontSize: '13px' }}>Loading invoices...</div>
+              </div>
+            ) : paginatedOrders.length === 0 ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                No orders match the selected invoice criteria.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+                {paginatedOrders.map((order) => {
+                  const invNo = getInvoiceNumber(order);
+                  const ordRef = getOrderRef(order);
+                  const isB2B = (order.userId?.role || 'b2c').toLowerCase() === 'b2b';
+                  const buyerName = order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer';
+                  const sellerName = order.sellerId?.companyName || order.sellerId?.name || 'Zudo Admin';
+
+                  return (
+                    <div 
+                      key={order._id}
+                      style={{
+                        padding: '16px',
+                        background: 'var(--glass-bg)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontWeight: 800, fontSize: '15px', color: 'var(--primary)', fontFamily: 'monospace' }}>
+                              {invNo}
+                            </span>
+                            <span style={{
+                              fontSize: '9px',
+                              fontWeight: 800,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              background: isB2B ? 'rgba(99, 102, 241, 0.15)' : 'rgba(236, 72, 153, 0.15)',
+                              color: isB2B ? 'var(--primary)' : '#ec4899'
+                            }}>
+                              {isB2B ? 'B2B' : 'B2C'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontFamily: 'monospace' }}>
+                            Order Ref #{ordRef}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleOrderPrintStatus(order._id, order.isPrinted)}
+                          style={{
+                            cursor: 'pointer',
+                            border: 'none',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            background: order.isPrinted ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                            color: order.isPrinted ? '#10b981' : 'var(--text-dim)'
+                          }}
+                        >
+                          {order.isPrinted ? '✓ Printed' : '○ Unprinted'}
+                        </button>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '10px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{buyerName}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>Seller: {sellerName}</div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
+                        <div>
+                          <span style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>Total Amount</span>
+                          <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-main)' }}>
+                            ₹{Number(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '10px', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>Items</span>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
+                            {order.items?.length || 0} Products
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrderDetails(order)}
+                          className="btn-primary"
+                          style={{
+                            flex: 1,
+                            padding: '8px',
+                            fontSize: '12px',
+                            background: 'rgba(99, 102, 241, 0.12)',
+                            color: 'var(--primary)',
+                            border: '1px solid rgba(99, 102, 241, 0.25)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <Eye size={14} /> Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePreview([order])}
+                          className="btn-primary"
+                          style={{
+                            flex: 1,
+                            padding: '8px',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <Printer size={14} /> Print
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {((invoiceType === 'order' && filteredOrders.length > 0) || (invoiceType === 'seller_generated' && filteredSellerInvoices.length > 0)) && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '16px 24px',
+            borderTop: '1px solid var(--glass-border)',
+            background: 'var(--card-bg)',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            <div style={{ fontSize: '12.5px', color: 'var(--text-dim)' }}>
+              {invoiceType === 'order' ? (
+                rowsPerPage === 'All' ? (
+                  `Showing all ${filteredOrders.length} records`
+                ) : (
+                  `Showing ${(currentPage - 1) * Number(rowsPerPage) + 1} to ${Math.min(currentPage * Number(rowsPerPage), filteredOrders.length)} of ${filteredOrders.length} records`
+                )
+              ) : (
+                rowsPerPage === 'All' ? (
+                  `Showing all ${filteredSellerInvoices.length} records`
+                ) : (
+                  `Showing ${(currentPage - 1) * Number(rowsPerPage) + 1} to ${Math.min(currentPage * Number(rowsPerPage), filteredSellerInvoices.length)} of ${filteredSellerInvoices.length} records`
+                )
+              )}
+            </div>
+
+            {rowsPerPage !== 'All' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="btn-secondary"
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    opacity: currentPage === 1 ? 0.4 : 1,
+                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <ChevronLeft size={14} /> Prev
+                </button>
+
+                <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-main)', padding: '0 4px' }}>
+                  Page {currentPage} of {invoiceType === 'order' ? totalOrderPages : totalSellerPages}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, (invoiceType === 'order' ? totalOrderPages : totalSellerPages)))}
+                  disabled={currentPage === (invoiceType === 'order' ? totalOrderPages : totalSellerPages)}
+                  className="btn-secondary"
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    opacity: currentPage === (invoiceType === 'order' ? totalOrderPages : totalSellerPages) ? 0.4 : 1,
+                    cursor: currentPage === (invoiceType === 'order' ? totalOrderPages : totalSellerPages) ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  Next <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Order Invoice Details Modal */}
+      {selectedOrderDetails && (() => {
+        const order = selectedOrderDetails;
+        const invNo = getInvoiceNumber(order);
+        const ordRef = getOrderRef(order);
+        const breakdown = calculateOrderTaxBreakdown(order);
+        const isB2B = (order.userId?.role || 'b2c').toLowerCase() === 'b2b';
+
+        const sellerName = order.sellerId?.companyName || order.sellerId?.name || 'SNB TRADING.CO';
+        const sellerGst = order.sellerId?.gstNumber || '29BQHPG3242G1ZYNO';
+        const sellerAddress = order.sellerId?.address || '307 ashrya layout vishweshwaria 7th block kodigehalli post opp cii institute magadi main road bangalore 560091';
+        const sellerPhone = order.sellerId?.phone || '';
+
+        const buyerName = order.userId?.businessName || order.userId?.companyName || order.shippingAddress?.companyName || order.shippingAddress?.businessName || order.shippingAddress?.name || order.userId?.name || 'Customer';
+        const buyerAddress = order.shippingAddress?.address || order.userId?.address || 'No, 123 Main Street, Bengaluru, Karnataka';
+        const buyerPhone = order.shippingAddress?.phone || order.userId?.phone || '';
+
+        return (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.82)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: isMobile ? '10px' : '20px'
+          }}>
+            <div style={{
+              background: 'var(--card-bg)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '24px',
+              width: '100%',
+              maxWidth: '920px',
+              maxHeight: '92vh',
+              overflowY: 'auto',
+              padding: isMobile ? '16px' : '28px',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px'
+            }} className="custom-scrollbar">
+              
+              {/* Modal Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--glass-border)', paddingBottom: '16px', gap: '14px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    background: 'rgba(99, 102, 241, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--primary)'
+                  }}>
+                    <FileText size={22} />
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)', fontFamily: 'monospace' }}>
+                        {invNo}
+                      </h3>
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: isB2B ? 'rgba(99, 102, 241, 0.15)' : 'rgba(236, 72, 153, 0.15)',
+                        color: isB2B ? 'var(--primary)' : '#ec4899'
+                      }}>
+                        {isB2B ? 'B2B INVOICE' : 'B2C INVOICE'}
+                      </span>
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: order.isPrinted ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                        color: order.isPrinted ? '#10b981' : 'var(--text-dim)'
+                      }}>
+                        {order.isPrinted ? 'PRINTED' : 'UNPRINTED'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '3px' }}>
+                      Order Ref #{ordRef} • Date: {new Date(order.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderDetails(null)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '8px',
+                    color: 'var(--text-dim)',
+                    cursor: 'pointer'
+                  }}
+                  title="Close Invoice Details"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Financial KPI Summary Tiles */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
+                <div style={{ padding: '14px', borderRadius: '14px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Net Payable</span>
+                  <span style={{ fontSize: '18px', fontWeight: 800, color: '#10b981', marginTop: '2px', display: 'block' }}>
+                    ₹{breakdown.grandTotal.toFixed(2)}
+                  </span>
+                </div>
+
+                <div style={{ padding: '14px', borderRadius: '14px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Taxable Value</span>
+                  <span style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
+                    ₹{breakdown.totalTaxableValue.toFixed(2)}
+                  </span>
+                </div>
+
+                <div style={{ padding: '14px', borderRadius: '14px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Total Tax (GST)</span>
+                  <span style={{ fontSize: '17px', fontWeight: 800, color: 'var(--primary)', marginTop: '2px', display: 'block' }}>
+                    ₹{breakdown.totalTax.toFixed(2)}
+                  </span>
+                  <span style={{ fontSize: '9.5px', color: 'var(--text-dim)' }}>
+                    SGST: ₹{breakdown.totalSgst.toFixed(2)} | CGST: ₹{breakdown.totalCgst.toFixed(2)}
+                  </span>
+                </div>
+
+                <div style={{ padding: '14px', borderRadius: '14px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Products / Qty</span>
+                  <span style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
+                    {order.items?.length || 0} items ({breakdown.totalQty} units)
+                  </span>
+                </div>
+
+                <div style={{ padding: '14px', borderRadius: '14px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Payment Method</span>
+                  <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
+                    {order.paymentMethod || 'Prepaid'}
+                  </span>
+                  <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 700 }}>
+                    {order.paymentStatus || 'Completed'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Billed By and Billed To Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '14px' }}>
+                <div style={{ padding: '16px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block' }}>
+                    BILLED BY (SUPPLIER)
+                  </span>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                    {sellerName}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                    <strong>GSTIN:</strong> {sellerGst}
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '2px', lineHeight: '1.4' }}>
+                    {sellerAddress}
+                  </div>
+                  {sellerPhone && (
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                      Phone: {sellerPhone}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ padding: '16px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block' }}>
+                    BILLED TO / SHIP TO (CUSTOMER)
+                  </span>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                    {buyerName}
+                  </div>
+                  {order.userId?.gstNumber && (
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                      <strong>GSTIN:</strong> {order.userId.gstNumber}
+                    </div>
+                  )}
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '2px', lineHeight: '1.4' }}>
+                    {buyerAddress}
+                  </div>
+                  {buyerPhone && (
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                      Phone: {buyerPhone}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Itemized Tax Breakdown Table */}
+              <div>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '8px' }}>
+                  Itemized Product & Tax Breakdown
+                </span>
+                <div style={{ overflowX: 'auto', borderRadius: '14px', border: '1px solid var(--glass-border)' }} className="custom-scrollbar">
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
+                        <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', width: '30px' }}>#</th>
+                        <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)' }}>Item & HSN</th>
+                        <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textAlign: 'right' }}>Qty</th>
+                        <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textAlign: 'right' }}>Unit Rate</th>
+                        <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textAlign: 'right' }}>Taxable Val</th>
+                        <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textAlign: 'right' }}>SGST</th>
+                        <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textAlign: 'right' }}>CGST</th>
+                        <th style={{ padding: '10px 12px', fontSize: '11px', color: 'var(--text-dim)', textAlign: 'right' }}>Total (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {breakdown.items.map((it) => (
+                        <tr key={it.index} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                          <td style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-dim)' }}>{it.index}</td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <div style={{ fontWeight: 700, fontSize: '12.5px', color: 'var(--text-main)' }}>{it.name}</div>
+                            <div style={{ fontSize: '10.5px', color: 'var(--text-dim)' }}>HSN: {it.hsn} • Unit: {it.unit}</div>
+                          </td>
+                          <td style={{ padding: '10px 12px', fontSize: '12.5px', fontWeight: 700, textAlign: 'right', color: 'var(--text-main)' }}>{it.qty}</td>
+                          <td style={{ padding: '10px 12px', fontSize: '12.5px', textAlign: 'right', color: 'var(--text-dim)' }}>₹{it.rate.toFixed(2)}</td>
+                          <td style={{ padding: '10px 12px', fontSize: '12.5px', textAlign: 'right', color: 'var(--text-main)' }}>₹{it.taxableValue.toFixed(2)}</td>
+                          <td style={{ padding: '10px 12px', fontSize: '12px', textAlign: 'right', color: 'var(--text-dim)' }}>
+                            <div>₹{it.sgst.toFixed(2)}</div>
+                            <span style={{ fontSize: '9.5px', opacity: 0.75 }}>({it.halfGstPercent}%)</span>
+                          </td>
+                          <td style={{ padding: '10px 12px', fontSize: '12px', textAlign: 'right', color: 'var(--text-dim)' }}>
+                            <div>₹{it.cgst.toFixed(2)}</div>
+                            <span style={{ fontSize: '9.5px', opacity: 0.75 }}>({it.halfGstPercent}%)</span>
+                          </td>
+                          <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: 800, textAlign: 'right', color: 'var(--text-main)' }}>
+                            ₹{it.itemTotal.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr style={{ background: 'rgba(99, 102, 241, 0.05)', fontWeight: 800 }}>
+                        <td colSpan={2} style={{ padding: '12px', fontSize: '12px', color: 'var(--text-main)' }}>INVOICE TOTAL</td>
+                        <td style={{ padding: '12px', fontSize: '12px', textAlign: 'right', color: 'var(--text-main)' }}>{breakdown.totalQty}</td>
+                        <td style={{ padding: '12px' }}></td>
+                        <td style={{ padding: '12px', fontSize: '12px', textAlign: 'right', color: 'var(--text-main)' }}>₹{breakdown.totalTaxableValue.toFixed(2)}</td>
+                        <td style={{ padding: '12px', fontSize: '12px', textAlign: 'right', color: 'var(--text-main)' }}>₹{breakdown.totalSgst.toFixed(2)}</td>
+                        <td style={{ padding: '12px', fontSize: '12px', textAlign: 'right', color: 'var(--text-main)' }}>₹{breakdown.totalCgst.toFixed(2)}</td>
+                        <td style={{ padding: '12px', fontSize: '14px', textAlign: 'right', color: '#10b981' }}>₹{breakdown.grandTotal.toFixed(2)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Amount in words banner */}
+              <div style={{ padding: '12px 16px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)', fontSize: '12px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <strong style={{ color: 'var(--primary)' }}>Amount in Words:</strong> Rupees {breakdown.inWords}
+              </div>
+
+              {/* Modal Actions */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--glass-border)', paddingTop: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => toggleOrderPrintStatus(order._id, order.isPrinted)}
+                  className="btn-secondary"
+                  style={{ padding: '8px 16px', fontSize: '12.5px' }}
+                >
+                  {order.isPrinted ? 'Mark as Unprinted' : 'Mark as Printed'}
+                </button>
+
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedOrderDetails(null);
+                      handleDirectBulkPrint([order]);
+                    }}
+                    className="btn-primary"
+                    style={{ padding: '8px 16px', fontSize: '12.5px', background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Download size={15} /> Quick Print PDF
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedOrderDetails(null);
+                      handlePreview([order]);
+                    }}
+                    className="btn-primary"
+                    style={{ padding: '8px 16px', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Printer size={15} /> Open Print Preview & Edit
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOrderDetails(null)}
+                    className="btn-secondary"
+                    style={{ padding: '8px 16px', fontSize: '12.5px' }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {sellerInvoicePreviewUrl && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', zIndex: 10000 }}>
