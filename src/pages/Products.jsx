@@ -26,9 +26,9 @@ const Products = () => {
     const fetchData = async () => {
       try {
         const [prodRes, catRes, commRes] = await Promise.allSettled([
-          api.get('/products'),
+          api.get('/products', { skipCache: true }),
           api.get('/categories'),
-          api.get('/commissions')
+          api.get('/commissions', { skipCache: true })
         ]);
         if (prodRes.status === 'fulfilled') setProducts(prodRes.value.data || []);
         if (catRes.status === 'fulfilled') setCategories(catRes.value.data || []);
@@ -163,12 +163,33 @@ const Products = () => {
     const sellerPricePerBaseUnit = sellerBasePrice;
 
     // 2. Admin Commission Per Base Unit (e.g. ₹2 / KG)
-    const isFlat = (product.commissionType || 'flat') === 'flat';
-    const adminCommissionPerBaseUnit = product.adminCommissionPerBaseUnit !== undefined && product.adminCommissionPerBaseUnit !== null
-      ? Number(product.adminCommissionPerBaseUnit)
-      : (product.commissionRate !== undefined && product.commissionRate !== null
-          ? Number(product.commissionRate)
-          : Number(product.commissionValue ?? 0));
+    let commType = product.commissionType || 'flat';
+    let adminCommissionPerBaseUnit = 0;
+    if (Number(product.adminCommissionPerBaseUnit) > 0) {
+      adminCommissionPerBaseUnit = Number(product.adminCommissionPerBaseUnit);
+    } else if (Number(product.commissionRate) > 0) {
+      adminCommissionPerBaseUnit = Number(product.commissionRate);
+    } else if (Number(product.commissionValue) > 0) {
+      adminCommissionPerBaseUnit = Number(product.commissionValue);
+    } else if (Array.isArray(commissions) && commissions.length > 0) {
+      const pCatId = product.categoryId?._id || product.categoryId;
+      const pMeas = String(product.measurementBasis || product.measurementUnit || '').trim().toLowerCase();
+      const pUnit = String(product.packagingType || product.unit || '').trim().toLowerCase();
+      const catComms = commissions.filter(c => {
+        const cCatId = c.categoryId?._id || c.categoryId;
+        return String(cCatId) === String(pCatId) && c.commissionStatus !== 'Inactive';
+      });
+      const matchedRule =
+        catComms.find(c => String(c.unit || '').trim().toLowerCase() === pMeas && (!c.pincode || String(c.pincode).toLowerCase() === 'all')) ||
+        catComms.find(c => String(c.unit || '').trim().toLowerCase() === pMeas) ||
+        catComms.find(c => String(c.unit || '').trim().toLowerCase() === pUnit) ||
+        catComms[0];
+      if (matchedRule) {
+        commType = matchedRule.commissionType || commType;
+        adminCommissionPerBaseUnit = Number(matchedRule.commissionValue) || 0;
+      }
+    }
+    const isFlat = commType === 'flat';
 
     // Calculate Per-Unit Commission (e.g. ₹2 / KG)
     const commissionPerBaseUnit = isFlat
