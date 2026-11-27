@@ -1,12 +1,13 @@
 import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
-import api from '../utils/api';
+import api, { clearApiCache } from '../utils/api';
 import { MapPin, Plus, Edit2, Trash2, Loader2, CheckCircle2, AlertCircle, X, Building2, Cog } from 'lucide-react';
 import { indiaData as locationData } from '../data/indiaData';
 
 const Locations = () => {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingLocation, setEditingLocation] = useState(null);
   const [formData, setFormData] = useState({ city: '', state: '', pincode: '' });
@@ -22,10 +23,10 @@ const Locations = () => {
     fetchLocations();
   }, []);
 
-  const fetchLocations = async () => {
+  const fetchLocations = async (forceRefresh = false) => {
     try {
-      const { data } = await api.get('/locations');
-      setLocations(data);
+      const { data } = await api.get('/locations', { skipCache: forceRefresh });
+      setLocations(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -44,10 +45,12 @@ const Locations = () => {
         await api.post('/locations', formData);
         setStatus({ type: 'success', message: 'New location added successfully!' });
       }
+      clearApiCache('/locations');
+      window.dispatchEvent(new Event('locationsUpdated'));
       setShowForm(false);
       setEditingLocation(null);
       setFormData({ city: '', state: '', pincode: '' });
-      fetchLocations();
+      await fetchLocations(true);
     } catch (err) {
       setStatus({ type: 'error', message: err.response?.data?.message || 'Action failed.' });
     } finally {
@@ -110,12 +113,23 @@ const Locations = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this location?')) return;
+    if (deletingId) return;
+    if (!window.confirm('Are you sure you want to permanently delete this location?')) return;
+    setDeletingId(id);
     try {
       await api.delete(`/locations/${id}`);
-      fetchLocations();
+      clearApiCache('/locations');
+      if (localStorage.getItem('zudo_admin_location') === id) {
+        localStorage.setItem('zudo_admin_location', 'global');
+        localStorage.setItem('zudo_admin_db_name', 'global');
+      }
+      window.dispatchEvent(new Event('locationsUpdated'));
+      await fetchLocations(true);
+      toast.success('Location permanently deleted');
     } catch (err) {
-      toast.error('Failed to delete location');
+      toast.error(err.response?.data?.message || 'Failed to delete location');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -163,7 +177,13 @@ const Locations = () => {
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={() => handleEdit(loc)} style={{ padding: '8px', borderRadius: '8px', background: 'var(--glass-bg)', color: 'var(--text-dim)', border: 'none', cursor: 'pointer' }}><Edit2 size={16} /></button>
-                <button onClick={() => handleDelete(loc._id)} style={{ padding: '8px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
+                <button
+                  onClick={() => handleDelete(loc._id)}
+                  disabled={deletingId === loc._id}
+                  style={{ padding: '8px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', cursor: deletingId === loc._id ? 'not-allowed' : 'pointer', opacity: deletingId === loc._id ? 0.5 : 1 }}
+                >
+                  {deletingId === loc._id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                </button>
               </div>
             </div>
             <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>{loc.city} ({loc.pincode})</h3>
