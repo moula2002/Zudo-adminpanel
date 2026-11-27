@@ -187,6 +187,7 @@ const DashboardLayout = ({ children }) => {
   const rawMenuItems = [
     { id: 'dashboard', to: '/', icon: LayoutDashboard, label: 'Dashboard', perm: 'view_dashboard' },
     { id: 'orders', to: '/orders', icon: ShoppingBag, label: 'Orders', perm: 'manage_orders' },
+    { id: 'pickups', to: '/pickups', icon: MapPin, label: 'Pickups', perm: 'manage_orders' },
     { id: 'invoices', to: '/invoices', icon: ReceiptIndianRupee, label: 'Invoices', perm: 'manage_invoices' },
     { id: 'reports', to: '/reports', icon: FileSpreadsheet, label: 'Reports', perm: 'view_dashboard' },
     { id: 'products', to: '/products', icon: Package, label: 'Products', perm: 'manage_products' },
@@ -297,6 +298,7 @@ const DashboardLayout = ({ children }) => {
     }
     if (location.pathname.startsWith('/edit-product')) return 'Edit Product';
     if (location.pathname === '/add-product') return 'Add Product';
+    if (location.pathname === '/pickups') return 'Pickups';
     if (location.pathname === '/deliveries') return 'Deliveries Slots';
     return 'Dashboard';
   };

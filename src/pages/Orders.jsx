@@ -193,7 +193,7 @@ const Orders = () => {
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [locationError, setLocationError] = useState(null);
 
-  const statuses = ['All', 'Pending', 'Packed', 'Out for Delivery', 'Delivered', 'Cancelled', 'Returns'];
+  const statuses = ['All', 'Pending', 'Packed', 'Picked Up', 'Out for Delivery', 'Delivered', 'Cancelled', 'Returns'];
 
   const fetchDriverLocation = async (driverId) => {
     setLoadingLocation(true);
@@ -5446,6 +5446,12 @@ const Orders = () => {
                     </div>
 
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '11px' }}>
+                      {viewingOrder.pickupCode && (
+                        <div>
+                          <span style={{ color: 'var(--text-dim)', display: 'block' }}>Pickup OTP</span>
+                          <strong style={{ color: '#8b5cf6', fontFamily: 'monospace', fontSize: '12px' }}>{viewingOrder.pickupCode}</strong>
+                        </div>
+                      )}
                       <div>
                         <span style={{ color: 'var(--text-dim)', display: 'block' }}>Route 1 (Hub)</span>
                         <strong style={{ color: 'var(--text-main)' }}>{orderRoutes[viewingOrder._id]?.route1 || viewingOrder.route1 || (viewingOrder.shippingAddress?.city ? `${viewingOrder.shippingAddress.city} Central Hub` : 'Route 1 - Hub')}</strong>

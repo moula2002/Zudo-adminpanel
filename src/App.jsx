@@ -13,6 +13,7 @@ const Admins = lazy(() => import('./pages/Admins'));
 const B2BVerification = lazy(() => import('./pages/B2BVerification'));
 const Users = lazy(() => import('./pages/Users'));
 const Orders = lazy(() => import('./pages/Orders'));
+const Pickups = lazy(() => import('./pages/Pickups'));
 const Reviews = lazy(() => import('./pages/Reviews'));
 const Deliveries = lazy(() => import('./pages/Deliveries'));
 const Sellers = lazy(() => import('./pages/Sellers'));
@@ -64,6 +65,7 @@ function App() {
                         <Routes>
                           <Route path="/" element={<Dashboard />} />
                           <Route path="/orders" element={<Orders />} />
+                          <Route path="/pickups" element={<Pickups />} />
                           <Route path="/invoices" element={<Invoices />} />
                           <Route path="/reports" element={<Reports />} />
                           <Route path="/products" element={<Products />} />
