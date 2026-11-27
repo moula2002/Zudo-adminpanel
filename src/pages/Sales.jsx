@@ -62,7 +62,7 @@ const Sales = () => {
 
   useEffect(() => {
     const locId = showCreate ? createData.locationId : (showEdit && editingAdmin ? editingAdmin.locationId : null);
-    if (locId) {
+    if (locId && locId !== 'global') {
       fetchPincodes(locId);
     } else {
       setAvailablePincodes([]);
@@ -70,10 +70,14 @@ const Sales = () => {
   }, [showCreate, showEdit, createData.locationId, editingAdmin?.locationId]);
 
   const fetchPincodes = async (locId) => {
+    if (!locId || locId === 'global') {
+      setAvailablePincodes([]);
+      return;
+    }
     setLoadingPincodes(true);
     try {
-      const { data } = await api.get(`/locations/${locId}/pincodes`);
-      setAvailablePincodes(data);
+      const { data } = await api.get(`/locations/${locId}/pincodes`, { skipCache: true });
+      setAvailablePincodes(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch pincodes:', err);
       setAvailablePincodes([]);
