@@ -2162,7 +2162,7 @@ const Orders = () => {
               width: isMobile ? '100%' : 'auto',
               overflowX: isMobile ? 'auto' : 'visible'
             }}>
-              {['All', 'B2C', 'B2B'].map(type => (
+              {['All', 'B2B', 'B2C'].map(type => (
                 <button
                   key={type}
                   onClick={() => setActiveType(type)}

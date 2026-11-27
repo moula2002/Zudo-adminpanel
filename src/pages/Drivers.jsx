@@ -19,7 +19,7 @@ const Drivers = () => {
     vehicleNo: '',
     drivingLicense: '',
     aadharNumber: '',
-    type: 'B2C',
+    type: 'B2B',
     cashManagement: false,
     documents: []
   });
@@ -369,7 +369,7 @@ const Drivers = () => {
       };
       await api.post('/drivers', payload);
       setShowModal(false);
-      setFormData({ name: '', phone: '', email: '', password: '', licenseNumber: '', vehicleDetails: '', vehicleNo: '', drivingLicense: '', aadharNumber: '', type: 'B2C', cashManagement: false, documents: [] });
+      setFormData({ name: '', phone: '', email: '', password: '', licenseNumber: '', vehicleDetails: '', vehicleNo: '', drivingLicense: '', aadharNumber: '', type: 'B2B', cashManagement: false, documents: [] });
       fetchDrivers();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create driver');
@@ -1322,8 +1322,8 @@ const Drivers = () => {
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                   >
-                    <option value="B2C" style={{ background: 'var(--bg-sidebar)' }}>B2C Driver (Direct to Customer)</option>
                     <option value="B2B" style={{ background: 'var(--bg-sidebar)' }}>B2B Driver (Business Deliveries)</option>
+                    <option value="B2C" style={{ background: 'var(--bg-sidebar)' }}>B2C Driver (Direct to Customer)</option>
                   </select>
                 </div>
               </div>

@@ -58,7 +58,7 @@ const Cash = () => {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
 
   const [formData, setFormData] = useState({
-    type: 'B2C',
+    type: 'B2B',
     name: '',
     phone: '',
     email: '',
@@ -229,7 +229,7 @@ const Cash = () => {
 
       let isVerified = false;
 
-      if (selectedDriver?.cashManagement && selectedDriver?.type?.toLowerCase() === 'b2c') {
+      if (selectedDriver?.cashManagement) {
         try {
           const { data } = await axios.post('drivers/verify-otp', {
             driverId: selectedDriver._id,
@@ -371,7 +371,7 @@ const Cash = () => {
     setLoading(true);
     try {
       const sanitizedPayload = {
-        type: formData.type || 'B2C',
+        type: formData.type || 'B2B',
         name: formData.name,
         phone: formData.phone || '9999999999',
         amount: Number(formData.amount) || 0,
@@ -394,7 +394,7 @@ const Cash = () => {
         toast.success('Cash collection transaction logged');
       }
       setFormData({
-        type: 'B2C',
+        type: 'B2B',
         name: '',
         phone: '',
         email: '',
@@ -496,7 +496,6 @@ const Cash = () => {
         'Phone Number': t.phone || (t.driverId?.phone) || '—',
         'Email': t.email || '—',
         'Flow Type': t.type,
-        'Branch / Location': t.locationName || t.location?.city || 'Default',
         'Date & Time': dt.full,
         'Verification': t.type === 'B2B' ? 'Password Verified' : (t.otp ? `OTP: ${t.otp}` : (t.verification || 'Verified')),
         'Settlement Status': t.status || 'Settled',
@@ -604,20 +603,8 @@ const Cash = () => {
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
+      {/* Summary KPI Cards - B2B First Priority */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: isMobile ? '12px' : '20px' }}>
-        <div className="glass-card" style={{ padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <ArrowDownLeft size={24} />
-          </div>
-          <div>
-            <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Total B2C Cash</p>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: 'var(--text-main)' }}>
-              ₹{transactions.filter(t => (t.type || '').startsWith('B2C')).reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString('en-IN')}
-            </h2>
-          </div>
-        </div>
-
         <div className="glass-card" style={{ padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(99, 102, 241, 0.12)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Building2 size={24} />
@@ -626,6 +613,18 @@ const Cash = () => {
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Total B2B Cash</p>
             <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: 'var(--text-main)' }}>
               ₹{transactions.filter(t => (t.type || '').startsWith('B2B')).reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString('en-IN')}
+            </h2>
+          </div>
+        </div>
+
+        <div className="glass-card" style={{ padding: '20px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ArrowDownLeft size={24} />
+          </div>
+          <div>
+            <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Total B2C Cash</p>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: 'var(--text-main)' }}>
+              ₹{transactions.filter(t => (t.type || '').startsWith('B2C')).reduce((acc, t) => acc + Number(t.amount || 0), 0).toLocaleString('en-IN')}
             </h2>
           </div>
         </div>
@@ -647,9 +646,9 @@ const Cash = () => {
             <Wallet size={24} />
           </div>
           <div>
-            <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>B2C Driver Wallets</p>
+            <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Driver Wallets (B2B & B2C)</p>
             <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '2px 0 0', color: 'var(--text-main)' }}>
-              ₹{drivers.filter(d => (d.type || '').toUpperCase() === 'B2C').reduce((acc, d) => acc + (d.wallet || 0), 0).toLocaleString('en-IN')}
+              ₹{drivers.reduce((acc, d) => acc + (Number(d.wallet) > 0 ? Number(d.wallet) : 0), 0).toLocaleString('en-IN')}
             </h2>
           </div>
         </div>
@@ -743,10 +742,10 @@ const Cash = () => {
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Smartphone size={18} style={{ color: 'var(--primary)' }} />
-            <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Driver Wallet Balances (B2C Cash in Hand)</h3>
+            <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>Driver Wallet Balances (B2B & B2C Cash in Hand)</h3>
           </div>
           <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
-            {drivers.filter(d => (d.wallet || 0) > 0 && (d.type || '').toUpperCase() === 'B2C').length} active wallets
+            {drivers.filter(d => (d.wallet || 0) > 0).length} active wallets
           </span>
         </div>
         <div style={{ overflowX: 'auto' }} className="custom-scrollbar">
@@ -761,20 +760,25 @@ const Cash = () => {
               </tr>
             </thead>
             <tbody>
-              {drivers.filter(d => (d.wallet || 0) > 0 && (d.type || '').toUpperCase() === 'B2C').length === 0 ? (
+              {drivers.filter(d => (d.wallet || 0) > 0).length === 0 ? (
                 <tr>
                   <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '14px' }}>
                     No pending driver cash in hand. All driver wallets settled!
                   </td>
                 </tr>
-              ) : drivers.filter(d => (d.wallet || 0) > 0 && (d.type || '').toUpperCase() === 'B2C').map(driver => (
+              ) : drivers
+                .filter(d => (d.wallet || 0) > 0)
+                .sort((a, b) => ((a.type || '').toUpperCase() === 'B2B' ? -1 : 1) - ((b.type || '').toUpperCase() === 'B2B' ? -1 : 1))
+                .map(driver => {
+                  const isB2BDriver = (driver.type || '').toUpperCase() === 'B2B';
+                  return (
                 <tr key={driver._id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{
                         width: '38px', height: '38px', borderRadius: '50%',
-                        background: 'rgba(236, 72, 153, 0.15)',
-                        color: '#ec4899',
+                        background: isB2BDriver ? 'rgba(99, 102, 241, 0.15)' : 'rgba(236, 72, 153, 0.15)',
+                        color: isB2BDriver ? '#6366f1' : '#ec4899',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800
                       }}>
                         {driver.name ? driver.name[0] : '?'}
@@ -802,9 +806,10 @@ const Cash = () => {
                   <td style={{ padding: '16px 24px' }}>
                     <span style={{
                       padding: '3px 10px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase',
-                      background: 'rgba(236, 72, 153, 0.15)', color: '#ec4899'
+                      background: isB2BDriver ? 'rgba(99, 102, 241, 0.15)' : 'rgba(236, 72, 153, 0.15)',
+                      color: isB2BDriver ? '#6366f1' : '#ec4899'
                     }}>
-                      B2C Logistics
+                      {isB2BDriver ? 'B2B Logistics' : 'B2C Logistics'}
                     </span>
                   </td>
                   <td style={{ padding: '16px 24px' }}>
@@ -829,7 +834,8 @@ const Cash = () => {
                     </button>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
@@ -911,8 +917,8 @@ const Cash = () => {
               style={{ padding: '8px 12px', minHeight: 'auto', fontSize: '12.5px', width: isMobile ? '100%' : 'auto' }}
             >
               <option value="All">All Flow Types</option>
-              <option value="B2C">B2C Customers</option>
               <option value="B2B">B2B Sellers / Clients</option>
+              <option value="B2C">B2C Customers</option>
               <option value="B2C (Driver)">B2C Driver Collections</option>
             </select>
 
@@ -927,23 +933,6 @@ const Cash = () => {
               <option value="Settled">Settled / Verified</option>
               <option value="Pending">Pending</option>
             </select>
-
-            {/* Location Filter */}
-            {locations.length > 0 && (
-              <select
-                value={locationFilter}
-                onChange={e => setLocationFilter(e.target.value)}
-                className="input-field"
-                style={{ padding: '8px 12px', minHeight: 'auto', fontSize: '12.5px', width: isMobile ? '100%' : 'auto' }}
-              >
-                <option value="All">All Locations</option>
-                {locations.map(loc => (
-                  <option key={loc._id} value={loc.city || loc.name}>
-                    {loc.city} ({loc.state || 'Hub'})
-                  </option>
-                ))}
-              </select>
-            )}
 
             {/* Sorting */}
             <select
@@ -1010,7 +999,6 @@ const Cash = () => {
                 <tr style={{ background: 'var(--card-bg)', borderBottom: '1px solid var(--glass-border)' }}>
                   <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Client / Payee</th>
                   <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Flow Type</th>
-                  <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Branch / Location</th>
                   <th style={{ padding: '14px 20px', textAlign: 'right', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Amount Collected (₹)</th>
                   <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Date & Time</th>
                   <th style={{ padding: '14px 18px', textAlign: 'left', fontSize: '11px', color: 'var(--text-dim)', fontWeight: 700, textTransform: 'uppercase' }}>Verification</th>
@@ -1064,17 +1052,6 @@ const Cash = () => {
                         }}>
                           {t.type}
                         </span>
-                      </td>
-
-                      <td style={{ padding: '16px 16px' }}>
-                        {locName ? (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700, color: 'var(--text-main)', background: 'var(--glass-bg)', padding: '3px 9px', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
-                            <MapPin size={12} style={{ color: 'var(--primary)' }} />
-                            <span>{locName}</span>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>—</span>
-                        )}
                       </td>
 
                       {/* Explicit AMOUNT Column */}
@@ -1202,11 +1179,6 @@ const Cash = () => {
                         }}>
                           {t.type}
                         </span>
-                        {locName && (
-                          <span style={{ fontSize: '10px', color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                            <MapPin size={10} style={{ color: 'var(--primary)' }} /> {locName}
-                          </span>
-                        )}
                       </div>
                     </div>
 
@@ -1350,15 +1322,7 @@ const Cash = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Branch / Location</span>
-                  <span style={{ fontSize: '12.5px', color: 'var(--text-main)', fontWeight: 700, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <MapPin size={13} style={{ color: 'var(--primary)' }} />
-                    {locName || 'Default Hub'}
-                  </span>
-                </div>
-
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                 <div style={{ padding: '12px', background: 'var(--glass-bg)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
                   <span style={{ fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Timestamp</span>
                   <span style={{ fontSize: '12px', color: 'var(--text-main)', marginTop: '2px', display: 'block' }}>
@@ -1442,7 +1406,7 @@ const Cash = () => {
 
             <form onSubmit={handleSubmit} style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', background: 'var(--glass-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                {['B2C', 'B2B'].map(type => (
+                {['B2B', 'B2C'].map(type => (
                   <button
                     key={type}
                     type="button"
@@ -1560,25 +1524,6 @@ const Cash = () => {
                       </div>
                     </div>
                   </>
-                )}
-
-                {locations.length > 0 && (
-                  <div style={{ position: 'relative' }}>
-                    <MapPin size={14} style={{ position: 'absolute', left: '12px', top: '12px', color: '#6366f1' }} />
-                    <select
-                      className="input-field"
-                      style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
-                      value={formData.locationId || ''}
-                      onChange={e => setFormData({ ...formData, locationId: e.target.value })}
-                    >
-                      <option value="">Branch / Location (Default Hub)</option>
-                      {locations.map(loc => (
-                        <option key={loc._id} value={loc._id}>
-                          {loc.city} ({loc.state || 'Branch'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                 )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
