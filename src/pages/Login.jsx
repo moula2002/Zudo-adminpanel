@@ -287,8 +287,8 @@ const Login = () => {
                       
                       <div style={{ maxHeight: '200px', overflowY: 'auto', padding: '4px' }}>
                         {locations.filter(loc => 
-                          loc.city.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          loc.state.toLowerCase().includes(searchQuery.toLowerCase())
+                          (loc.city || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (loc.state || '').toLowerCase().includes(searchQuery.toLowerCase())
                         ).map(loc => (
                           <button
                             key={loc._id}
@@ -337,8 +337,8 @@ const Login = () => {
                         ))}
                         
                         {locations.filter(loc => 
-                          loc.city.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          loc.state.toLowerCase().includes(searchQuery.toLowerCase())
+                          (loc.city || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (loc.state || '').toLowerCase().includes(searchQuery.toLowerCase())
                         ).length === 0 && (
                           <div style={{ padding: '30px 10px', textAlign: 'center' }}>
                             <MapPin size={20} style={{ color: 'rgba(255, 255, 255, 0.05)', marginBottom: '6px' }} />

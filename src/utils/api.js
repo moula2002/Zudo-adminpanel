@@ -180,16 +180,24 @@ const setupInterceptors = (instance) => {
       }
 
       if (error.response && error.response.status === 401) {
-        if (error.response.data && error.response.data.code === 'SESSION_INVALIDATED') {
-          toast.error('Session expired. You have logged in from another device.');
-        } else {
-          toast.error('Session expired. Please log in again.');
+        const isLoginRequest = config?.url && (
+          config.url.includes('/auth/login') ||
+          config.url.includes('/auth/user-login') ||
+          config.url.includes('/auth/driver-login') ||
+          config.url.includes('/auth/cash-collector-login')
+        );
+        if (!isLoginRequest) {
+          if (error.response.data && error.response.data.code === 'SESSION_INVALIDATED') {
+            toast.error('Session expired. You have logged in from another device.');
+          } else {
+            toast.error('Session expired. Please log in again.');
+          }
+          localStorage.removeItem('zudo_admin_token');
+          localStorage.removeItem('zudo_admin_user');
+          localStorage.removeItem('zudo_admin_location');
+          localStorage.removeItem('zudo_admin_db_name');
+          window.location.href = '/login';
         }
-        localStorage.removeItem('zudo_admin_token');
-        localStorage.removeItem('zudo_admin_user');
-        localStorage.removeItem('zudo_admin_location');
-        localStorage.removeItem('zudo_admin_db_name');
-        window.location.href = '/login';
       }
       activeRequests = Math.max(0, activeRequests - 1);
       emitLoadState();
