@@ -403,7 +403,7 @@ const Pickups = () => {
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
                     <div>
-                      <span style={{ color: 'var(--text-dim)' }}>Pickup OTP: </span>
+                      <span style={{ color: 'var(--text-dim)' }}>Seller Pickup OTP: </span>
                       <strong style={{ fontFamily: 'monospace', color: '#8b5cf6', fontSize: '13px' }}>{p.pickupCode || 'N/A'}</strong>
                     </div>
                     <div>
@@ -448,7 +448,7 @@ const Pickups = () => {
                 <tr style={{ background: 'rgba(255, 255, 255, 0.03)', borderBottom: '1px solid var(--glass-border)' }}>
                   <th style={{ padding: '15px 18px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Order Ref</th>
                   <th style={{ padding: '15px 18px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Pickup Point (Seller & Address)</th>
-                  <th style={{ padding: '15px 18px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Pickup OTP</th>
+                  <th style={{ padding: '15px 18px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Seller Pickup OTP</th>
                   <th style={{ padding: '15px 18px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Items</th>
                   <th style={{ padding: '15px 18px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Assigned Driver</th>
                   <th style={{ padding: '15px 18px', fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Status</th>
@@ -665,7 +665,7 @@ const Pickups = () => {
               <div>
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800 }}>Pickup Details #{selectedPickup.orderRef}</h3>
                 <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>
-                  Global Pickup OTP: <strong style={{ fontFamily: 'monospace', color: '#8b5cf6' }}>{selectedPickup.pickupCode || 'N/A'}</strong>
+                  Order Status: <strong style={{ color: getBadgeStyle(selectedPickup.orderStatus).color }}>{selectedPickup.orderStatus}</strong>
                 </div>
               </div>
               <button onClick={() => setSelectedPickup(null)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}>
@@ -673,7 +673,48 @@ const Pickups = () => {
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '18px' }}>
+            {/* OTP Types Breakdown */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px', marginTop: '16px' }}>
+              <div style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+                <div style={{ fontSize: '10px', fontWeight: 800, color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Seller Pickup OTP (Driver ↔ Seller)
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 900, fontFamily: 'monospace', color: 'var(--text-main)', marginTop: '4px' }}>
+                  {selectedPickup.pickupCode || 'N/A'}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                  Driver verifies with seller at pickup point
+                </div>
+              </div>
+
+              <div style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.22)' }}>
+                <div style={{ fontSize: '10px', fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Customer Delivery OTP (Driver ↔ Customer)
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 900, fontFamily: 'monospace', color: 'var(--text-main)', marginTop: '4px' }}>
+                  {selectedPickup.deliveryOtp || (selectedPickup.orderStatus === 'Delivered' ? 'Verified' : 'Generated on Dispatch')}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                  Driver verifies with customer at drop-off
+                </div>
+              </div>
+
+              {selectedPickup.isReturnPickup && (
+                <div style={{ padding: '12px 14px', borderRadius: '14px', background: 'rgba(236, 72, 153, 0.08)', border: '1px solid rgba(236, 72, 153, 0.22)' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: '#ec4899', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Return Customer Pickup OTP
+                  </div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, fontFamily: 'monospace', color: 'var(--text-main)', marginTop: '4px' }}>
+                    {selectedPickup.returnCustomerOtp || 'Pending Driver'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                    Return driver verifies with customer
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
               {/* Pickup Points List */}
               {(selectedPickup.pickupPoints || []).map((pt, idx) => (
                 <div key={idx} style={{ padding: '16px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)' }}>
@@ -693,8 +734,8 @@ const Pickups = () => {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '13px', padding: '4px 10px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.16)', color: '#a78bfa' }}>
-                        OTP: {pt.pickupCode || selectedPickup.pickupCode || 'N/A'}
+                      <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '12px', padding: '4px 10px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.16)', color: '#a78bfa' }}>
+                        Seller Pickup OTP: {pt.pickupCode || selectedPickup.pickupCode || 'N/A'}
                       </span>
                       <span style={{ fontSize: '11px', fontWeight: 700, color: getBadgeStyle(pt.pickupStatus).color }}>
                         Status: {pt.pickupStatus}
