@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../utils/api';
+import api, { clearApiCache } from '../utils/api';
 import { Lock, Mail, Loader2, MapPin, Map, ChevronRight, ChevronDown, Building2, CheckCircle2, Users, Shield } from 'lucide-react';
 
 const Login = () => {
@@ -22,7 +22,7 @@ const Login = () => {
 
   const fetchLocations = async () => {
     try {
-      const { data } = await api.get('/locations/active');
+      const { data } = await api.get('/locations/active', { skipCache: true });
       if (Array.isArray(data)) {
         setLocations(data);
       } else {
@@ -46,6 +46,9 @@ const Login = () => {
 
     setLoading(true);
     setError('');
+    localStorage.removeItem('zudo_admin_location');
+    localStorage.removeItem('zudo_admin_db_name');
+    clearApiCache();
     try {
       const { data } = await api.post('/auth/login', {
         email,
@@ -55,12 +58,15 @@ const Login = () => {
       });
       localStorage.setItem('zudo_admin_token', data.token);
       localStorage.setItem('zudo_admin_user', JSON.stringify(data));
-      window.dispatchEvent(new Event('adminAuthChange'));
-      if (selectedLocation) {
-        localStorage.setItem('zudo_admin_location', selectedLocation._id);
-        const dbIdentifier = selectedLocation.dbName || selectedLocation.name || `zudo-${selectedLocation.city.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+      if (data.locationId || selectedLocation?._id) {
+        localStorage.setItem('zudo_admin_location', data.locationId || selectedLocation._id);
+      }
+      const fallbackCitySlug = (selectedLocation?.city || '').trim().toLowerCase().replace(/\s+/g, '-');
+      const dbIdentifier = data.dbName || selectedLocation?.dbName || selectedLocation?.name || (fallbackCitySlug ? `zudo-${fallbackCitySlug}` : '');
+      if (dbIdentifier) {
         localStorage.setItem('zudo_admin_db_name', dbIdentifier);
       }
+      window.dispatchEvent(new Event('adminAuthChange'));
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please check credentials.');

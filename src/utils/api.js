@@ -120,14 +120,16 @@ const setupInterceptors = (instance) => {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Check if there is a location header needed
-    const dbName = localStorage.getItem('zudo_admin_db_name');
-    const location = localStorage.getItem('zudo_admin_location');
-    
-    if (dbName && dbName !== 'global' && !config.headers['x-location']) {
-      config.headers['x-location'] = dbName;
-    } else if (location && location !== 'global' && !config.headers['x-location']) {
-      config.headers['x-location'] = location;
+    // Check if there is a location header needed (never attach stale x-location to login requests)
+    if (!isAuthRequest) {
+      const dbName = localStorage.getItem('zudo_admin_db_name');
+      const location = localStorage.getItem('zudo_admin_location');
+      
+      if (dbName && dbName !== 'global' && !config.headers['x-location']) {
+        config.headers['x-location'] = dbName;
+      } else if (location && location !== 'global' && !config.headers['x-location']) {
+        config.headers['x-location'] = location;
+      }
     }
 
     activeRequests++;
