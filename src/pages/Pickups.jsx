@@ -52,6 +52,7 @@ const Pickups = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [activeTab, setActiveTab] = useState('All');
+  const [segmentFilter, setSegmentFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
 
@@ -59,6 +60,7 @@ const Pickups = () => {
   const [selectedPickup, setSelectedPickup] = useState(null);
   const [showDriverModal, setShowDriverModal] = useState(false);
   const [assignTargetOrder, setAssignTargetOrder] = useState(null);
+  const [otpInputMap, setOtpInputMap] = useState({});
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -74,11 +76,16 @@ const Pickups = () => {
     setLoading(true);
     try {
       const [pickupsRes, driversRes] = await Promise.all([
-        axios.get('/orders/admin/pickups'),
-        axios.get('/drivers')
+        axios.get('/orders/admin/pickups', { skipCache: true }),
+        axios.get('/drivers', { skipCache: true })
       ]);
-      setPickups(Array.isArray(pickupsRes.data) ? pickupsRes.data : []);
+      const nextPickups = Array.isArray(pickupsRes.data) ? pickupsRes.data : [];
+      setPickups(nextPickups);
       setDrivers(Array.isArray(driversRes.data) ? driversRes.data : []);
+      if (selectedPickup) {
+        const refreshedSel = nextPickups.find(x => x._id === selectedPickup._id);
+        if (refreshedSel) setSelectedPickup(refreshedSel);
+      }
     } catch (error) {
       console.error('Error fetching pickups:', error);
       toast.error('Failed to load pickup records');
@@ -110,7 +117,10 @@ const Pickups = () => {
   }, [activePickups]);
 
   const filteredPickups = useMemo(() => {
-    return activePickups.filter(p => {
+    const list = activePickups.filter(p => {
+      const seg = p.customerSegment || (p.customer?.role === 'b2b' ? 'B2B' : 'B2C');
+      if (segmentFilter !== 'All' && seg !== segmentFilter) return false;
+
       // Tab filter
       if (activeTab === 'Ready for Pickup') {
         if (!['Pending', 'Confirmed', 'Accepted', 'Packed', 'Assigned'].includes(p.orderStatus)) return false;
@@ -143,7 +153,15 @@ const Pickups = () => {
 
       return true;
     });
-  }, [activePickups, activeTab, searchQuery]);
+
+    // Prioritize B2B orders first, then newest first
+    return [...list].sort((a, b) => {
+      const aSeg = (a.customerSegment || (a.customer?.role === 'b2b' ? 'B2B' : 'B2C')) === 'B2B' ? 0 : 1;
+      const bSeg = (b.customerSegment || (b.customer?.role === 'b2b' ? 'B2B' : 'B2C')) === 'B2B' ? 0 : 1;
+      if (aSeg !== bSeg) return aSeg - bSeg;
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
+  }, [activePickups, activeTab, segmentFilter, searchQuery]);
 
   const handleUpdatePickupStatus = async (orderId, newStatus, sellerId = null) => {
     setActionLoadingId(orderId);
@@ -154,13 +172,31 @@ const Pickups = () => {
       });
       toast.success(`Pickup marked as ${newStatus}`);
       await fetchData();
-      if (selectedPickup && selectedPickup._id === orderId) {
-        const refreshed = (await axios.get('/orders/admin/pickups')).data;
-        const updated = refreshed.find(x => x._id === orderId);
-        if (updated) setSelectedPickup(updated);
-      }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to update pickup status');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleVerifySellerPickupOtp = async (orderId, sellerId) => {
+    const key = `${orderId}_${sellerId || 'global'}`;
+    const otp = (otpInputMap[key] || '').trim();
+    if (!otp) {
+      toast.error('Please enter the 6-digit Seller Pickup OTP');
+      return;
+    }
+    setActionLoadingId(orderId);
+    try {
+      await axios.post(`/orders/${orderId}/verify-pickup-otp`, {
+        ...(sellerId ? { sellerId } : {}),
+        otp
+      });
+      toast.success('Seller Pickup OTP verified');
+      setOtpInputMap(prev => ({ ...prev, [key]: '' }));
+      await fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'OTP verification failed');
     } finally {
       setActionLoadingId(null);
     }
@@ -188,6 +224,7 @@ const Pickups = () => {
 
   const exportToExcel = () => {
     const rows = filteredPickups.map(p => ({
+      'Segment': p.customerSegment || (p.customer?.role === 'b2b' ? 'B2B' : 'B2C'),
       'Order Ref': `#${p.orderRef}`,
       'Order Status': p.orderStatus,
       'Pickup OTP': p.pickupCode || 'N/A',
@@ -332,16 +369,43 @@ const Pickups = () => {
           ))}
         </div>
 
-        <div style={{ position: 'relative', maxWidth: '460px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-          <input
-            type="text"
-            placeholder="Search by Order Ref, Pickup OTP, Seller Name, Address, or Driver..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="input-field"
-            style={{ paddingLeft: '40px', height: '42px', fontSize: '13px', borderRadius: '12px', width: '100%' }}
-          />
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <div style={{ position: 'relative', flex: '1 1 320px', maxWidth: '460px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
+            <input
+              type="text"
+              placeholder="Search by Order Ref, Pickup OTP, Seller Name, Address, or Driver..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input-field"
+              style={{ paddingLeft: '40px', height: '42px', fontSize: '13px', borderRadius: '12px', width: '100%' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '6px', background: 'var(--glass-bg)', padding: '4px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+            {[
+              { id: 'All', label: 'All Segments (B2B First)' },
+              { id: 'B2B', label: 'B2B' },
+              { id: 'B2C', label: 'B2C' }
+            ].map(seg => (
+              <button
+                key={seg.id}
+                onClick={() => setSegmentFilter(seg.id)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: segmentFilter === seg.id ? (seg.id === 'B2B' ? '#6366f1' : 'var(--primary)') : 'transparent',
+                  color: segmentFilter === seg.id ? '#fff' : 'var(--text-dim)'
+                }}
+              >
+                {seg.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -464,7 +528,19 @@ const Pickups = () => {
                   return (
                     <tr key={p._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                       <td style={{ padding: '16px 18px', verticalAlign: 'top' }}>
-                        <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--primary)' }}>#{p.orderRef}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--primary)' }}>#{p.orderRef}</span>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            background: (p.customerSegment || 'B2C') === 'B2B' ? 'rgba(99, 102, 241, 0.18)' : 'rgba(148, 163, 184, 0.14)',
+                            color: (p.customerSegment || 'B2C') === 'B2B' ? '#818cf8' : '#94a3b8'
+                          }}>
+                            {p.customerSegment || 'B2C'}
+                          </span>
+                        </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '3px' }}>
                           {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '-'}
                         </div>
@@ -735,7 +811,7 @@ const Pickups = () => {
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                       <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '12px', padding: '4px 10px', borderRadius: '8px', background: 'rgba(139, 92, 246, 0.16)', color: '#a78bfa' }}>
-                        Seller Pickup OTP: {pt.pickupCode || selectedPickup.pickupCode || 'N/A'}
+                        Seller Pickup OTP: {pt.pickupCode || (['Picked Up', 'Shipped', 'Out for Delivery', 'Delivered'].includes(pt.pickupStatus) ? 'Verified' : selectedPickup.pickupCode || 'N/A')}
                       </span>
                       <span style={{ fontSize: '11px', fontWeight: 700, color: getBadgeStyle(pt.pickupStatus).color }}>
                         Status: {pt.pickupStatus}
@@ -755,7 +831,32 @@ const Pickups = () => {
                   </div>
 
                   {pt.sellerId && ['Pending', 'Confirmed', 'Accepted', 'Packed', 'Assigned'].includes(pt.pickupStatus) && (
-                    <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+                    <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        placeholder="6-digit OTP"
+                        value={otpInputMap[`${selectedPickup._id}_${pt.sellerId}`] || ''}
+                        onChange={(e) => setOtpInputMap(prev => ({ ...prev, [`${selectedPickup._id}_${pt.sellerId}`]: e.target.value }))}
+                        className="input-field"
+                        style={{ width: '120px', height: '32px', fontSize: '12px', fontFamily: 'monospace', padding: '0 10px' }}
+                      />
+                      <button
+                        onClick={() => handleVerifySellerPickupOtp(selectedPickup._id, pt.sellerId)}
+                        disabled={actionLoadingId === selectedPickup._id}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(139, 92, 246, 0.16)',
+                          color: '#a78bfa',
+                          border: '1px solid rgba(139, 92, 246, 0.35)',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Verify Pickup OTP
+                      </button>
                       <button
                         onClick={() => handleUpdatePickupStatus(selectedPickup._id, 'Picked Up', pt.sellerId)}
                         disabled={actionLoadingId === selectedPickup._id}
@@ -770,7 +871,7 @@ const Pickups = () => {
                           cursor: 'pointer'
                         }}
                       >
-                        Mark Seller Pickup as Picked Up
+                        Mark Picked Up
                       </button>
                     </div>
                   )}
@@ -830,7 +931,15 @@ const Pickups = () => {
             <div style={{ padding: '18px', maxHeight: '380px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {drivers.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)', fontSize: '13px' }}>No drivers available</div>
-              ) : drivers.map(driver => (
+              ) : [...drivers].sort((a, b) => {
+                const isOrderB2B = (assignTargetOrder.customerSegment || 'B2C') === 'B2B';
+                if (isOrderB2B) {
+                  const aB2B = String(a.type || '').toLowerCase() === 'b2b' ? 0 : 1;
+                  const bB2B = String(b.type || '').toLowerCase() === 'b2b' ? 0 : 1;
+                  if (aB2B !== bB2B) return aB2B - bB2B;
+                }
+                return 0;
+              }).map(driver => (
                 <button
                   key={driver._id}
                   onClick={() => handleAssignDriver(driver._id)}
