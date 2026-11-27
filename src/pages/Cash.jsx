@@ -227,64 +227,63 @@ const Cash = () => {
       const cleanEnteredOtp = (enteredOtp || '').toString().trim();
       const cleanGeneratedOtp = (generatedOtp || '').toString().trim();
 
+      if (!cleanEnteredOtp) {
+        toast.error('Please enter the 6-digit verification OTP');
+        setVerifying(false);
+        return;
+      }
+
       let isVerified = false;
 
-      if (selectedDriver?.cashManagement) {
-        try {
-          const { data } = await axios.post('drivers/verify-otp', {
-            driverId: selectedDriver._id,
-            otp: cleanEnteredOtp
-          });
-          isVerified = data.success;
-        } catch (_) {
-          isVerified = cleanEnteredOtp === cleanGeneratedOtp;
-        }
+      if (currentDepositId) {
+        // Atomic server-side OTP verification + single wallet debit inside MongoDB transaction
+        await axios.put(`deposits/${currentDepositId}/status`, {
+          status: 'Approved',
+          otp: cleanEnteredOtp
+        });
+        isVerified = true;
+      } else if (selectedDriver?.cashManagement) {
+        const { data } = await axios.post('drivers/verify-otp', {
+          driverId: selectedDriver._id,
+          otp: cleanEnteredOtp
+        });
+        isVerified = Boolean(data?.success);
       } else {
         isVerified = cleanEnteredOtp === cleanGeneratedOtp;
       }
 
       if (isVerified) {
-        await new Promise(resolve => setTimeout(resolve, 300));
+        const isB2BDriver = (selectedDriver?.type || '').toUpperCase() === 'B2B';
+        const txType = isB2BDriver ? 'B2B' : 'B2C (Driver)';
 
         let transaction = null;
         try {
           const cashPayload = {
-            type: 'B2C (Driver)',
+            type: txType,
             name: selectedDriver?.name || 'Driver Settlement',
             phone: selectedDriver?.phone || '9999999999',
             amount: Number(depositAmount) || 0,
             description: `Settled with driver ${selectedDriver?.name || ''}${cleanEnteredOtp ? ` (OTP: ${cleanEnteredOtp})` : ''}`,
-            paymentMethod: 'Cash'
+            paymentMethod: 'Cash',
+            driverId: selectedDriver?._id,
+            otp: cleanEnteredOtp
           };
           const res = await axios.post('cash', cashPayload);
           transaction = res.data;
         } catch (err) {
           console.warn('POST api/cash note:', err.response?.data?.message || err.message);
-          transaction = {
-            _id: 'tx_' + Date.now(),
-            type: 'B2C (Driver)',
-            name: selectedDriver?.name || 'Driver Settlement',
-            phone: selectedDriver?.phone || '9999999999',
-            amount: Number(depositAmount) || 0,
-            status: 'active',
-            description: `Settled with driver ${selectedDriver?.name || ''}${cleanEnteredOtp ? ` (OTP: ${cleanEnteredOtp})` : ''}`,
-            paymentMethod: 'Cash',
-            date: new Date().toISOString()
-          };
         }
 
         if (transaction) {
           setTransactions(prev => [transaction, ...prev]);
         }
 
-        setDrivers(prev => prev.map(d =>
-          d._id === selectedDriver._id ? { ...d, wallet: Math.max(0, (d.wallet || 0) - depositAmount), otp: '' } : d
-        ));
-
-        if (selectedDriver._id) {
+        // Only update driver wallet directly when settling manually without a Deposit record
+        // (Deposit settlement already debited driver.wallet atomically on the server)
+        if (!currentDepositId && selectedDriver._id) {
           try {
             await axios.put(`drivers/${selectedDriver._id}`, {
-              wallet: Math.max(0, (selectedDriver.wallet || 0) - depositAmount),
+              wallet: Math.max(0, (selectedDriver.wallet || 0) - Number(depositAmount || 0)),
               otp: ''
             });
           } catch (e) {
@@ -292,18 +291,12 @@ const Cash = () => {
           }
         }
 
-        if (currentDepositId) {
-          try {
-            await axios.put(`deposits/${currentDepositId}/status`, { status: 'Approved' });
-          } catch (_) {
-            try {
-              await axios.put(`deposits/${currentDepositId}`, { status: 'Approved' });
-            } catch (err) {
-              console.warn('Deposit status update warning:', err);
-            }
-          }
+        setDrivers(prev => prev.map(d =>
+          d._id === selectedDriver._id ? { ...d, wallet: Math.max(0, (d.wallet || 0) - Number(depositAmount || 0)), otp: '' } : d
+        ));
 
-          setPendingDeposits(prev => prev.filter(d => 
+        if (currentDepositId) {
+          setPendingDeposits(prev => prev.filter(d =>
             d._id !== currentDepositId && (d.driverId?._id || d.driverId) !== selectedDriver._id
           ));
         }
