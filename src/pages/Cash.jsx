@@ -64,11 +64,31 @@ const Cash = () => {
     email: '',
     password: '',
     otp: '',
-    amount: '',
+    orderId: '',
+    collectorKey: '',
     description: '',
     paymentMethod: 'Cash',
     locationId: ''
   });
+
+  const [reconciliation, setReconciliation] = useState({
+    summary: {
+      totalExpectedCash: 0,
+      totalCashCollected: 0,
+      totalPendingCash: 0,
+      collectionProgress: 0,
+      totalAssignedTasks: 0,
+      completedCount: 0,
+      partialCount: 0,
+      pendingCount: 0,
+      failedCancelledCount: 0
+    },
+    collectorSummaries: [],
+    tasks: [],
+    eligibleOrders: [],
+    collectors: []
+  });
+  const [taskFilter, setTaskFilter] = useState('All');
 
   const [drivers, setDrivers] = useState([]);
   const [showCollectModal, setShowCollectModal] = useState(false);
@@ -94,7 +114,19 @@ const Cash = () => {
     fetchDrivers();
     fetchPendingDeposits();
     fetchLocations();
+    fetchReconciliation();
   }, []);
+
+  const fetchReconciliation = async () => {
+    try {
+      const { data } = await axios.get('cashcollectors/reconciliation', { skipCache: true });
+      if (data && data.summary) {
+        setReconciliation(data);
+      }
+    } catch (error) {
+      console.error('Error fetching cash reconciliation:', error);
+    }
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -363,28 +395,41 @@ const Cash = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const sanitizedPayload = {
-        type: formData.type || 'B2B',
-        name: formData.name,
-        phone: formData.phone || '9999999999',
-        amount: Number(formData.amount) || 0,
-        description: formData.description || '',
-        paymentMethod: formData.paymentMethod || 'Cash'
-      };
-      if (formData.email) sanitizedPayload.email = formData.email;
-      if (formData.password) sanitizedPayload.password = formData.password;
-
-      if (editId) {
-        const { data: updatedTx } = await axios.put(`cash/${editId}`, sanitizedPayload);
-        setTransactions(transactions.map(t => (t._id || t.id) === editId ? updatedTx : t));
+      if (!editId && formData.orderId && formData.collectorKey) {
+        const [collectorType, collectorId] = String(formData.collectorKey).split(':');
+        await axios.post('cashcollectors/assign', {
+          orderId: formData.orderId,
+          collectorId,
+          collectorType: collectorType || 'cash_collector',
+          notes: formData.description || ''
+        });
+        toast.success('Cash collection assigned (expected amount synced from order)');
         setShowForm(false);
-        setEditId(null);
-        toast.success('Transaction updated successfully');
+        await Promise.all([fetchReconciliation(), fetchTransactions()]);
       } else {
-        const { data: transaction } = await axios.post('cash', sanitizedPayload);
-        setTransactions([transaction, ...transactions]);
-        setShowForm(false);
-        toast.success('Cash collection transaction logged');
+        const sanitizedPayload = {
+          type: formData.type || 'B2B',
+          name: formData.name,
+          phone: formData.phone || '9999999999',
+          description: formData.description || '',
+          paymentMethod: formData.paymentMethod || 'Cash'
+        };
+        if (formData.orderId) sanitizedPayload.orderId = formData.orderId;
+        if (formData.email) sanitizedPayload.email = formData.email;
+        if (formData.password) sanitizedPayload.password = formData.password;
+
+        if (editId) {
+          const { data: updatedTx } = await axios.put(`cash/${editId}`, sanitizedPayload);
+          setTransactions(transactions.map(t => (t._id || t.id) === editId ? updatedTx : t));
+          setShowForm(false);
+          setEditId(null);
+          toast.success('Collection record updated');
+        } else {
+          const { data: transaction } = await axios.post('cash', sanitizedPayload);
+          setTransactions([transaction, ...transactions]);
+          setShowForm(false);
+          toast.success('Cash collector record created (pending collection confirmation)');
+        }
       }
       setFormData({
         type: 'B2B',
@@ -393,14 +438,15 @@ const Cash = () => {
         email: '',
         password: '',
         otp: '',
-        amount: '',
+        orderId: '',
+        collectorKey: '',
         description: '',
         paymentMethod: 'Cash',
-        status: 'Settled',
+        status: 'Pending',
         locationId: ''
       });
     } catch (error) {
-      toast.error(editId ? 'Failed to update transaction' : 'Failed to record transaction');
+      toast.error(error.response?.data?.message || (editId ? 'Failed to update record' : 'Failed to create collection assignment'));
     } finally {
       setLoading(false);
     }
@@ -569,7 +615,7 @@ const Cash = () => {
             type="button"
             onClick={() => {
               setEditId(null);
-              setFormData({ type: 'B2C', name: '', phone: '', email: '', password: '', otp: '', amount: '', description: '', paymentMethod: 'Cash', status: 'Settled', locationId: '' });
+              setFormData({ type: 'B2B', name: '', phone: '', email: '', password: '', otp: '', orderId: '', collectorKey: '', description: '', paymentMethod: 'Cash', status: 'Pending', locationId: '' });
               setShowForm(true);
             }}
             style={{
@@ -591,7 +637,7 @@ const Cash = () => {
             }}
           >
             <Plus size={18} />
-            <span>Record Cash Entry</span>
+            <span>Assign / Log Collection</span>
           </button>
         </div>
       </div>
@@ -644,6 +690,172 @@ const Cash = () => {
               ₹{drivers.reduce((acc, d) => acc + (Number(d.wallet) > 0 ? Number(d.wallet) : 0), 0).toLocaleString('en-IN')}
             </h2>
           </div>
+        </div>
+      </div>
+
+      {/* Automatic Cash Collection & Reconciliation Overview */}
+      <div className="glass-card" style={{ padding: '22px 24px', borderRadius: '24px', border: '1px solid rgba(99, 102, 241, 0.28)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+              Automatic Cash Collection & Reconciliation
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '2px 0 0' }}>
+              Expected amounts are derived from orders; collected amounts update automatically when Cash Collectors confirm in-app
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#6366f1', background: 'rgba(99, 102, 241, 0.14)', padding: '5px 12px', borderRadius: '10px' }}>
+              Collection Progress: {reconciliation.summary.collectionProgress}%
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+          <div style={{ padding: '14px', borderRadius: '14px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+            <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Expected Cash</div>
+            <div style={{ fontSize: '19px', fontWeight: 800, color: 'var(--text-main)', marginTop: '4px' }}>₹{Number(reconciliation.summary.totalExpectedCash || 0).toLocaleString('en-IN')}</div>
+          </div>
+          <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.25)' }}>
+            <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#22c55e', textTransform: 'uppercase' }}>Total Cash Collected</div>
+            <div style={{ fontSize: '19px', fontWeight: 800, color: '#22c55e', marginTop: '4px' }}>₹{Number(reconciliation.summary.totalCashCollected || 0).toLocaleString('en-IN')}</div>
+          </div>
+          <div style={{ padding: '14px', borderRadius: '14px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+            <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase' }}>Total Pending Cash</div>
+            <div style={{ fontSize: '19px', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>₹{Number(reconciliation.summary.totalPendingCash || 0).toLocaleString('en-IN')}</div>
+          </div>
+          <div style={{ padding: '14px', borderRadius: '14px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)' }}>
+            <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Tasks Breakdown</div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)', marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ color: '#22c55e' }}>✓ {reconciliation.summary.completedCount} Done</span>
+              <span style={{ color: '#3b82f6' }}>◐ {reconciliation.summary.partialCount} Partial</span>
+              <span style={{ color: '#f59e0b' }}>◷ {reconciliation.summary.pendingCount} Pending</span>
+              <span style={{ color: '#ef4444' }}>✕ {reconciliation.summary.failedCancelledCount} Failed</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ width: '100%', height: '8px', borderRadius: '999px', background: 'rgba(148, 163, 184, 0.16)', overflow: 'hidden', marginBottom: '20px' }}>
+          <div style={{ width: `${reconciliation.summary.collectionProgress || 0}%`, height: '100%', background: 'linear-gradient(90deg, #6366f1, #22c55e)', transition: 'width 0.4s ease' }} />
+        </div>
+
+        {/* Cash Collector-wise Summary */}
+        <h4 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 10px' }}>Cash Collector-wise Summary</h4>
+        <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--glass-border)' }}>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Collector / Driver</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Tasks</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Expected</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Collected</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Pending</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Done / Pending / Failed</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reconciliation.collectorSummaries.length === 0 ? (
+                <tr><td colSpan={7} style={{ padding: '18px', textAlign: 'center', color: 'var(--text-dim)' }}>No assigned cash collection tasks yet.</td></tr>
+              ) : reconciliation.collectorSummaries.map(cs => (
+                <tr key={cs.collectorId} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <td style={{ padding: '10px 12px' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{cs.name}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{cs.role} • {cs.type} {cs.phone ? `• ${cs.phone}` : ''}</div>
+                  </td>
+                  <td style={{ padding: '10px 12px', fontWeight: 700 }}>{cs.assignedTasks}</td>
+                  <td style={{ padding: '10px 12px', fontWeight: 700 }}>₹{Number(cs.totalExpected || 0).toLocaleString('en-IN')}</td>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, color: '#22c55e' }}>₹{Number(cs.totalCollected || 0).toLocaleString('en-IN')}</td>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, color: '#f59e0b' }}>₹{Number(cs.totalPending || 0).toLocaleString('en-IN')}</td>
+                  <td style={{ padding: '10px 12px', fontSize: '11.5px' }}>
+                    <span style={{ color: '#22c55e', fontWeight: 700 }}>{cs.completedCount}</span> /{' '}
+                    <span style={{ color: '#f59e0b', fontWeight: 700 }}>{cs.pendingCount + cs.partialCount}</span> /{' '}
+                    <span style={{ color: '#ef4444', fontWeight: 700 }}>{cs.failedCancelledCount}</span>
+                  </td>
+                  <td style={{ padding: '10px 12px' }}>
+                    <span style={{
+                      padding: '3px 9px', borderRadius: '8px', fontSize: '11px', fontWeight: 700,
+                      background: cs.overallStatus === 'Completed' ? 'rgba(34,197,94,0.14)' : cs.overallStatus === 'Partial' ? 'rgba(59,130,246,0.14)' : 'rgba(245,158,11,0.14)',
+                      color: cs.overallStatus === 'Completed' ? '#22c55e' : cs.overallStatus === 'Partial' ? '#3b82f6' : '#f59e0b'
+                    }}>
+                      {cs.overallStatus}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Order-wise Collection History */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+          <h4 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Order-wise Collection History</h4>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {['All', 'Pending', 'Partial', 'Completed', 'Failed / Cancelled'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setTaskFilter(tab)}
+                style={{
+                  padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700, border: 'none', cursor: 'pointer',
+                  background: taskFilter === tab ? 'var(--primary)' : 'var(--glass-bg)',
+                  color: taskFilter === tab ? '#fff' : 'var(--text-dim)'
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--glass-border)' }}>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Order</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Customer</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Assigned To</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Expected</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Collected</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Pending</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reconciliation.tasks
+                .filter(t => {
+                  if (taskFilter === 'All') return true;
+                  if (taskFilter === 'Failed / Cancelled') return t.collectionStatus === 'Failed' || t.collectionStatus === 'Cancelled';
+                  return t.collectionStatus === taskFilter;
+                })
+                .slice(0, 20)
+                .map(t => (
+                  <tr key={t._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 800, color: 'var(--primary)' }}>
+                      #{t.orderRef} <span style={{ fontSize: '10px', opacity: 0.8 }}>({t.customerSegment})</span>
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ fontWeight: 700 }}>{t.customerName}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{t.customerPhone}</div>
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ fontWeight: 600 }}>{t.assignedCollectorName || 'Unassigned'}</div>
+                      {t.assignedRole && <div style={{ fontSize: '10.5px', color: 'var(--text-dim)' }}>{t.assignedRole}</div>}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontWeight: 700 }}>₹{Number(t.expectedAmount || 0).toLocaleString('en-IN')}</td>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#22c55e' }}>₹{Number(t.collectedAmount || 0).toLocaleString('en-IN')}</td>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#f59e0b' }}>₹{Number(t.pendingAmount || 0).toLocaleString('en-IN')}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span style={{
+                        padding: '3px 9px', borderRadius: '8px', fontSize: '11px', fontWeight: 700,
+                        background: t.collectionStatus === 'Completed' ? 'rgba(34,197,94,0.14)' : t.collectionStatus === 'Partial' ? 'rgba(59,130,246,0.14)' : (t.collectionStatus === 'Failed' || t.collectionStatus === 'Cancelled') ? 'rgba(239,68,68,0.14)' : 'rgba(245,158,11,0.14)',
+                        color: t.collectionStatus === 'Completed' ? '#22c55e' : t.collectionStatus === 'Partial' ? '#3b82f6' : (t.collectionStatus === 'Failed' || t.collectionStatus === 'Cancelled') ? '#ef4444' : '#f59e0b'
+                      }}>
+                        {t.collectionStatus}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -1386,8 +1598,8 @@ const Cash = () => {
               background: 'var(--card-bg)'
             }}>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>{editId ? 'Edit Cash Transaction' : 'Log Cash Transaction'}</h3>
-                <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>{editId ? 'Modify existing cash payment details' : 'Manually record a cash payment'}</p>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>{editId ? 'Edit Collection Record' : 'Assign Cash Collection'}</h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '2px' }}>{editId ? 'Update notes/details (amounts are auto-tracked)' : 'Assign an order to a Cash Collector — amount is synced automatically from the order'}</p>
               </div>
               <button
                 onClick={() => { setShowForm(false); setEditId(null); }}
@@ -1456,7 +1668,7 @@ const Cash = () => {
                           className="input-field"
                           style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
                           placeholder="Email Address"
-                          required
+                          required={!formData.orderId && !editId}
                           value={formData.email}
                           onChange={e => setFormData({ ...formData, email: e.target.value })}
                         />
@@ -1468,7 +1680,7 @@ const Cash = () => {
                           className="input-field"
                           style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
                           placeholder="Password"
-                          required
+                          required={!formData.orderId && !editId}
                           value={formData.password}
                           onChange={e => setFormData({ ...formData, password: e.target.value })}
                         />
@@ -1510,7 +1722,7 @@ const Cash = () => {
                           className="input-field"
                           style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
                           placeholder="Enter Driver OTP"
-                          required
+                          required={!formData.orderId && !editId}
                           value={formData.otp}
                           onChange={e => setFormData({ ...formData, otp: e.target.value })}
                         />
@@ -1519,19 +1731,72 @@ const Cash = () => {
                   </>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div style={{ position: 'relative' }}>
-                    <IndianRupee size={14} style={{ position: 'absolute', left: '12px', top: '12px', color: '#6366f1' }} />
-                    <input
-                      type="number"
+                {!editId && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', borderRadius: '14px', background: 'rgba(99, 102, 241, 0.06)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Assign Order & Cash Collector (Auto Expected Amount)
+                    </label>
+                    <select
                       className="input-field"
-                      style={{ paddingLeft: '36px', height: '38px', fontSize: '13px' }}
-                      placeholder="Amount (₹)"
-                      required
-                      value={formData.amount}
-                      onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                    />
+                      style={{ height: '38px', fontSize: '12.5px' }}
+                      value={formData.orderId || ''}
+                      onChange={e => {
+                        const ord = (reconciliation.eligibleOrders || []).find(o => o._id === e.target.value);
+                        setFormData({
+                          ...formData,
+                          orderId: e.target.value,
+                          type: ord?.customerSegment || formData.type,
+                          name: ord?.customerName || formData.name,
+                          phone: ord?.customerPhone || formData.phone
+                        });
+                      }}
+                    >
+                      <option value="">-- Optional: Select Order to Assign --</option>
+                      {(reconciliation.eligibleOrders || []).map(ord => (
+                        <option key={ord._id} value={ord._id}>
+                          #{ord.orderRef} • {ord.customerName} ({ord.customerSegment}) — Expected ₹{ord.expectedAmount} (Pending ₹{ord.pendingAmount})
+                        </option>
+                      ))}
+                    </select>
+
+                    {formData.orderId && (
+                      <>
+                        <select
+                          className="input-field"
+                          style={{ height: '38px', fontSize: '12.5px' }}
+                          required
+                          value={formData.collectorKey || ''}
+                          onChange={e => setFormData({ ...formData, collectorKey: e.target.value })}
+                        >
+                          <option value="">-- Select Cash Collector / Eligible Driver --</option>
+                          {(reconciliation.collectors || []).map(c => (
+                            <option key={`cc_${c._id}`} value={`cash_collector:${c._id}`}>
+                              Cash Collector: {c.name} ({c.type || 'B2B'}) {c.phone ? `• ${c.phone}` : ''}
+                            </option>
+                          ))}
+                          {(drivers || []).filter(d => d.cashManagement).map(d => (
+                            <option key={`drv_${d._id}`} value={`driver:${d._id}`}>
+                              Driver: {d.name} ({String(d.type || 'b2c').toUpperCase()}) • {d.phone}
+                            </option>
+                          ))}
+                        </select>
+
+                        {(() => {
+                          const selOrd = (reconciliation.eligibleOrders || []).find(o => o._id === formData.orderId);
+                          if (!selOrd) return null;
+                          return (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '8px 10px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', fontWeight: 700 }}>
+                              <span>Auto Expected: ₹{selOrd.expectedAmount}</span>
+                              <span>Pending: ₹{selOrd.pendingAmount}</span>
+                            </div>
+                          );
+                        })()}
+                      </>
+                    )}
                   </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                   <div style={{ position: 'relative' }}>
                     <CreditCard size={14} style={{ position: 'absolute', left: '12px', top: '12px', color: '#6366f1' }} />
                     <select
