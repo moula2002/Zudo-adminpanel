@@ -89,6 +89,8 @@ const Cash = () => {
     collectors: []
   });
   const [taskFilter, setTaskFilter] = useState('All');
+  const [selectedDriverFilter, setSelectedDriverFilter] = useState('All');
+  const [historyModalTask, setHistoryModalTask] = useState(null);
 
   const [drivers, setDrivers] = useState([]);
   const [showCollectModal, setShowCollectModal] = useState(false);
@@ -755,9 +757,9 @@ const Cash = () => {
               </tr>
             </thead>
             <tbody>
-              {reconciliation.collectorSummaries.length === 0 ? (
+              {reconciliation.collectorSummaries.filter(cs => selectedDriverFilter === 'All' || cs.collectorId === selectedDriverFilter).length === 0 ? (
                 <tr><td colSpan={7} style={{ padding: '18px', textAlign: 'center', color: 'var(--text-dim)' }}>No assigned cash collection tasks yet.</td></tr>
-              ) : reconciliation.collectorSummaries.map(cs => (
+              ) : reconciliation.collectorSummaries.filter(cs => selectedDriverFilter === 'All' || cs.collectorId === selectedDriverFilter).map(cs => (
                 <tr key={cs.collectorId} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <td style={{ padding: '10px 12px' }}>
                     <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{cs.name}</div>
@@ -790,7 +792,20 @@ const Cash = () => {
         {/* Order-wise Collection History */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
           <h4 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Order-wise Collection History</h4>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <select
+              className="input-field"
+              style={{ height: '30px', fontSize: '11.5px', padding: '0 10px', width: 'auto', minWidth: '170px' }}
+              value={selectedDriverFilter}
+              onChange={(e) => setSelectedDriverFilter(e.target.value)}
+            >
+              <option value="All">All Drivers & Collectors</option>
+              {reconciliation.collectorSummaries.map(cs => (
+                <option key={cs.collectorId} value={cs.collectorId}>
+                  {cs.name} ({cs.role})
+                </option>
+              ))}
+            </select>
             {['All', 'Pending', 'Partial', 'Completed', 'Failed / Cancelled'].map(tab => (
               <button
                 key={tab}
@@ -817,16 +832,18 @@ const Cash = () => {
                 <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Collected</th>
                 <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Pending</th>
                 <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase' }}>Status</th>
+                <th style={{ padding: '10px 12px', color: 'var(--text-dim)', fontSize: '11px', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {reconciliation.tasks
                 .filter(t => {
+                  if (selectedDriverFilter !== 'All' && String(t.assignedCollectorId) !== selectedDriverFilter) return false;
                   if (taskFilter === 'All') return true;
                   if (taskFilter === 'Failed / Cancelled') return t.collectionStatus === 'Failed' || t.collectionStatus === 'Cancelled';
                   return t.collectionStatus === taskFilter;
                 })
-                .slice(0, 20)
+                .slice(0, 25)
                 .map(t => (
                   <tr key={t._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                     <td style={{ padding: '10px 12px', fontWeight: 800, color: 'var(--primary)' }}>
@@ -852,12 +869,72 @@ const Cash = () => {
                         {t.collectionStatus}
                       </span>
                     </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                        {t.collectionStatus !== 'Completed' && t.collectionStatus !== 'Cancelled' && (
+                          <button
+                            onClick={() => {
+                              setEditId(null);
+                              setFormData({
+                                ...formData,
+                                type: t.customerSegment || 'B2B',
+                                name: t.customerName || '',
+                                phone: t.customerPhone || '',
+                                orderId: t._id,
+                                collectorKey: t.assignedCollectorId ? `${t.assignedRole === 'Driver' ? 'driver' : 'cash_collector'}:${t.assignedCollectorId}` : ''
+                              });
+                              setShowForm(true);
+                            }}
+                            style={{ padding: '4px 8px', borderRadius: '7px', border: '1px solid rgba(99,102,241,0.35)', background: 'rgba(99,102,241,0.12)', color: '#818cf8', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            {t.assignedCollectorId ? 'Reassign' : 'Assign Driver'}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setHistoryModalTask(t)}
+                          style={{ padding: '4px 8px', borderRadius: '7px', border: '1px solid var(--glass-border)', background: 'var(--glass-bg)', color: 'var(--text-dim)', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          History
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Task Collection History Modal */}
+      {historyModalTask && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1150, padding: '16px' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '500px', borderRadius: '22px', padding: '22px', border: '1px solid var(--glass-border)', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>Collection History #{historyModalTask.orderRef}</h4>
+                <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{historyModalTask.customerName} • Expected ₹{historyModalTask.expectedAmount} • Pending ₹{historyModalTask.pendingAmount}</div>
+              </div>
+              <button onClick={() => setHistoryModalTask(null)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+            {(historyModalTask.codCollectionHistory || []).length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12.5px' }}>No collection events recorded yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {historyModalTask.codCollectionHistory.map((h, i) => (
+                  <div key={i} style={{ padding: '10px 12px', borderRadius: '12px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                      <span>{h.collectorName || 'Collector'} ({h.collectorRole || 'Driver'}) — {h.status}</span>
+                      <span style={{ color: '#22c55e' }}>+₹{Number(h.amount || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                    {h.notes && <div style={{ color: 'var(--text-dim)', marginTop: '3px', fontSize: '11.5px' }}>{h.notes}</div>}
+                    <div style={{ color: 'var(--text-dim)', marginTop: '3px', fontSize: '10.5px' }}>{h.collectedAt ? new Date(h.collectedAt).toLocaleString() : '-'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Pending Deposit Requests Section */}
       {pendingDeposits.length > 0 && (
@@ -1768,15 +1845,15 @@ const Cash = () => {
                           value={formData.collectorKey || ''}
                           onChange={e => setFormData({ ...formData, collectorKey: e.target.value })}
                         >
-                          <option value="">-- Select Cash Collector / Eligible Driver --</option>
+                          <option value="">-- Select Driver or Cash Collector --</option>
+                          {(drivers || []).map(d => (
+                            <option key={`drv_${d._id}`} value={`driver:${d._id}`}>
+                              Driver: {d.name} ({String(d.type || 'b2c').toUpperCase()}) • {d.phone} {d.cashManagement ? '✓ Cash Mgmt' : ''}
+                            </option>
+                          ))}
                           {(reconciliation.collectors || []).map(c => (
                             <option key={`cc_${c._id}`} value={`cash_collector:${c._id}`}>
                               Cash Collector: {c.name} ({c.type || 'B2B'}) {c.phone ? `• ${c.phone}` : ''}
-                            </option>
-                          ))}
-                          {(drivers || []).filter(d => d.cashManagement).map(d => (
-                            <option key={`drv_${d._id}`} value={`driver:${d._id}`}>
-                              Driver: {d.name} ({String(d.type || 'b2c').toUpperCase()}) • {d.phone}
                             </option>
                           ))}
                         </select>
